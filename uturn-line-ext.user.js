@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Uturn專屬派單神器
-// @namespace    https://line-official-ext.local/
-// @version      1.15.0
+// @namespace    https://github.com/iewihc/uturn-line-ext
+// @version      1.15.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單。
-// @author       line-official-ext
+// @author       iewihc
 // @match        https://manager.line.biz/*
 // @match        https://chat.line.biz/*
 // @grant        GM_setClipboard
@@ -12,6 +12,10 @@
 // @grant        GM_xmlhttpRequest
 // @connect      discord.com
 // @connect      discordapp.com
+// @homepageURL  https://github.com/iewihc/uturn-line-ext
+// @supportURL   https://github.com/iewihc/uturn-line-ext/issues
+// @downloadURL  https://raw.githubusercontent.com/iewihc/uturn-line-ext/main/uturn-line-ext.user.js
+// @updateURL    https://raw.githubusercontent.com/iewihc/uturn-line-ext/main/uturn-line-ext.user.js
 // @run-at       document-idle
 // ==/UserScript==
 (function () {
@@ -1393,8 +1397,8 @@
           autoSendReply(DISPATCH_REPLY_MSG);
           toast(how === "discord" ? "已派單到 Discord，並已自動回覆客人" : "已複製（未設定 Webhook），並已自動回覆客人");
         } else {
-          fillReplyTextarea(DISPATCH_REPLY_MSG, true);
-          toast(how === "discord" ? "已派單到 Discord，回覆已填入輸入框，請按送出" : "已複製（未設定 Webhook），回覆已填入輸入框");
+          // 不勾選：只送派單，不在輸入框帶入任何訊息
+          toast(how === "discord" ? "已派單到 Discord（未回覆客人）" : "已複製（未設定 Webhook）");
         }
       } catch (err) {
         sendBtn.disabled = false;
