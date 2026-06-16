@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Uturn專屬派單神器
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.18.1
+// @version      1.18.5
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -62,30 +62,181 @@
    * ====================================================================== */
   const CONFIG = [
     // 帳號層級（群編預設）：{ group, gid }
-    { group: "*🍿", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7" },
+    { group: "*🐻‍❄️", gid: "U9ae75f4ea77f3f9aa04ab0f26705d676" },
+    { group: "*♾️", gid: "U8acceed382c80644a1b6b934ea143ebe" },
+    { group: "*🐡", gid: "U5273c0793f7e49250e82b9e754a21ba7" },
+    { group: "🐶", gid: "U0094da8274701d2834e3d5214b6810b5" },
+    { group: "⌚️", gid: "U5fcb2daab781b63cd01c3186f93d68b7" },
+    { group: "🦑", gid: "Uef0ceb32c8be0fbd5aa1cf158718a177" },
+    { group: "🦋", gid: "U3d0e9b69499da00fa839c4d8245aefae" },
+    { group: "🔻", gid: "Uf257f4bdadd048d87f3fb37304cb2378" },
+    { group: "🍩", gid: "Uf0a20ba38b64972a0f2c9d6d2c302b05" },
     { group: "*📗", gid: "Uac542d3ffeeb279827bb2d5dfac1f26d" },
     { group: "*🌪️", gid: "Ub8ead8093979b9ce4aaa4332921610c0" },
     { group: "*🌊", gid: "U93634323fea8a2ce9facd79d0edfcbd1" },
     { group: "*🍓", gid: "Ub0336775c2eabda4735e98b48dc0aa72" },
-    { group: "*🍒", gid: "Udadf526c6163cf0f42d52e31f20dc8e8" },
     { group: "*🪼", gid: "U19abd947d4a982d03ca24274fc62c6c8" },
     { group: "*🍦", gid: "U6c97c065bdbe16a3a83ec465963f2240" },
     { group: "*🍁", gid: "U2d148b75a8b0df438e0070111baa19eb" },
     { group: "*🍑", gid: "Ued3a794c10f0a699343f3992d12e9bee" },
     { group: "*🍋‍🟩", gid: "U660a73ac245d76a8e4bf2986b62b4392" },
     { group: "*🐬", gid: "Ua5e9cfeb16616c79e559133f8b9e97d9" },
+    { group: "*🏈", gid: "U1d456f5238bbb07f9229923ccad452b2" },
     { group: "*🐑", gid: "U2e6bea0ce91ede806436c69e5bf36208" },
     { group: "*🐦‍🔥", gid: "U6d9a3726cc6b791715d99944a4725f01" },
+    { group: "*🍿", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7" },
     { group: "*🍔", gid: "Uaec9e478c471c730b50e7a0b7fa35110" },
-    { group: "*🏈", gid: "U1d456f5238bbb07f9229923ccad452b2" },
     { group: "*🐳", gid: "U07f1858be8fa376ab889f7dc53a29c19" },
     { group: "*🎵", gid: "U3df1c9d94b1c0454a385fe3f958c421c" },
+    { group: "*🍒", gid: "Udadf526c6163cf0f42d52e31f20dc8e8" },
+    // 對話群編覆寫（只改群編、無上車地址）：{ group, gid, chat }
+    {
+      group: "*🐞",
+      gid: "U8acceed382c80644a1b6b934ea143ebe",
+      chat: "Cf5daff1a7542183cd4b5e75120a70f84",
+    },
+    {
+      group: "*🦈",
+      gid: "U8acceed382c80644a1b6b934ea143ebe",
+      chat: "C06ec37c27d2102f21eff3052e8d7cf7c",
+    },
+    {
+      group: "*♾️1",
+      gid: "U8acceed382c80644a1b6b934ea143ebe",
+      chat: "C77e51aef562d72e41f00202a452cc207",
+    },
+    {
+      group: "*🍇",
+      gid: "U5273c0793f7e49250e82b9e754a21ba7",
+      chat: "U7a42e70b0e7593f4123905ce39e26b7d",
+    },
+    {
+      group: "*🍇群",
+      gid: "U5273c0793f7e49250e82b9e754a21ba7",
+      chat: "Ccb36aa175edd878bae1e32d1dc1fc09e",
+    },
+    {
+      group: "*🐕‍🦺",
+      gid: "U6c97c065bdbe16a3a83ec465963f2240",
+      chat: "Cc1c5f53714b9c2fb717b76224615b52c",
+    },
+    {
+      group: "*🐕‍🦺",
+      gid: "U6c97c065bdbe16a3a83ec465963f2240",
+      chat: "C90927ece39fafe7d27ecd5a0e7d9af59",
+    },
+    {
+      group: "*🐕‍🦺",
+      gid: "U6c97c065bdbe16a3a83ec465963f2240",
+      chat: "C90927ece39fafe7d27ecd5a0e7d9af59",
+    },
+    {
+      group: "*🍬",
+      gid: "U660a73ac245d76a8e4bf2986b62b4392",
+      chat: "Cc195e5223ece165e8e46eabaf5b3d9e9",
+    },
     // 店配（對話層級：固定群編＋上車地址）：{ group, gid, chat, pickup }
     {
-      group: "*🍿70店",
+      group: "*🌪️店配",
+      gid: "Ub8ead8093979b9ce4aaa4332921610c0",
+      chat: "Cdf6e95f3f0898b31fa9b688831b6f0ec",
+      pickup: "想你好酒/霧峰區草湖路127-1號",
+    },
+    {
+      group: "*🍁",
+      gid: "U2d148b75a8b0df438e0070111baa19eb",
+      chat: "C5f7a0a12080bfabd19fb81ab93fc9f8a",
+      pickup: "北區中清路一段53號 統領大樓",
+    },
+    {
+      group: "*🍿店",
+      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
+      chat: "C393cc88f7683611034cdfc7fea14fb2c",
+      pickup: "西區忠明南路333號 歐菲旅店",
+    },
+    {
+      group: "*🍿店",
+      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
+      chat: "C857deed27479a24d1b9b3a393c2f8530",
+      pickup: "Glacier餐酒館",
+    },
+    {
+      group: "*🍿店",
+      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
+      chat: "C5416bea2d186e6ea899c551b92de4d06",
+      pickup: "沙鹿區台灣大道七段303號 Taluan",
+    },
+    {
+      group: "*🍿店",
       gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
       chat: "C8c750ad390270edfff713e1d567c523c",
-      pickup: "老地方青海店",
+      pickup: "老地方青海店 開進停車場最後面",
+    },
+    {
+      group: "*🍿店",
+      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
+      chat: "C8c750ad390270edfff713e1d567c523c",
+      pickup: "南屯區大墩路852號 非嚐不可",
+    },
+    {
+      group: "*🍒3.70店/小真",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C0a1d063f0fe80494b7997baecbce9231",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/小洪",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C510862e713d61bd19a27bb544febe3ac",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/大益",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C58119ce7ee1a2c5d14df7dbed92684ed",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/翔",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C24708f0f96952713dc4e6da05d400865",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/光少",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C56ae0c4336da4736b97898cdb3d01ae6",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/草爺",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C0d3907b8e87a8e09e2d21bcad5c5f265",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/鳳梨",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C8392f99fdce2c17c29d3beb22c65ff11",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/賢哥",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C0f48f8efa82bf025f4deb4cb44ed0bf6",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/喜董",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "C39573c444d425a2d28a05c0994f7f666",
+      pickup: "中區市府路130號 雪在燒",
+    },
+    {
+      group: "*🍒3.70店/泰泰喜歡",
+      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
+      chat: "Cf235683ce321521d157d4ddc4713b49b",
+      pickup: "西屯黎明路三段388-2號 泰泰喜歡",
     },
   ];
 
