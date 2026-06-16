@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Uturn專屬派單神器
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.15.2
+// @version      1.17.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -24,7 +24,7 @@
   /* ---------------------------------------------------------------------- *
    * Constants
    * ---------------------------------------------------------------------- */
-  const BLUE = "#1c6cf3";          // 主要藍色
+  const BLUE = "#1c6cf3"; // 主要藍色
   const BLUE_HOVER = "#0b57d0";
   const BLUE_SOFT = "#eef4ff";
 
@@ -39,22 +39,47 @@
   const QUICK_MENU_CLASS = "loe-quick-reply-menu";
   const QUICK_MENU_OPEN_CLASS = "loe-quick-reply-open";
   const STORE_KEY = "loe_quick_replies_v1";
-  const QR_BAR_CLASS = "loe-qr-bar";      // 輸入框上方的快捷氣泡列
+  const QR_BAR_CLASS = "loe-qr-bar"; // 輸入框上方的快捷氣泡列
   const QR_CHIP_CLASS = "loe-qr-chip";
-  const QR_BAR_MAX = 5;                    // 最多顯示前 5 個
+  const QR_BAR_MAX = 5; // 最多顯示前 5 個
 
   const FORWARD_BUTTON_CLASS = "loe-forward-button";
   const PREFIX_CHIP_CLASS = "loe-prefix-chip";
-  const PREFIX_KEY = "loe_prefix_v1";          // 前綴設定（一組，對應目前 OA 帳號）
+  const PREFIX_KEY = "loe_prefix_v1"; // 前綴設定（一組，對應目前 OA 帳號）
   const WEBHOOK_KEY = "loe_discord_webhook_v1"; // Discord 頻道 webhook 網址
-  const DISPATCHER_KEY = "loe_dispatcher_v1";    // 派單人員名稱（顯示為 Discord 訊息發送者）
+  const DISPATCHER_KEY = "loe_dispatcher_v1"; // 派單人員名稱（顯示為 Discord 訊息發送者）
   const DISPATCH_BUTTON_CLASS = "loe-dispatch-button"; // 派單按鈕
   const DISPATCH_POP_CLASS = "loe-dispatch-pop";
   const ESTIMATE_BUTTON_CLASS = "loe-estimate-button"; // 估價按鈕
   const AUTOREPLY_KEY = "loe_dispatch_autoreply_v1"; // 派單後是否自動回覆客人
+  const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
+
+  /* ====================================================================== *
+   * 預設設定檔 CONFIG —— 「一鍵匯入所有設定」會套用這份。
+   *   - 沒有 chat：設定該 gid 的「群編預設」。
+   *   - 有 chat：店配，該對話固定「群編」＋「上車地址(pickup)」。
+   * 要新增門市/帳號，照格式往下加即可。
+   * ====================================================================== */
+  const CONFIG = [
+    {
+      name: "超派叫車",
+      group: "*🍿",
+      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
+    },
+    {
+      name: "超派店配1",
+      group: "*🍿70店",
+      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
+      chat: "C8c750ad390270edfff713e1d567c523c",
+      pickup: "老地方青海店",
+    },
+  ];
 
   const DEFAULT_REPLIES = [
-    { name: "安排", text: "馬上幫您安排調派時間約③ - ⑧分\n有車會立即告知,請勿關閉通知\n派車期間請勿催促" },
+    {
+      name: "安排",
+      text: "馬上幫您安排調派時間約③ - ⑧分\n有車會立即告知,請勿關閉通知\n派車期間請勿催促",
+    },
     { name: "取消", text: "好的已幫您取消\n非常抱歉未能替您服務(⸝⸝o̴̶̷᷄ ·̭ o̴̶̷̥᷅⸝⸝)" },
   ];
 
@@ -71,11 +96,18 @@
     copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
     check: '<path d="M20 6 9 17l-5-5"></path>',
     x: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
-    "message-square": '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
-    forward: '<polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path>',
-    settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>',
-    truck: '<path d="M10 17h4V5H2v12h3"></path><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle>',
-    calculator: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="12" y1="14" x2="12" y2="14"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="8" y1="18" x2="12" y2="18"></line>',
+    "message-square":
+      '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
+    forward:
+      '<polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path>',
+    settings:
+      '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>',
+    truck:
+      '<path d="M10 17h4V5H2v12h3"></path><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle>',
+    calculator:
+      '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="12" y1="14" x2="12" y2="14"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="8" y1="18" x2="12" y2="18"></line>',
+    download:
+      '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
   };
   const ic = (name) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -84,7 +116,9 @@
   const ERROR_ICON = ic("x");
   const QUICK_ICON = ic("message-square");
   const FORWARD_ICON = ic("forward");
-  function paintIcons() { /* 內建 SVG 直接渲染，無需後處理 */ }
+  function paintIcons() {
+    /* 內建 SVG 直接渲染，無需後處理 */
+  }
 
   /* ---------------------------------------------------------------------- *
    * Styles
@@ -411,6 +445,18 @@
     .${PREFIX_CHIP_CLASS}.loe-prefix-empty { color: ${BLUE}; background: #fff; }
     .${PREFIX_CHIP_CLASS} > svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 
+    /* 一鍵匯入所有設定按鈕 */
+    .loe-import-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-left: 6px; height: 28px; padding: 0 12px;
+      border: 1px solid rgba(28,108,243,.35); border-radius: 999px;
+      background: #fff; color: ${BLUE};
+      font-size: 12px; font-weight: 600; line-height: 1;
+      cursor: pointer; white-space: nowrap;
+    }
+    .loe-import-btn:hover { background: ${BLUE_SOFT}; border-color: ${BLUE}; color: ${BLUE_HOVER}; }
+    .loe-import-btn > svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
     /* 前綴設定彈出框 */
     .loe-prefix-pop {
       position: fixed; z-index: 2147483647;
@@ -521,8 +567,13 @@
     return def;
   }
   function storeSet(key, val) {
-    try { if (typeof GM_setValue === "function") GM_setValue(key, JSON.stringify(val)); } catch (_) {}
-    try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {}
+    try {
+      if (typeof GM_setValue === "function")
+        GM_setValue(key, JSON.stringify(val));
+    } catch (_) {}
+    try {
+      localStorage.setItem(key, JSON.stringify(val));
+    } catch (_) {}
   }
   function getReplies() {
     const v = storeGet(STORE_KEY, null);
@@ -550,8 +601,69 @@
     const dd = document.querySelector("header .dropdown.btn-group");
     return dd ? dd.textContent.trim() : "";
   }
+  // 目前對話的客戶名稱（頂部標題），完整帶入。
+  // LINE 把 emoji 以 <img alt="🍿"> 呈現，這裡用 alt 還原，得到「🍿Z3721/版主 允🐱」這種完整名稱。
+  function getCustomerName() {
+    const h = document.querySelector(".sub-header h4");
+    if (!h) return "";
+    let name = "";
+    (function walk(node) {
+      node.childNodes.forEach((n) => {
+        if (n.nodeType === 3) name += n.nodeValue;
+        else if (n.tagName === "IMG") name += n.getAttribute("alt") || "";
+        else if (n.childNodes && n.childNodes.length) walk(n);
+        else name += n.textContent || "";
+      });
+    })(h);
+    return name.trim();
+  }
+  function getChatId() {
+    const parts = location.pathname.split("/").filter(Boolean);
+    const ci = parts.indexOf("chat");
+    return ci >= 0 && parts[ci + 1] ? parts[ci + 1] : "";
+  }
   function scopedKey(base) {
     return `${base}::${getOaId()}`;
+  }
+  // 設定指定 OA 帳號(gid)的前綴（給「一鍵匯入」用，可寫入非目前帳號）
+  function setPrefixForGid(gid, text) {
+    storeSet(`${PREFIX_KEY}::${gid}`, text || "");
+  }
+  // chat 層級覆寫：key = gid/chat -> { group, pickup }
+  function getChatOverrides() {
+    const v = storeGet(CHAT_OVERRIDE_KEY, null);
+    return v && typeof v === "object" ? v : {};
+  }
+  function setChatOverrides(map) {
+    storeSet(CHAT_OVERRIDE_KEY, map || {});
+  }
+  function getCurrentOverride() {
+    const gid = getOaId();
+    const chat = getChatId();
+    if (!chat) return null;
+    return getChatOverrides()[`${gid}/${chat}`] || null;
+  }
+  // 一鍵匯入：把 CONFIG 套用到各帳號（前綴）與各對話（群編覆寫＋固定上車地址）
+  function applyConfig() {
+    const overrides = {};
+    let gidCount = 0,
+      chatCount = 0;
+    CONFIG.forEach((c) => {
+      if (!c.gid) return;
+      if (c.chat) {
+        overrides[`${c.gid}/${c.chat}`] = {
+          group: c.group || "",
+          pickup: c.pickup || "",
+        };
+        chatCount++;
+      } else {
+        setPrefixForGid(c.gid, c.group || "");
+        gidCount++;
+      }
+    });
+    setChatOverrides(overrides);
+    renderPrefixChip();
+    return { gidCount, chatCount };
   }
   // 取值：先讀此帳號專屬的 key；若沒有、但有舊的全域設定，搬移過來(一次性)
   function getScoped(base) {
@@ -618,13 +730,23 @@
   }
   async function copyText(text) {
     if (!text) return false;
-    if (typeof GM_setClipboard === "function") { GM_setClipboard(text, "text"); return true; }
-    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+    if (typeof GM_setClipboard === "function") {
+      GM_setClipboard(text, "text");
+      return true;
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
     const ta = document.createElement("textarea");
-    ta.value = text; ta.setAttribute("readonly", "");
-    ta.style.position = "fixed"; ta.style.left = "-9999px";
-    document.body.appendChild(ta); ta.select();
-    const ok = document.execCommand("copy"); ta.remove();
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
     return ok;
   }
   function flashCopied(button, ok) {
@@ -671,7 +793,11 @@
       acceptNode(node) {
         const p = node.parentElement;
         if (!p) return NodeFilter.FILTER_REJECT;
-        if (p.closest(`a, button, script, style, textarea, input, .${MAP_LINK_CLASS}`))
+        if (
+          p.closest(
+            `a, button, script, style, textarea, input, .${MAP_LINK_CLASS}`,
+          )
+        )
           return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       },
@@ -686,7 +812,8 @@
       if (!text || !ADDRESS_PATTERN.test(text)) return;
       ADDRESS_PATTERN.lastIndex = 0;
       const frag = document.createDocumentFragment();
-      let last = 0, m;
+      let last = 0,
+        m;
       while ((m = ADDRESS_PATTERN.exec(text)) !== null) {
         frag.appendChild(document.createTextNode(text.slice(last, m.index)));
         frag.appendChild(createMapLink(m[0]));
@@ -705,13 +832,20 @@
    * Reply input (custom <textarea-ex> with shadow DOM)
    * ---------------------------------------------------------------------- */
   function getEditorHost() {
-    return document.querySelector("textarea-ex#editor") || document.querySelector("textarea-ex");
+    return (
+      document.querySelector("textarea-ex#editor") ||
+      document.querySelector("textarea-ex")
+    );
   }
   function fillReplyTextarea(text, replace = false) {
     const host = getEditorHost();
-    const inner = host && host.shadowRoot && host.shadowRoot.querySelector("textarea");
+    const inner =
+      host && host.shadowRoot && host.shadowRoot.querySelector("textarea");
     if (inner) {
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      ).set;
       let next, pos;
       if (replace) {
         next = text;
@@ -723,10 +857,16 @@
         pos = start + text.length;
       }
       setter.call(inner, next);
-      inner.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      inner.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      inner.dispatchEvent(
+        new Event("input", { bubbles: true, composed: true }),
+      );
+      inner.dispatchEvent(
+        new Event("change", { bubbles: true, composed: true }),
+      );
       inner.focus();
-      try { inner.setSelectionRange(pos, pos); } catch (_) {}
+      try {
+        inner.setSelectionRange(pos, pos);
+      } catch (_) {}
       return true;
     }
     // Fallback: plain textarea
@@ -736,8 +876,11 @@
       document.querySelector("textarea.input") ||
       document.querySelector("textarea");
     if (!ta) return false;
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
-    const next = replace ? text : (ta.value + text);
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    ).set;
+    const next = replace ? text : ta.value + text;
     setter ? setter.call(ta, next) : (ta.value = next);
     ta.dispatchEvent(new Event("input", { bubbles: true }));
     ta.dispatchEvent(new Event("change", { bubbles: true }));
@@ -749,12 +892,14 @@
    * Quick reply menu
    * ---------------------------------------------------------------------- */
   function closeQuickReplyMenus(except) {
-    document.querySelectorAll(`.${QUICK_BUTTON_CLASS}.${QUICK_MENU_OPEN_CLASS}`).forEach((b) => {
-      if (b !== except) {
-        b.classList.remove(QUICK_MENU_OPEN_CLASS);
-        b.setAttribute("aria-expanded", "false");
-      }
-    });
+    document
+      .querySelectorAll(`.${QUICK_BUTTON_CLASS}.${QUICK_MENU_OPEN_CLASS}`)
+      .forEach((b) => {
+        if (b !== except) {
+          b.classList.remove(QUICK_MENU_OPEN_CLASS);
+          b.setAttribute("aria-expanded", "false");
+        }
+      });
   }
   function populateQuickMenu(menu) {
     menu.textContent = "";
@@ -762,7 +907,7 @@
     const manage = document.createElement("button");
     manage.type = "button";
     manage.className = "loe-qr-manage";
-    manage.textContent = "✏️ 管理 / 新增快速回覆";
+    manage.textContent = "管理 / 新增快速回覆";
     manage.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -772,7 +917,9 @@
     menu.appendChild(manage);
   }
   function refreshAllQuickMenus() {
-    document.querySelectorAll(`.${QUICK_MENU_CLASS}`).forEach(populateQuickMenu);
+    document
+      .querySelectorAll(`.${QUICK_MENU_CLASS}`)
+      .forEach(populateQuickMenu);
   }
   // 輸入框上方的快捷氣泡列（最多前 5 個；點了帶入對話框）
   function renderQuickBar(bar) {
@@ -808,7 +955,11 @@
     renderQuickBar(bar);
   }
   function addQuickReplyButton(phoneLink) {
-    if (!phoneLink || phoneLink.parentElement.querySelector(`.${QUICK_BUTTON_CLASS}`)) return;
+    if (
+      !phoneLink ||
+      phoneLink.parentElement.querySelector(`.${QUICK_BUTTON_CLASS}`)
+    )
+      return;
     const button = document.createElement("a");
     button.href = "#";
     button.role = "button";
@@ -850,7 +1001,9 @@
 
     const mask = document.createElement("div");
     mask.className = "loe-modal-mask";
-    mask.addEventListener("click", (e) => { if (e.target === mask) closeManager(); });
+    mask.addEventListener("click", (e) => {
+      if (e.target === mask) closeManager();
+    });
 
     const modal = document.createElement("div");
     modal.className = "loe-modal";
@@ -993,7 +1146,10 @@
 
     saveBtn.addEventListener("click", () => {
       const text = textInput.value.trim();
-      if (!text) { textInput.focus(); return; }
+      if (!text) {
+        textInput.focus();
+        return;
+      }
       const name = nameInput.value.trim() || text.slice(0, 12);
       const arr = getReplies();
       if (editIndex >= 0 && editIndex < arr.length) {
@@ -1020,7 +1176,9 @@
     renderList();
     nameInput.focus();
 
-    mask._loeEsc = (e) => { if (e.key === "Escape") closeManager(); };
+    mask._loeEsc = (e) => {
+      if (e.key === "Escape") closeManager();
+    };
     document.addEventListener("keydown", mask._loeEsc);
     openManager._mask = mask;
   }
@@ -1052,7 +1210,10 @@
           url,
           headers: { "Content-Type": "application/json" },
           data: JSON.stringify(body),
-          onload: (res) => (res.status >= 200 && res.status < 300 ? resolve() : reject(new Error("HTTP " + res.status))),
+          onload: (res) =>
+            res.status >= 200 && res.status < 300
+              ? resolve()
+              : reject(new Error("HTTP " + res.status)),
           onerror: () => reject(new Error("network")),
           ontimeout: () => reject(new Error("timeout")),
         });
@@ -1061,7 +1222,11 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-        }).then((r) => (r.ok ? resolve() : reject(new Error("HTTP " + r.status)))).catch(reject);
+        })
+          .then((r) =>
+            r.ok ? resolve() : reject(new Error("HTTP " + r.status)),
+          )
+          .catch(reject);
       }
     });
   }
@@ -1164,13 +1329,15 @@
 
     // 顯示目前綁定的官方帳號（每個帳號各自獨立）
     const acct = document.createElement("div");
-    acct.style.cssText = "display:inline-flex;align-items:center;margin-bottom:8px;padding:3px 9px;border-radius:999px;background:#eef4ff;color:#0b57d0;font-size:12px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+    acct.style.cssText =
+      "display:inline-flex;align-items:center;margin-bottom:8px;padding:3px 9px;border-radius:999px;background:#eef4ff;color:#0b57d0;font-size:12px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
     acct.textContent = `此帳號：${getOaName() || getOaId()}`;
 
     // 前綴
     const hint = document.createElement("div");
     hint.className = "loe-pop-hint";
-    hint.innerHTML = "群編前綴（不用加斜線，派單時會自動補上）。例如填「🐽」或「W0」。（僅套用於此帳號）";
+    hint.innerHTML =
+      "群編前綴（不用加斜線，派單時會自動補上）。例如填「W0」。（僅套用於此帳號）";
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "例如：W0";
@@ -1180,7 +1347,8 @@
     const hookHint = document.createElement("div");
     hookHint.className = "loe-pop-hint";
     hookHint.style.marginTop = "4px";
-    hookHint.textContent = "Discord 頻道 Webhook 網址（留空則改為複製到剪貼簿）：";
+    hookHint.textContent =
+      "Discord 頻道 Webhook 網址（留空則改為複製到剪貼簿）：";
     const hookInput = document.createElement("input");
     hookInput.type = "text";
     hookInput.placeholder = "https://discord.com/api/webhooks/...";
@@ -1190,7 +1358,8 @@
     const whoHint = document.createElement("div");
     whoHint.className = "loe-pop-hint";
     whoHint.style.marginTop = "4px";
-    whoHint.textContent = "後台帳號（Email，會顯示為這張單在 Discord 的發送者）：";
+    whoHint.textContent =
+      "後台帳號（Email，會顯示為這張單在 Discord 的發送者）：";
     const whoInput = document.createElement("input");
     whoInput.type = "email";
     whoInput.placeholder = "例如：dispatcher@uturn.com";
@@ -1201,7 +1370,13 @@
     const clearBtn = document.createElement("button");
     clearBtn.className = "loe-btn-ghost";
     clearBtn.textContent = "清除";
-    clearBtn.addEventListener("click", () => { setPrefix(""); setWebhook(""); setDispatcher(""); closePrefixPopover(); toast("已清除前綴、Webhook 與後台帳號"); });
+    clearBtn.addEventListener("click", () => {
+      setPrefix("");
+      setWebhook("");
+      setDispatcher("");
+      closePrefixPopover();
+      toast("已清除前綴、Webhook 與後台帳號");
+    });
     const saveBtn = document.createElement("button");
     saveBtn.className = "loe-btn-primary";
     saveBtn.textContent = "儲存";
@@ -1216,7 +1391,10 @@
       setWebhook(hookInput.value.trim());
       setDispatcher(acct);
       closePrefixPopover();
-      toast("已儲存設定" + (input.value.trim() ? "（前綴：" + input.value.trim() + "）" : ""));
+      toast(
+        "已儲存設定" +
+          (input.value.trim() ? "（前綴：" + input.value.trim() + "）" : ""),
+      );
     });
     actions.appendChild(clearBtn);
     actions.appendChild(saveBtn);
@@ -1233,9 +1411,13 @@
     document.body.appendChild(pop);
     const r = anchor.getBoundingClientRect();
     pop.style.top = Math.round(r.bottom + 8) + "px";
-    pop.style.left = Math.round(Math.min(r.left, window.innerWidth - 296)) + "px";
+    pop.style.left =
+      Math.round(Math.min(r.left, window.innerWidth - 296)) + "px";
     input.focus();
-    const onKey = (e) => { if (e.key === "Enter") saveBtn.click(); if (e.key === "Escape") closePrefixPopover(); };
+    const onKey = (e) => {
+      if (e.key === "Enter") saveBtn.click();
+      if (e.key === "Escape") closePrefixPopover();
+    };
     input.addEventListener("keydown", onKey);
     hookInput.addEventListener("keydown", onKey);
     whoInput.addEventListener("keydown", onKey);
@@ -1243,7 +1425,10 @@
     openPrefixPopover._pop = pop;
   }
   function closePrefixPopover() {
-    if (openPrefixPopover._pop) { openPrefixPopover._pop.remove(); openPrefixPopover._pop = null; }
+    if (openPrefixPopover._pop) {
+      openPrefixPopover._pop.remove();
+      openPrefixPopover._pop = null;
+    }
   }
   function enhancePrefixChip() {
     const header = document.querySelector("header");
@@ -1261,6 +1446,24 @@
       else openPrefixPopover(chip);
     });
     dd.insertAdjacentElement("afterend", chip);
+
+    // 一鍵匯入所有設定（套用 CONFIG）
+    const importBtn = document.createElement("button");
+    importBtn.type = "button";
+    importBtn.className = "loe-import-btn";
+    importBtn.insertAdjacentHTML("beforeend", ic("download"));
+    const importLabel = document.createElement("span");
+    importLabel.textContent = "一鍵匯入所有設定";
+    importBtn.appendChild(importLabel);
+    importBtn.title = "把預設的群編設定檔套用到各帳號／門市";
+    importBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const r = applyConfig();
+      toast(`已匯入設定：${r.gidCount} 個帳號群編、${r.chatCount} 筆門市覆寫`);
+    });
+    chip.insertAdjacentElement("afterend", importBtn);
+
     renderPrefixChip();
   }
 
@@ -1270,27 +1473,35 @@
    * ---------------------------------------------------------------------- */
   const TRUCK_ICON = ic("truck");
   const CALC_ICON = ic("calculator");
-  // 固定格式：群編/地址 [時間] [備註] mailto:後台帳號
+  // 固定格式：群編/地址 [note:筆記] mailto:後台帳號
   // 群編不需自行加斜線，這裡自動補上一個（已有斜線也不會重複）。
-  // 例：W0/虎尾高中 23:30 2人 mailto:dc@gmail.com
-  function buildDispatchPayload(groupCode, address, time, note) {
+  // 例：W0/虎尾高中 note:王小明 mailto:dc@gmail.com
+  function buildDispatchPayload(groupCode, address, memo) {
     const email = getDispatcher();
     const g = (groupCode || "").replace(/\/+$/, ""); // 去掉尾端斜線，統一補一個
     let body = g ? `${g}/${address}` : address;
-    if (time) body += ` ${time}`;
-    if (note) body += ` ${note}`;
+    if (memo) body += ` note:${memo}`; // 筆記（司機看不到，內部備記用）
     if (email) body += ` mailto:${email}`;
     return body;
   }
   function closeDispatchPopover() {
-    if (openDispatchPopover._pop) { openDispatchPopover._pop.remove(); openDispatchPopover._pop = null; }
+    if (openDispatchPopover._pop) {
+      openDispatchPopover._pop.remove();
+      openDispatchPopover._pop = null;
+    }
   }
   // 自動回覆：填入訊息並按下「傳送」
   function autoSendReply(text) {
     fillReplyTextarea(text, true);
-    const sendBtn = document.querySelector(".send-group.btn-group input.btn, .send-group.btn-group button.btn");
+    const sendBtn = document.querySelector(
+      ".send-group.btn-group input.btn, .send-group.btn-group button.btn",
+    );
     if (sendBtn) {
-      window.setTimeout(() => { try { sendBtn.click(); } catch (_) {} }, 120);
+      window.setTimeout(() => {
+        try {
+          sendBtn.click();
+        } catch (_) {}
+      }, 120);
       return true;
     }
     return false;
@@ -1311,16 +1522,24 @@
     closeX.className = "loe-pop-close";
     closeX.textContent = "×";
     closeX.title = "關閉";
-    closeX.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); closeDispatchPopover(); });
+    closeX.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeDispatchPopover();
+    });
 
-    // 群編（預設帶入此帳號設定的前綴，可自行編輯）
+    // 依設定檔決定預設：此對話有店配覆寫就用覆寫的群編＋固定上車地址，否則用此帳號前綴
+    const override = getCurrentOverride();
+
+    // 群編（預設帶入設定的前綴／店配覆寫，可自行編輯）
     const groupLabel = document.createElement("label");
     groupLabel.className = "loe-fld";
     groupLabel.textContent = "群編（預設為設定的前綴，可改；不用加斜線）";
     const groupInput = document.createElement("input");
     groupInput.type = "text";
     groupInput.placeholder = "例如：W0";
-    groupInput.value = getPrefix();
+    groupInput.value =
+      override && override.group ? override.group : getPrefix();
 
     const addrLabel = document.createElement("label");
     addrLabel.className = "loe-fld";
@@ -1328,22 +1547,18 @@
     const addrInput = document.createElement("textarea");
     addrInput.rows = 2;
     addrInput.placeholder = "例如：員林市溝皂六街8號";
+    // 優先順序：轉發帶入的地址 > 店配固定上車地址
     if (prefillAddress) addrInput.value = prefillAddress;
+    else if (override && override.pickup) addrInput.value = override.pickup;
 
-    // 預約時間（24h，HH:MM；留空＝即時單，顯示 --:--）
-    const timeLabel = document.createElement("label");
-    timeLabel.className = "loe-fld";
-    timeLabel.textContent = "預約時間（選填，24小時制；留空為即時單）";
-    const timeInput = document.createElement("input");
-    timeInput.type = "time";
-    timeInput.step = "60";
-
-    const noteLabel = document.createElement("label");
-    noteLabel.className = "loe-fld";
-    noteLabel.textContent = "備註（選填）";
-    const noteInput = document.createElement("textarea");
-    noteInput.rows = 2;
-    noteInput.placeholder = "例如：2人、有行李、電子菸";
+    // 筆記（預約單可記客戶名稱，司機看不到；組成時變成 note:）
+    const memoLabel = document.createElement("label");
+    memoLabel.className = "loe-fld";
+    memoLabel.textContent = "筆記（選填，預約單可記客戶名稱，司機看不到）";
+    const memoInput = document.createElement("input");
+    memoInput.type = "text";
+    memoInput.placeholder = "例如：王小明（會變成 note:王小明）";
+    memoInput.value = getCustomerName(); // 預設帶入目前客戶名稱（含 emoji），可自行改
 
     // 預覽單號（即時顯示送出的完整字串）
     const previewLabel = document.createElement("label");
@@ -1354,13 +1569,16 @@
     function refreshPreview() {
       const a = addrInput.value.trim();
       preview.textContent = a
-        ? buildDispatchPayload(groupInput.value.trim(), a, timeInput.value, noteInput.value.trim())
+        ? buildDispatchPayload(
+            groupInput.value.trim(),
+            a,
+            memoInput.value.trim(),
+          )
         : "（填入上車地址後顯示）";
     }
     groupInput.addEventListener("input", refreshPreview);
     addrInput.addEventListener("input", refreshPreview);
-    timeInput.addEventListener("input", refreshPreview);
-    noteInput.addEventListener("input", refreshPreview);
+    memoInput.addEventListener("input", refreshPreview);
 
     // 是否自動回覆訊息
     const chkWrap = document.createElement("label");
@@ -1369,7 +1587,8 @@
     chk.type = "checkbox";
     chk.checked = getAutoReply();
     const chkText = document.createElement("span");
-    chkText.textContent = "送出派單後，自動傳送「安排」訊息給客人（不勾＝只帶入輸入框，自己按送出）";
+    chkText.textContent =
+      "送出派單後，自動傳送「安排」訊息給客人（不勾＝只帶入輸入框，自己按送出）";
     chkText.title = DISPATCH_REPLY_MSG;
     chkWrap.appendChild(chk);
     chkWrap.appendChild(chkText);
@@ -1385,8 +1604,15 @@
     sendBtn.textContent = "送出派單";
     sendBtn.addEventListener("click", async () => {
       const address = addrInput.value.trim();
-      if (!address) { addrInput.focus(); return; }
-      const payload = buildDispatchPayload(groupInput.value.trim(), address, timeInput.value, noteInput.value.trim());
+      if (!address) {
+        addrInput.focus();
+        return;
+      }
+      const payload = buildDispatchPayload(
+        groupInput.value.trim(),
+        address,
+        memoInput.value.trim(),
+      );
       const auto = chk.checked;
       setAutoReply(auto); // 記住選擇
       sendBtn.disabled = true;
@@ -1395,10 +1621,18 @@
         closeDispatchPopover();
         if (auto) {
           autoSendReply(DISPATCH_REPLY_MSG);
-          toast(how === "discord" ? "已派單到 Discord，並已自動回覆客人" : "已複製（未設定 Webhook），並已自動回覆客人");
+          toast(
+            how === "discord"
+              ? "已派單到 Discord，並已自動回覆客人"
+              : "已複製（未設定 Webhook），並已自動回覆客人",
+          );
         } else {
           // 不勾選：只送派單，不在輸入框帶入任何訊息
-          toast(how === "discord" ? "已派單到 Discord（未回覆客人）" : "已複製（未設定 Webhook）");
+          toast(
+            how === "discord"
+              ? "已派單到 Discord（未回覆客人）"
+              : "已複製（未設定 Webhook）",
+          );
         }
       } catch (err) {
         sendBtn.disabled = false;
@@ -1414,10 +1648,8 @@
     pop.appendChild(groupInput);
     pop.appendChild(addrLabel);
     pop.appendChild(addrInput);
-    pop.appendChild(timeLabel);
-    pop.appendChild(timeInput);
-    pop.appendChild(noteLabel);
-    pop.appendChild(noteInput);
+    pop.appendChild(memoLabel);
+    pop.appendChild(memoInput);
     pop.appendChild(previewLabel);
     pop.appendChild(preview);
     pop.appendChild(chkWrap);
@@ -1429,17 +1661,21 @@
     const W = pop.offsetWidth || 300;
     if (anchor) {
       const r = anchor.getBoundingClientRect();
-      pop.style.left = Math.round(Math.max(8, Math.min(r.left, window.innerWidth - W - 8))) + "px";
+      pop.style.left =
+        Math.round(Math.max(8, Math.min(r.left, window.innerWidth - W - 8))) +
+        "px";
       pop.style.bottom = Math.round(window.innerHeight - r.top + 8) + "px";
       pop.style.top = "auto";
       pop.style.maxHeight = Math.round(r.top - 16) + "px";
     } else {
       pop.style.left = Math.round((window.innerWidth - W) / 2) + "px";
       pop.style.top = "12px";
-      pop.style.maxHeight = (window.innerHeight - 24) + "px";
+      pop.style.maxHeight = window.innerHeight - 24 + "px";
     }
     addrInput.focus();
-    pop.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDispatchPopover(); });
+    pop.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeDispatchPopover();
+    });
     openDispatchPopover._pop = pop;
   }
   function addDispatchButton() {
@@ -1463,8 +1699,13 @@
       group.insertAdjacentElement("beforebegin", btn);
     }
     // 估價按鈕：放在「派單」左邊，固定開啟估價網站
-    const dispatchBtn = group.parentElement.querySelector(`.${DISPATCH_BUTTON_CLASS}`);
-    if (dispatchBtn && !group.parentElement.querySelector(`.${ESTIMATE_BUTTON_CLASS}`)) {
+    const dispatchBtn = group.parentElement.querySelector(
+      `.${DISPATCH_BUTTON_CLASS}`,
+    );
+    if (
+      dispatchBtn &&
+      !group.parentElement.querySelector(`.${ESTIMATE_BUTTON_CLASS}`)
+    ) {
       const est = document.createElement("button");
       est.type = "button";
       est.className = ESTIMATE_BUTTON_CLASS;
@@ -1492,7 +1733,11 @@
   addDispatchButton();
   ensureQuickBar();
   paintIcons();
-  document.addEventListener("click", () => { closeQuickReplyMenus(); closePrefixPopover(); closeDispatchPopover(); });
+  document.addEventListener("click", () => {
+    closeQuickReplyMenus();
+    closePrefixPopover();
+    closeDispatchPopover();
+  });
 
   // 全域維護工作（建立按鈕/前綴/氣泡列/圖示）以 rAF 去抖動，每幀最多執行一次，避免忙迴圈卡住主執行緒。
   let maintQueued = false;
@@ -1531,11 +1776,16 @@
         if (!(node instanceof Element)) continue;
         if (node.matches(".chat-body")) addCopyButton(node);
         else enhanceChatBodies(node);
-        if (node.matches("i.lar.la-chat-phone.la-fw.la-lg")) addQuickReplyButton(node.closest("a"));
+        if (node.matches("i.lar.la-chat-phone.la-fw.la-lg"))
+          addQuickReplyButton(node.closest("a"));
         else enhanceQuickReplyToolbars(node);
       }
     }
     scheduleMaintenance();
   });
-  observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+  observer.observe(document.body, {
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
 })();
