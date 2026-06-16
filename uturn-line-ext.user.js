@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Uturn專屬派單神器
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.17.2
+// @version      1.18.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -61,13 +61,27 @@
    * 要新增門市/帳號，照格式往下加即可。
    * ====================================================================== */
   const CONFIG = [
+    // 帳號層級（群編預設）：{ group, gid }
+    { group: "*🍿", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7" },
+    { group: "*📗", gid: "Uac542d3ffeeb279827bb2d5dfac1f26d" },
+    { group: "*🌪️", gid: "Ub8ead8093979b9ce4aaa4332921610c0" },
+    { group: "*🌊", gid: "U93634323fea8a2ce9facd79d0edfcbd1" },
+    { group: "*🍓", gid: "Ub0336775c2eabda4735e98b48dc0aa72" },
+    { group: "*🍒", gid: "Udadf526c6163cf0f42d52e31f20dc8e8" },
+    { group: "*🪼", gid: "U19abd947d4a982d03ca24274fc62c6c8" },
+    { group: "*🍦", gid: "U6c97c065bdbe16a3a83ec465963f2240" },
+    { group: "*🍁", gid: "U2d148b75a8b0df438e0070111baa19eb" },
+    { group: "*🍑", gid: "Ued3a794c10f0a699343f3992d12e9bee" },
+    { group: "*🍋‍🟩", gid: "U660a73ac245d76a8e4bf2986b62b4392" },
+    { group: "*🐬", gid: "Ua5e9cfeb16616c79e559133f8b9e97d9" },
+    { group: "*🐑", gid: "U2e6bea0ce91ede806436c69e5bf36208" },
+    { group: "*🐦‍🔥", gid: "U6d9a3726cc6b791715d99944a4725f01" },
+    { group: "*🍔", gid: "Uaec9e478c471c730b50e7a0b7fa35110" },
+    { group: "*🏈", gid: "U1d456f5238bbb07f9229923ccad452b2" },
+    { group: "*🐳", gid: "U07f1858be8fa376ab889f7dc53a29c19" },
+    { group: "*🎵", gid: "U3df1c9d94b1c0454a385fe3f958c421c" },
+    // 店配（對話層級：固定群編＋上車地址）：{ group, gid, chat, pickup }
     {
-      name: "超派叫車",
-      group: "*🍿",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-    },
-    {
-      name: "超派店配1",
       group: "*🍿70店",
       gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
       chat: "C8c750ad390270edfff713e1d567c523c",
@@ -685,17 +699,30 @@
     storeSet(scopedKey(PREFIX_KEY), text || "");
     renderPrefixChip();
   }
+  // Webhook 與後台帳號為「全域共用」：設定一次，所有帳號／頁面共用。
+  // 讀取時：先讀全域；若全域空、但舊版有存成「此帳號專屬」，自動搬到全域(一次性)。
+  function getGlobalWithMigration(base) {
+    let v = storeGet(base, "");
+    if (!v) {
+      const sc = storeGet(scopedKey(base), "");
+      if (sc) {
+        storeSet(base, sc);
+        v = sc;
+      }
+    }
+    return typeof v === "string" ? v : "";
+  }
   function getWebhook() {
-    return getScoped(WEBHOOK_KEY);
+    return getGlobalWithMigration(WEBHOOK_KEY);
   }
   function setWebhook(url) {
-    storeSet(scopedKey(WEBHOOK_KEY), (url || "").trim());
+    storeSet(WEBHOOK_KEY, (url || "").trim());
   }
   function getDispatcher() {
-    return getScoped(DISPATCHER_KEY);
+    return getGlobalWithMigration(DISPATCHER_KEY);
   }
   function setDispatcher(name) {
-    storeSet(scopedKey(DISPATCHER_KEY), (name || "").trim());
+    storeSet(DISPATCHER_KEY, (name || "").trim());
   }
   function getAutoReply() {
     return storeGet(AUTOREPLY_KEY, false) === true;
@@ -1348,18 +1375,17 @@
     hookHint.className = "loe-pop-hint";
     hookHint.style.marginTop = "4px";
     hookHint.textContent =
-      "Discord 頻道 Webhook 網址（留空則改為複製到剪貼簿）：";
+      "Discord 頻道 Webhook 網址（全部帳號共用，設定一次即可；留空＝改為複製到剪貼簿）：";
     const hookInput = document.createElement("input");
     hookInput.type = "text";
     hookInput.placeholder = "https://discord.com/api/webhooks/...";
     hookInput.value = getWebhook();
 
-    // 後台帳號（Email）— 會顯示為這張單在 Discord 的發送者；每個 OA 帳號各自設定
+    // 後台帳號（Email）— 全部帳號共用，顯示為這張單在 Discord 的發送者
     const whoHint = document.createElement("div");
     whoHint.className = "loe-pop-hint";
     whoHint.style.marginTop = "4px";
-    whoHint.textContent =
-      "後台帳號（Email，會顯示為這張單在 Discord 的發送者）：";
+    whoHint.textContent = "後台帳號（Email，全部帳號共用，設定一次即可）：";
     const whoInput = document.createElement("input");
     whoInput.type = "email";
     whoInput.placeholder = "例如：dispatcher@uturn.com";
