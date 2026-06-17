@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Uturn專屬派單神器
+// @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.18.5
+// @version      1.19.5
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -52,6 +52,8 @@
   const DISPATCH_POP_CLASS = "loe-dispatch-pop";
   const ESTIMATE_BUTTON_CLASS = "loe-estimate-button"; // 估價按鈕
   const AUTOREPLY_KEY = "loe_dispatch_autoreply_v1"; // 派單後是否自動回覆客人
+  const MEMO_INCLUDE_KEY = "loe_dispatch_memo_include_v1"; // 派單是否帶入筆記(note:)
+  const DISPATCH_TEMPLATE_KEY = "loe_dispatch_template_v1"; // 自動回覆要送的範本名稱
   const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
 
   /* ====================================================================== *
@@ -712,6 +714,9 @@
     .${DISPATCH_POP_CLASS} .loe-check input { width: 16px; height: 16px; margin: 1px 0 0; flex-shrink: 0; }
     .${DISPATCH_POP_CLASS} .loe-preview { margin: 8px 0 2px; padding: 7px 10px; background: #f8fafc; border-radius: 8px; color: #334155; font-size: 12px; white-space: pre-wrap; word-break: break-all; min-height: 16px; }
     .${DISPATCH_POP_CLASS} .loe-pop-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+    .${DISPATCH_POP_CLASS} .loe-check { align-items: center; }
+    .loe-tpl-select { flex: 1; min-width: 0; border: 1px solid rgba(15,23,42,.18); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12px; background: #fff; color: #1f2937; cursor: pointer; }
+    .loe-tpl-select:focus { outline: none; border-color: ${BLUE}; }
   `;
   document.head.appendChild(style);
 
@@ -880,6 +885,19 @@
   }
   function setAutoReply(on) {
     storeSet(AUTOREPLY_KEY, !!on);
+  }
+  function getMemoInclude() {
+    return storeGet(MEMO_INCLUDE_KEY, true) !== false; // 預設帶入
+  }
+  function setMemoInclude(on) {
+    storeSet(MEMO_INCLUDE_KEY, !!on);
+  }
+  function getDispatchTemplate() {
+    const v = storeGet(DISPATCH_TEMPLATE_KEY, "");
+    return typeof v === "string" ? v : "";
+  }
+  function setDispatchTemplate(name) {
+    storeSet(DISPATCH_TEMPLATE_KEY, name || "");
   }
 
   /* ---------------------------------------------------------------------- *
@@ -1104,7 +1122,7 @@
     bar = bar || document.querySelector(`.${QR_BAR_CLASS}`);
     if (!bar) return;
     bar.textContent = "";
-    const reps = getReplies().slice(0, QR_BAR_MAX);
+    const reps = getReplies(); // 全部顯示（氣泡列可水平滑動）
     reps.forEach((r) => {
       const chip = document.createElement("button");
       chip.type = "button";
@@ -1343,7 +1361,8 @@
     const listHint = document.createElement("div");
     listHint.className = "loe-qr-empty";
     listHint.style.cssText = "text-align:left;padding:0 0 8px;color:#94a3b8;";
-    listHint.textContent = "用 ↑ ↓ 調整順序；對話框上方只顯示最前面 5 個。";
+    listHint.textContent =
+      "用 ↑ ↓ 調整順序；對話框上方會顯示全部（可左右滑動）。";
     body.appendChild(listHint);
     body.appendChild(list);
     body.appendChild(form);
@@ -1641,6 +1660,22 @@
     });
     chip.insertAdjacentElement("afterend", importBtn);
 
+    // 估價按鈕（頂部，放在「一鍵匯入所有設定」旁邊）
+    const estBtn = document.createElement("button");
+    estBtn.type = "button";
+    estBtn.className = "loe-import-btn";
+    estBtn.insertAdjacentHTML("beforeend", ic("calculator"));
+    const estLabel = document.createElement("span");
+    estLabel.textContent = "估價";
+    estBtn.appendChild(estLabel);
+    estBtn.title = "估價（開啟計費網站）";
+    estBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.open("https://calc-fare.mr-chi-tech.com/", "_blank", "noopener");
+    });
+    importBtn.insertAdjacentElement("afterend", estBtn);
+
     renderPrefixChip();
   }
 
@@ -1723,7 +1758,7 @@
     addrLabel.textContent = "上車地址";
     const addrInput = document.createElement("textarea");
     addrInput.rows = 2;
-    addrInput.placeholder = "例如：員林市溝皂六街8號";
+    addrInput.placeholder = "例如：墨鐵 20:30有行李箱";
     // 優先順序：轉發帶入的地址 > 店配固定上車地址
     if (prefillAddress) addrInput.value = prefillAddress;
     else if (override && override.pickup) addrInput.value = override.pickup;
@@ -1731,11 +1766,25 @@
     // 筆記（預約單可記客戶名稱，司機看不到；組成時變成 note:）
     const memoLabel = document.createElement("label");
     memoLabel.className = "loe-fld";
-    memoLabel.textContent = "筆記（選填，預約單可記客戶名稱，司機看不到）";
+    memoLabel.textContent = "筆記(選填，司機看不到)";
     const memoInput = document.createElement("input");
     memoInput.type = "text";
     memoInput.placeholder = "例如：王小明（會變成 note:王小明）";
     memoInput.value = getCustomerName(); // 預設帶入目前客戶名稱（含 emoji），可自行改
+
+    // 是否把筆記帶入派單（控制 note: 是否出現在預覽與送出內容）
+    const memoChkWrap = document.createElement("label");
+    memoChkWrap.className = "loe-check";
+    const memoChk = document.createElement("input");
+    memoChk.type = "checkbox";
+    memoChk.checked = getMemoInclude();
+    const memoChkText = document.createElement("span");
+    memoChkText.textContent = "帶入乘客名稱作為筆記";
+    memoChkWrap.appendChild(memoChk);
+    memoChkWrap.appendChild(memoChkText);
+
+    // 取目前要送出的筆記值（沒勾就視為空）
+    const currentMemo = () => (memoChk.checked ? memoInput.value.trim() : "");
 
     // 預覽單號（即時顯示送出的完整字串）
     const previewLabel = document.createElement("label");
@@ -1746,29 +1795,56 @@
     function refreshPreview() {
       const a = addrInput.value.trim();
       preview.textContent = a
-        ? buildDispatchPayload(
-            groupInput.value.trim(),
-            a,
-            memoInput.value.trim(),
-          )
+        ? buildDispatchPayload(groupInput.value.trim(), a, currentMemo())
         : "（填入上車地址後顯示）";
     }
     groupInput.addEventListener("input", refreshPreview);
     addrInput.addEventListener("input", refreshPreview);
     memoInput.addEventListener("input", refreshPreview);
+    memoChk.addEventListener("change", () => {
+      setMemoInclude(memoChk.checked);
+      refreshPreview();
+    });
 
-    // 是否自動回覆訊息
-    const chkWrap = document.createElement("label");
+    // 派單後自動回覆客人（可選範本）
+    const chkWrap = document.createElement("div");
     chkWrap.className = "loe-check";
+    const chkLabel = document.createElement("label");
+    chkLabel.style.cssText =
+      "display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;";
     const chk = document.createElement("input");
     chk.type = "checkbox";
     chk.checked = getAutoReply();
     const chkText = document.createElement("span");
-    chkText.textContent =
-      "送出派單後，自動傳送「安排」訊息給客人（不勾＝只帶入輸入框，自己按送出）";
-    chkText.title = DISPATCH_REPLY_MSG;
-    chkWrap.appendChild(chk);
-    chkWrap.appendChild(chkText);
+    chkText.textContent = "派單後自動回覆客人";
+    chkLabel.appendChild(chk);
+    chkLabel.appendChild(chkText);
+    // 範本下拉（從快速回覆範本）
+    const reps = getReplies();
+    const tplSelect = document.createElement("select");
+    tplSelect.className = "loe-tpl-select";
+    reps.forEach((r, i) => {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = r.name || (r.text || "").slice(0, 10);
+      tplSelect.appendChild(o);
+    });
+    let selIdx = reps.findIndex(
+      (r) => (r.name || "") === getDispatchTemplate(),
+    );
+    if (selIdx < 0) selIdx = reps.findIndex((r) => (r.name || "") === "安排");
+    if (selIdx < 0) selIdx = 0;
+    if (reps.length) tplSelect.value = String(selIdx);
+    tplSelect.addEventListener("change", () => {
+      const r = reps[Number(tplSelect.value)];
+      if (r) setDispatchTemplate(r.name || "");
+    });
+    const selectedReplyText = () => {
+      const r = reps[Number(tplSelect.value)];
+      return r ? r.text : "";
+    };
+    chkWrap.appendChild(chkLabel);
+    chkWrap.appendChild(tplSelect);
 
     const actions = document.createElement("div");
     actions.className = "loe-pop-actions";
@@ -1778,7 +1854,7 @@
     cancelBtn.addEventListener("click", closeDispatchPopover);
     const sendBtn = document.createElement("button");
     sendBtn.className = "loe-btn-primary";
-    sendBtn.textContent = "送出派單";
+    sendBtn.textContent = "確認";
     sendBtn.addEventListener("click", async () => {
       const address = addrInput.value.trim();
       if (!address) {
@@ -1788,7 +1864,7 @@
       const payload = buildDispatchPayload(
         groupInput.value.trim(),
         address,
-        memoInput.value.trim(),
+        currentMemo(),
       );
       const auto = chk.checked;
       setAutoReply(auto); // 記住選擇
@@ -1797,7 +1873,7 @@
         const how = await sendForward(payload);
         closeDispatchPopover();
         if (auto) {
-          autoSendReply(DISPATCH_REPLY_MSG);
+          autoSendReply(selectedReplyText());
           toast(
             how === "discord"
               ? "已派單到 Discord，並已自動回覆客人"
@@ -1827,6 +1903,7 @@
     pop.appendChild(addrInput);
     pop.appendChild(memoLabel);
     pop.appendChild(memoInput);
+    pop.appendChild(memoChkWrap);
     pop.appendChild(previewLabel);
     pop.appendChild(preview);
     pop.appendChild(chkWrap);
@@ -1874,29 +1951,6 @@
         else openDispatchPopover();
       });
       group.insertAdjacentElement("beforebegin", btn);
-    }
-    // 估價按鈕：放在「派單」左邊，固定開啟估價網站
-    const dispatchBtn = group.parentElement.querySelector(
-      `.${DISPATCH_BUTTON_CLASS}`,
-    );
-    if (
-      dispatchBtn &&
-      !group.parentElement.querySelector(`.${ESTIMATE_BUTTON_CLASS}`)
-    ) {
-      const est = document.createElement("button");
-      est.type = "button";
-      est.className = ESTIMATE_BUTTON_CLASS;
-      est.title = "估價（開啟計費網站）";
-      est.insertAdjacentHTML("beforeend", CALC_ICON);
-      const elabel = document.createElement("span");
-      elabel.textContent = "估價";
-      est.appendChild(elabel);
-      est.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        window.open("https://calc-fare.mr-chi-tech.com/", "_blank", "noopener");
-      });
-      dispatchBtn.insertAdjacentElement("beforebegin", est);
     }
   }
 
