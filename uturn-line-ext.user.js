@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.19.5
+// @version      1.20.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -54,6 +54,7 @@
   const AUTOREPLY_KEY = "loe_dispatch_autoreply_v1"; // 派單後是否自動回覆客人
   const MEMO_INCLUDE_KEY = "loe_dispatch_memo_include_v1"; // 派單是否帶入筆記(note:)
   const DISPATCH_TEMPLATE_KEY = "loe_dispatch_template_v1"; // 自動回覆要送的範本名稱
+  const MARK_FOLLOWUP_KEY = "loe_dispatch_mark_followup_v1"; // 派單後是否標記待處理
   const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
 
   /* ====================================================================== *
@@ -899,6 +900,12 @@
   function setDispatchTemplate(name) {
     storeSet(DISPATCH_TEMPLATE_KEY, name || "");
   }
+  function getMarkFollowUp() {
+    return storeGet(MARK_FOLLOWUP_KEY, true) !== false; // 預設標記
+  }
+  function setMarkFollowUp(on) {
+    storeSet(MARK_FOLLOWUP_KEY, !!on);
+  }
 
   /* ---------------------------------------------------------------------- *
    * Toast
@@ -1718,6 +1725,20 @@
     }
     return false;
   }
+  // 標記目前對話為「待處理」：點 LINE 自己的待處理按鈕（用它的驗證 token，API 直打會 403）。
+  // 已是待處理（按鈕呈 btn-outline-success）就不再點，避免被切回未標記。
+  function markFollowUp() {
+    try {
+      const btn = [
+        ...document.querySelectorAll(".sub-header a.btn, a.btn"),
+      ].find((b) => b.textContent.trim() === "待處理");
+      if (!btn) return false;
+      if (/btn-outline-success|\bactive\b/.test(btn.className)) return true; // 已標記
+      btn.click();
+      return true;
+    } catch (_) {}
+    return false;
+  }
   function openDispatchPopover(prefillAddress) {
     closeDispatchPopover();
     const anchor = document.querySelector(`.${DISPATCH_BUTTON_CLASS}`);
@@ -1779,9 +1800,21 @@
     memoChk.type = "checkbox";
     memoChk.checked = getMemoInclude();
     const memoChkText = document.createElement("span");
-    memoChkText.textContent = "帶入乘客名稱作為筆記";
+    memoChkText.textContent = "帶入乘客姓名";
     memoChkWrap.appendChild(memoChk);
     memoChkWrap.appendChild(memoChkText);
+
+    // 是否標記「待處理」（有勾才標記）
+    const markChkWrap = document.createElement("label");
+    markChkWrap.className = "loe-check";
+    const markChk = document.createElement("input");
+    markChk.type = "checkbox";
+    markChk.checked = getMarkFollowUp();
+    const markChkText = document.createElement("span");
+    markChkText.textContent = "標記待處理";
+    markChkWrap.appendChild(markChk);
+    markChkWrap.appendChild(markChkText);
+    markChk.addEventListener("change", () => setMarkFollowUp(markChk.checked));
 
     // 取目前要送出的筆記值（沒勾就視為空）
     const currentMemo = () => (memoChk.checked ? memoInput.value.trim() : "");
@@ -1887,6 +1920,8 @@
               : "已複製（未設定 Webhook）",
           );
         }
+        // 有勾選「標記待處理」才標記目前這個對話（在自動回覆送出之後）
+        if (markChk.checked) window.setTimeout(markFollowUp, 500);
       } catch (err) {
         sendBtn.disabled = false;
         toast("派單失敗：" + (err && err.message ? err.message : "未知錯誤"));
@@ -1904,6 +1939,7 @@
     pop.appendChild(memoLabel);
     pop.appendChild(memoInput);
     pop.appendChild(memoChkWrap);
+    pop.appendChild(markChkWrap);
     pop.appendChild(previewLabel);
     pop.appendChild(preview);
     pop.appendChild(chkWrap);
