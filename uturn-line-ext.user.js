@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.20.1
+// @version      1.21.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -55,6 +55,7 @@
   const MEMO_INCLUDE_KEY = "loe_dispatch_memo_include_v1"; // 派單是否帶入筆記(note:)
   const DISPATCH_TEMPLATE_KEY = "loe_dispatch_template_v1"; // 自動回覆要送的範本名稱
   const MARK_FOLLOWUP_KEY = "loe_dispatch_mark_followup_v1"; // 派單後是否標記待處理
+  const LINEURL_INCLUDE_KEY = "loe_dispatch_lineurl_v1"; // 送出是否附上對話連結(linechaturl:)
   const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
 
   /* ====================================================================== *
@@ -905,6 +906,12 @@
   }
   function setMarkFollowUp(on) {
     storeSet(MARK_FOLLOWUP_KEY, !!on);
+  }
+  function getLineUrlInclude() {
+    return storeGet(LINEURL_INCLUDE_KEY, true) !== false; // 預設附上
+  }
+  function setLineUrlInclude(on) {
+    storeSet(LINEURL_INCLUDE_KEY, !!on);
   }
 
   /* ---------------------------------------------------------------------- *
@@ -1818,6 +1825,12 @@
 
     // 取目前要送出的筆記值（沒勾就視為空）
     const currentMemo = () => (memoChk.checked ? memoInput.value.trim() : "");
+    // 對話連結（linechaturl:）— 永遠在送出時加在最後；預覽不顯示
+    const lineUrlSuffix = () => {
+      const chat = getChatId();
+      if (!chat) return "";
+      return ` linechaturl:https://chat.line.biz/${getOaId()}/chat/${chat}`;
+    };
 
     // 預覽單號（即時顯示送出的完整字串）
     const previewLabel = document.createElement("label");
@@ -1894,11 +1907,10 @@
         addrInput.focus();
         return;
       }
-      const payload = buildDispatchPayload(
-        groupInput.value.trim(),
-        address,
-        currentMemo(),
-      );
+      // 預覽用的內容不含對話連結；送出時才在最後加上 linechaturl:
+      const payload =
+        buildDispatchPayload(groupInput.value.trim(), address, currentMemo()) +
+        lineUrlSuffix();
       const auto = chk.checked;
       setAutoReply(auto); // 記住選擇
       sendBtn.disabled = true;
@@ -1938,8 +1950,15 @@
     pop.appendChild(addrInput);
     pop.appendChild(memoLabel);
     pop.appendChild(memoInput);
-    pop.appendChild(memoChkWrap);
-    pop.appendChild(markChkWrap);
+    // 勾選同一行
+    memoChkWrap.style.marginTop = "0";
+    markChkWrap.style.marginTop = "0";
+    const checksRow = document.createElement("div");
+    checksRow.style.cssText =
+      "display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:10px;";
+    checksRow.appendChild(memoChkWrap);
+    checksRow.appendChild(markChkWrap);
+    pop.appendChild(checksRow);
     pop.appendChild(previewLabel);
     pop.appendChild(preview);
     pop.appendChild(chkWrap);
