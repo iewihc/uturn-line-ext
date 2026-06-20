@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.21.2
-// @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單。
+// @version      1.22.0
+// @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
 // @match        https://chat.line.biz/*
@@ -12,6 +12,7 @@
 // @grant        GM_xmlhttpRequest
 // @connect      discord.com
 // @connect      discordapp.com
+// @connect      mr-chi-tech.com
 // @homepageURL  https://github.com/iewihc/uturn-line-ext
 // @supportURL   https://github.com/iewihc/uturn-line-ext/issues
 // @downloadURL  https://raw.githubusercontent.com/iewihc/uturn-line-ext/main/uturn-line-ext.user.js
@@ -877,7 +878,7 @@
     storeSet(WEBHOOK_KEY, (url || "").trim());
   }
   function getDispatcher() {
-    return getGlobalWithMigration(DISPATCHER_KEY);
+    return (getGlobalWithMigration(DISPATCHER_KEY) || "").trim();
   }
   function setDispatcher(name) {
     storeSet(DISPATCHER_KEY, (name || "").trim());
@@ -2010,6 +2011,178 @@
   }
 
   /* ---------------------------------------------------------------------- *
+   * 後台一鍵分享 → 自動送出
+   *   後台按「分享」會開啟  https://chat.line.biz/{gid}/chat/{chatId}?send={token}
+   *   本腳本偵測到 ?send={token} 後：
+   *     GET  {API_BASE}/line-dispatch/{token}      -> { text, gid, chatId }（一次性，410=已用/過期）
+   *     填入對話框 → 點送出 → POST .../ack（回報結果）→ 清掉網址 ?send
+   *   ※ 腳本不含任何訊息模板：要送的文字一律由後台 getCopyText() 組好、存在後端，這裡只搬運。
+   * ---------------------------------------------------------------------- */
+  const API_BASE = "https://right.mr-chi-tech.com"; // 後端網域（@connect mr-chi-tech.com 已涵蓋子網域）
+  const SEND_TOKEN_RE = /^[0-9a-f]{64}$/;
+  let lastConsumedToken = null; // 冪等：同一 token 不重複處理
+  let sendInFlight = false;
+
+  function getSendToken() {
+    try {
+      const t = new URL(location.href).searchParams.get("send");
+      return t && SEND_TOKEN_RE.test(t) ? t : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function cleanupSendParam() {
+    try {
+      const u = new URL(location.href);
+      if (!u.searchParams.has("send")) return;
+      u.searchParams.delete("send");
+      history.replaceState(null, "", u.pathname + u.search + u.hash);
+    } catch (_) {}
+  }
+  // 等對話輸入框就緒，且（若有指定）已切到該對話
+  function waitForEditorReady(chatId, timeoutMs = 12000) {
+    return new Promise((resolve) => {
+      const t0 = Date.now();
+      (function poll() {
+        const host = getEditorHost();
+        const inner =
+          host && host.shadowRoot && host.shadowRoot.querySelector("textarea");
+        if (inner && (!chatId || getChatId() === chatId)) return resolve(true);
+        if (Date.now() - t0 > timeoutMs) return resolve(false);
+        setTimeout(poll, 200);
+      })();
+    });
+  }
+  // 找 LINE 送出鈕：派單按鈕是插在 .send-group.btn-group 「前面」(不在群內)，群內最後一顆啟用的就是送出
+  function findLineSendButton() {
+    const group = document.querySelector(".send-group.btn-group");
+    if (group) {
+      const btns = Array.from(group.querySelectorAll("button")).filter(
+        (b) => !b.disabled && b.offsetParent !== null,
+      );
+      if (btns.length) return btns[btns.length - 1];
+    }
+    return null;
+  }
+  function pressEnterToSend() {
+    const host = getEditorHost();
+    const el =
+      (host && host.shadowRoot && host.shadowRoot.querySelector("textarea")) ||
+      document.querySelector('textarea[part="input"].input') ||
+      document.querySelector("textarea.input") ||
+      document.querySelector("textarea");
+    if (!el) return false;
+    el.focus();
+    const opt = {
+      key: "Enter",
+      code: "Enter",
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      composed: true,
+    };
+    el.dispatchEvent(new KeyboardEvent("keydown", opt));
+    el.dispatchEvent(new KeyboardEvent("keypress", opt));
+    el.dispatchEvent(new KeyboardEvent("keyup", opt));
+    return true;
+  }
+  function clickLineSendButton() {
+    const btn = findLineSendButton();
+    if (btn) {
+      btn.click();
+      return true;
+    }
+    return pressEnterToSend(); // 備援：找不到按鈕就模擬 Enter
+  }
+  function httpGetJson(url) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest !== "function")
+        return reject(new Error("no GM_xmlhttpRequest"));
+      GM_xmlhttpRequest({
+        method: "GET",
+        url,
+        headers: { Accept: "application/json" },
+        timeout: 15000,
+        onload: (res) => {
+          if (res.status === 200) {
+            try {
+              resolve(JSON.parse(res.responseText));
+            } catch (e) {
+              reject(e);
+            }
+          } else if (res.status === 410)
+            reject(Object.assign(new Error("gone"), { gone: true }));
+          else reject(new Error("HTTP " + res.status));
+        },
+        onerror: () => reject(new Error("network")),
+        ontimeout: () => reject(new Error("timeout")),
+      });
+    });
+  }
+  function ackSend(token, status, error) {
+    if (typeof GM_xmlhttpRequest !== "function") return;
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: `${API_BASE}/line-dispatch/${token}/ack`,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({ status, error: error || "" }),
+    });
+  }
+  async function consumeAndSend(token) {
+    sendInFlight = true;
+    let data;
+    try {
+      data = await httpGetJson(`${API_BASE}/line-dispatch/${token}`);
+    } catch (e) {
+      cleanupSendParam(); // 410 / 網路錯誤都靜默：清掉網址、不重送
+      sendInFlight = false;
+      return;
+    }
+    const text = data && data.text;
+    if (!text) {
+      cleanupSendParam();
+      sendInFlight = false;
+      return;
+    }
+    const ready = await waitForEditorReady(data.chatId);
+    if (!ready) {
+      ackSend(token, "failed", "editor not ready");
+      cleanupSendParam();
+      sendInFlight = false;
+      return;
+    }
+    // 對話一致性：目前畫面必須就是 token 對應的對話，避免送錯人
+    if (
+      (data.chatId && data.chatId !== getChatId()) ||
+      (data.gid && data.gid !== getOaId())
+    ) {
+      ackSend(token, "failed", "chat mismatch");
+      cleanupSendParam();
+      sendInFlight = false;
+      return;
+    }
+    fillReplyTextarea(text, true);
+    setTimeout(() => {
+      const sent = clickLineSendButton();
+      ackSend(
+        token,
+        sent ? "sent" : "failed",
+        sent ? "" : "send button not found",
+      );
+      cleanupSendParam();
+      sendInFlight = false;
+    }, 150);
+  }
+  function checkSendToken() {
+    if (location.hostname !== "chat.line.biz") return;
+    if (sendInFlight) return;
+    const token = getSendToken();
+    if (!token || token === lastConsumedToken) return;
+    lastConsumedToken = token; // 先標記再處理，避免 observer 重入重複觸發
+    consumeAndSend(token);
+  }
+
+  /* ---------------------------------------------------------------------- *
    * Boot
    * ---------------------------------------------------------------------- */
   let lastOaId = getOaId();
@@ -2019,6 +2192,8 @@
   addDispatchButton();
   ensureQuickBar();
   paintIcons();
+  checkSendToken();
+  window.addEventListener("popstate", checkSendToken);
   document.addEventListener("click", () => {
     closeQuickReplyMenus();
     closePrefixPopover();
@@ -2036,6 +2211,7 @@
       addDispatchButton();
       ensureQuickBar();
       paintIcons();
+      checkSendToken();
       const oa = getOaId();
       if (oa !== lastOaId) {
         lastOaId = oa;
