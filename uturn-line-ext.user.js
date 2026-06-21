@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.22.0
+// @version      1.24.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -22,10 +22,13 @@
 (function () {
   "use strict";
 
+  const UTURN_BUILD = "1.24.1";
+  try { console.log("%c[UTurn懶惰蟲] loaded build " + UTURN_BUILD, "color:#1c6cf3;font-weight:bold"); } catch (_) {}
+
   /* ---------------------------------------------------------------------- *
    * Constants
    * ---------------------------------------------------------------------- */
-  const BLUE = "#1c6cf3"; // 主要藍色
+  const BLUE = "#1c6cf3";          // 主要藍色
   const BLUE_HOVER = "#0b57d0";
   const BLUE_SOFT = "#eef4ff";
 
@@ -40,15 +43,14 @@
   const QUICK_MENU_CLASS = "loe-quick-reply-menu";
   const QUICK_MENU_OPEN_CLASS = "loe-quick-reply-open";
   const STORE_KEY = "loe_quick_replies_v1";
-  const QR_BAR_CLASS = "loe-qr-bar"; // 輸入框上方的快捷氣泡列
+  const QR_BAR_CLASS = "loe-qr-bar";      // 輸入框上方的快捷氣泡列
   const QR_CHIP_CLASS = "loe-qr-chip";
-  const QR_BAR_MAX = 5; // 最多顯示前 5 個
 
   const FORWARD_BUTTON_CLASS = "loe-forward-button";
   const PREFIX_CHIP_CLASS = "loe-prefix-chip";
-  const PREFIX_KEY = "loe_prefix_v1"; // 前綴設定（一組，對應目前 OA 帳號）
+  const PREFIX_KEY = "loe_prefix_v1";          // 前綴設定（一組，對應目前 OA 帳號）
   const WEBHOOK_KEY = "loe_discord_webhook_v1"; // Discord 頻道 webhook 網址
-  const DISPATCHER_KEY = "loe_dispatcher_v1"; // 派單人員名稱（顯示為 Discord 訊息發送者）
+  const DISPATCHER_KEY = "loe_dispatcher_v1";    // 派單人員名稱（顯示為 Discord 訊息發送者）
   const DISPATCH_BUTTON_CLASS = "loe-dispatch-button"; // 派單按鈕
   const DISPATCH_POP_CLASS = "loe-dispatch-pop";
   const ESTIMATE_BUTTON_CLASS = "loe-estimate-button"; // 估價按鈕
@@ -95,161 +97,37 @@
     { group: "*🎵", gid: "U3df1c9d94b1c0454a385fe3f958c421c" },
     { group: "*🍒", gid: "Udadf526c6163cf0f42d52e31f20dc8e8" },
     // 對話群編覆寫（只改群編、無上車地址）：{ group, gid, chat }
-    {
-      group: "*🐞",
-      gid: "U8acceed382c80644a1b6b934ea143ebe",
-      chat: "Cf5daff1a7542183cd4b5e75120a70f84",
-    },
-    {
-      group: "*🦈",
-      gid: "U8acceed382c80644a1b6b934ea143ebe",
-      chat: "C06ec37c27d2102f21eff3052e8d7cf7c",
-    },
-    {
-      group: "*♾️1",
-      gid: "U8acceed382c80644a1b6b934ea143ebe",
-      chat: "C77e51aef562d72e41f00202a452cc207",
-    },
-    {
-      group: "*🍇",
-      gid: "U5273c0793f7e49250e82b9e754a21ba7",
-      chat: "U7a42e70b0e7593f4123905ce39e26b7d",
-    },
-    {
-      group: "*🍇群",
-      gid: "U5273c0793f7e49250e82b9e754a21ba7",
-      chat: "Ccb36aa175edd878bae1e32d1dc1fc09e",
-    },
-    {
-      group: "*🐕‍🦺",
-      gid: "U6c97c065bdbe16a3a83ec465963f2240",
-      chat: "Cc1c5f53714b9c2fb717b76224615b52c",
-    },
-    {
-      group: "*🐕‍🦺",
-      gid: "U6c97c065bdbe16a3a83ec465963f2240",
-      chat: "C90927ece39fafe7d27ecd5a0e7d9af59",
-    },
-    {
-      group: "*🐕‍🦺",
-      gid: "U6c97c065bdbe16a3a83ec465963f2240",
-      chat: "C90927ece39fafe7d27ecd5a0e7d9af59",
-    },
-    {
-      group: "*🍬",
-      gid: "U660a73ac245d76a8e4bf2986b62b4392",
-      chat: "Cc195e5223ece165e8e46eabaf5b3d9e9",
-    },
+    { group: "*🐞", gid: "U8acceed382c80644a1b6b934ea143ebe", chat: "Cf5daff1a7542183cd4b5e75120a70f84" },
+    { group: "*🦈", gid: "U8acceed382c80644a1b6b934ea143ebe", chat: "C06ec37c27d2102f21eff3052e8d7cf7c" },
+    { group: "*♾️1", gid: "U8acceed382c80644a1b6b934ea143ebe", chat: "C77e51aef562d72e41f00202a452cc207" },
+    { group: "*🍇", gid: "U5273c0793f7e49250e82b9e754a21ba7", chat: "U7a42e70b0e7593f4123905ce39e26b7d" },
+    { group: "*🍇群", gid: "U5273c0793f7e49250e82b9e754a21ba7", chat: "Ccb36aa175edd878bae1e32d1dc1fc09e" },
+    { group: "*🐕‍🦺", gid: "U6c97c065bdbe16a3a83ec465963f2240", chat: "Cc1c5f53714b9c2fb717b76224615b52c" },
+    { group: "*🐕‍🦺", gid: "U6c97c065bdbe16a3a83ec465963f2240", chat: "C90927ece39fafe7d27ecd5a0e7d9af59" },
+    { group: "*🐕‍🦺", gid: "U6c97c065bdbe16a3a83ec465963f2240", chat: "C90927ece39fafe7d27ecd5a0e7d9af59" },
+    { group: "*🍬", gid: "U660a73ac245d76a8e4bf2986b62b4392", chat: "Cc195e5223ece165e8e46eabaf5b3d9e9" },
     // 店配（對話層級：固定群編＋上車地址）：{ group, gid, chat, pickup }
-    {
-      group: "*🌪️店配",
-      gid: "Ub8ead8093979b9ce4aaa4332921610c0",
-      chat: "Cdf6e95f3f0898b31fa9b688831b6f0ec",
-      pickup: "想你好酒/霧峰區草湖路127-1號",
-    },
-    {
-      group: "*🍁",
-      gid: "U2d148b75a8b0df438e0070111baa19eb",
-      chat: "C5f7a0a12080bfabd19fb81ab93fc9f8a",
-      pickup: "北區中清路一段53號 統領大樓",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C393cc88f7683611034cdfc7fea14fb2c",
-      pickup: "西區忠明南路333號 歐菲旅店",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C857deed27479a24d1b9b3a393c2f8530",
-      pickup: "Glacier餐酒館",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C5416bea2d186e6ea899c551b92de4d06",
-      pickup: "沙鹿區台灣大道七段303號 Taluan",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C8c750ad390270edfff713e1d567c523c",
-      pickup: "老地方青海店 開進停車場最後面",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C8c750ad390270edfff713e1d567c523c",
-      pickup: "南屯區大墩路852號 非嚐不可",
-    },
-    {
-      group: "*🍒3.70店/小真",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C0a1d063f0fe80494b7997baecbce9231",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/小洪",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C510862e713d61bd19a27bb544febe3ac",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/大益",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C58119ce7ee1a2c5d14df7dbed92684ed",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/翔",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C24708f0f96952713dc4e6da05d400865",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/光少",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C56ae0c4336da4736b97898cdb3d01ae6",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/草爺",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C0d3907b8e87a8e09e2d21bcad5c5f265",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/鳳梨",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C8392f99fdce2c17c29d3beb22c65ff11",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/賢哥",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C0f48f8efa82bf025f4deb4cb44ed0bf6",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/喜董",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C39573c444d425a2d28a05c0994f7f666",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/泰泰喜歡",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "Cf235683ce321521d157d4ddc4713b49b",
-      pickup: "西屯黎明路三段388-2號 泰泰喜歡",
-    },
+    { group: "*🌪️店配", gid: "Ub8ead8093979b9ce4aaa4332921610c0", chat: "Cdf6e95f3f0898b31fa9b688831b6f0ec", pickup: "想你好酒/霧峰區草湖路127-1號" },
+    { group: "*🍁", gid: "U2d148b75a8b0df438e0070111baa19eb", chat: "C5f7a0a12080bfabd19fb81ab93fc9f8a", pickup: "北區中清路一段53號 統領大樓" },
+    { group: "*🍿店", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7", chat: "C393cc88f7683611034cdfc7fea14fb2c", pickup: "西區忠明南路333號 歐菲旅店" },
+    { group: "*🍿店", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7", chat: "C857deed27479a24d1b9b3a393c2f8530", pickup: "Glacier餐酒館" },
+    { group: "*🍿店", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7", chat: "C5416bea2d186e6ea899c551b92de4d06", pickup: "沙鹿區台灣大道七段303號 Taluan" },
+    { group: "*🍿店", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7", chat: "C8c750ad390270edfff713e1d567c523c", pickup: "老地方青海店 開進停車場最後面" },
+    { group: "*🍿店", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7", chat: "C8c750ad390270edfff713e1d567c523c", pickup: "南屯區大墩路852號 非嚐不可" },
+    { group: "*🍒3.70店/小真", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C0a1d063f0fe80494b7997baecbce9231", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/小洪", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C510862e713d61bd19a27bb544febe3ac", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/大益", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C58119ce7ee1a2c5d14df7dbed92684ed", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/翔", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C24708f0f96952713dc4e6da05d400865", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/光少", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C56ae0c4336da4736b97898cdb3d01ae6", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/草爺", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C0d3907b8e87a8e09e2d21bcad5c5f265", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/鳳梨", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C8392f99fdce2c17c29d3beb22c65ff11", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/賢哥", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C0f48f8efa82bf025f4deb4cb44ed0bf6", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/喜董", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "C39573c444d425a2d28a05c0994f7f666", pickup: "中區市府路130號 雪在燒" },
+    { group: "*🍒3.70店/泰泰喜歡", gid: "Udadf526c6163cf0f42d52e31f20dc8e8", chat: "Cf235683ce321521d157d4ddc4713b49b", pickup: "西屯黎明路三段388-2號 泰泰喜歡" },
   ];
 
   const DEFAULT_REPLIES = [
-    {
-      name: "安排",
-      text: "馬上幫您安排調派時間約③ - ⑧分\n有車會立即告知,請勿關閉通知\n派車期間請勿催促",
-    },
+    { name: "安排", text: "馬上幫您安排調派時間約③ - ⑧分\n有車會立即告知,請勿關閉通知\n派車期間請勿催促" },
     { name: "取消", text: "好的已幫您取消\n非常抱歉未能替您服務(⸝⸝o̴̶̷᷄ ·̭ o̴̶̷̥᷅⸝⸝)" },
   ];
 
@@ -266,18 +144,12 @@
     copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
     check: '<path d="M20 6 9 17l-5-5"></path>',
     x: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
-    "message-square":
-      '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
-    forward:
-      '<polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path>',
-    settings:
-      '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>',
-    truck:
-      '<path d="M10 17h4V5H2v12h3"></path><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle>',
-    calculator:
-      '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="12" y1="14" x2="12" y2="14"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="8" y1="18" x2="12" y2="18"></line>',
-    download:
-      '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
+    "message-square": '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
+    forward: '<polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path>',
+    settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>',
+    truck: '<path d="M10 17h4V5H2v12h3"></path><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle>',
+    calculator: '<rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="8" y1="6" x2="16" y2="6"></line><line x1="8" y1="14" x2="8" y2="14"></line><line x1="12" y1="14" x2="12" y2="14"></line><line x1="16" y1="14" x2="16" y2="18"></line><line x1="8" y1="18" x2="12" y2="18"></line>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
   };
   const ic = (name) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -286,9 +158,7 @@
   const ERROR_ICON = ic("x");
   const QUICK_ICON = ic("message-square");
   const FORWARD_ICON = ic("forward");
-  function paintIcons() {
-    /* 內建 SVG 直接渲染，無需後處理 */
-  }
+  function paintIcons() { /* 內建 SVG 直接渲染，無需後處理 */ }
 
   /* ---------------------------------------------------------------------- *
    * Styles
@@ -315,12 +185,13 @@
       background: rgba(255, 255, 255, 0.86);
       color: ${BLUE};
       cursor: pointer;
-      opacity: 0.55;
+      opacity: 0;
+      pointer-events: none;
       user-select: none;
       backdrop-filter: blur(3px);
       transition: opacity .12s ease, background .12s ease, border-color .12s ease;
     }
-    .${BUBBLE_CLASS}:hover .${BUTTON_CLASS} { opacity: 0.9; }
+    .${BUBBLE_CLASS}:hover .${BUTTON_CLASS} { opacity: 0.9; pointer-events: auto; }
     .${BUTTON_CLASS}:hover,
     .${BUTTON_CLASS}:focus-visible {
       border-color: ${BLUE};
@@ -552,11 +423,12 @@
       background: rgba(255, 255, 255, 0.86);
       color: ${BLUE};
       cursor: pointer;
-      opacity: 0.55;
+      opacity: 0;
+      pointer-events: none;
       backdrop-filter: blur(3px);
       transition: opacity .12s ease, background .12s ease, border-color .12s ease;
     }
-    .${BUBBLE_CLASS}:hover .${FORWARD_BUTTON_CLASS} { opacity: 0.9; }
+    .${BUBBLE_CLASS}:hover .${FORWARD_BUTTON_CLASS} { opacity: 0.9; pointer-events: auto; }
     .${FORWARD_BUTTON_CLASS}:hover,
     .${FORWARD_BUTTON_CLASS}:focus-visible {
       border-color: ${BLUE}; background: ${BLUE_SOFT}; color: ${BLUE_HOVER}; opacity: 1; outline: none;
@@ -740,13 +612,8 @@
     return def;
   }
   function storeSet(key, val) {
-    try {
-      if (typeof GM_setValue === "function")
-        GM_setValue(key, JSON.stringify(val));
-    } catch (_) {}
-    try {
-      localStorage.setItem(key, JSON.stringify(val));
-    } catch (_) {}
+    try { if (typeof GM_setValue === "function") GM_setValue(key, JSON.stringify(val)); } catch (_) {}
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (_) {}
   }
   function getReplies() {
     const v = storeGet(STORE_KEY, null);
@@ -819,15 +686,11 @@
   // 一鍵匯入：把 CONFIG 套用到各帳號（前綴）與各對話（群編覆寫＋固定上車地址）
   function applyConfig() {
     const overrides = {};
-    let gidCount = 0,
-      chatCount = 0;
+    let gidCount = 0, chatCount = 0;
     CONFIG.forEach((c) => {
       if (!c.gid) return;
       if (c.chat) {
-        overrides[`${c.gid}/${c.chat}`] = {
-          group: c.group || "",
-          pickup: c.pickup || "",
-        };
+        overrides[`${c.gid}/${c.chat}`] = { group: c.group || "", pickup: c.pickup || "" };
         chatCount++;
       } else {
         setPrefixForGid(c.gid, c.group || "");
@@ -864,10 +727,7 @@
     let v = storeGet(base, "");
     if (!v) {
       const sc = storeGet(scopedKey(base), "");
-      if (sc) {
-        storeSet(base, sc);
-        v = sc;
-      }
+      if (sc) { storeSet(base, sc); v = sc; }
     }
     return typeof v === "string" ? v : "";
   }
@@ -941,23 +801,13 @@
   }
   async function copyText(text) {
     if (!text) return false;
-    if (typeof GM_setClipboard === "function") {
-      GM_setClipboard(text, "text");
-      return true;
-    }
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
+    if (typeof GM_setClipboard === "function") { GM_setClipboard(text, "text"); return true; }
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
     const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    ta.remove();
+    ta.value = text; ta.setAttribute("readonly", "");
+    ta.style.position = "fixed"; ta.style.left = "-9999px";
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand("copy"); ta.remove();
     return ok;
   }
   function flashCopied(button, ok) {
@@ -999,64 +849,52 @@
     ADDRESS_PATTERN.lastIndex = 0;
     if (!ADDRESS_PATTERN.test(container.textContent || "")) return;
 
-    const clone = container.cloneNode(true);
-    const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, {
+    // 就地替換：只動「含地址的那一個文字節點」，不清空／重建整個容器，
+    // 避免容器內容瞬間被掏空造成瀏覽器失去捲動定位、把對話頂上去。
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         const p = node.parentElement;
         if (!p) return NodeFilter.FILTER_REJECT;
-        if (
-          p.closest(
-            `a, button, script, style, textarea, input, .${MAP_LINK_CLASS}`,
-          )
-        )
+        if (p.closest(`a, button, script, style, textarea, input, .${MAP_LINK_CLASS}`))
           return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
+        ADDRESS_PATTERN.lastIndex = 0;
+        return ADDRESS_PATTERN.test(node.nodeValue || "")
+          ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       },
     });
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
 
-    let changed = false;
     nodes.forEach((textNode) => {
       const text = textNode.nodeValue;
       ADDRESS_PATTERN.lastIndex = 0;
-      if (!text || !ADDRESS_PATTERN.test(text)) return;
-      ADDRESS_PATTERN.lastIndex = 0;
       const frag = document.createDocumentFragment();
-      let last = 0,
-        m;
+      let last = 0, m;
       while ((m = ADDRESS_PATTERN.exec(text)) !== null) {
-        frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
         frag.appendChild(createMapLink(m[0]));
         last = m.index + m[0].length;
       }
-      frag.appendChild(document.createTextNode(text.slice(last)));
-      textNode.parentNode.replaceChild(frag, textNode);
-      changed = true;
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      // Vue 可能已把節點換掉；用 contains 確認仍是子節點，再包 try 保證絕不丟錯中斷後續處理。
+      const p = textNode.parentNode;
+      if (p && p.contains(textNode)) {
+        try { p.replaceChild(frag, textNode); } catch (_) {}
+      }
     });
-    if (!changed) return;
-    while (container.firstChild) container.removeChild(container.firstChild);
-    while (clone.firstChild) container.appendChild(clone.firstChild);
   }
 
   /* ---------------------------------------------------------------------- *
    * Reply input (custom <textarea-ex> with shadow DOM)
    * ---------------------------------------------------------------------- */
   function getEditorHost() {
-    return (
-      document.querySelector("textarea-ex#editor") ||
-      document.querySelector("textarea-ex")
-    );
+    return document.querySelector("textarea-ex#editor") || document.querySelector("textarea-ex");
   }
   function fillReplyTextarea(text, replace = false) {
     const host = getEditorHost();
-    const inner =
-      host && host.shadowRoot && host.shadowRoot.querySelector("textarea");
+    const inner = host && host.shadowRoot && host.shadowRoot.querySelector("textarea");
     if (inner) {
-      const setter = Object.getOwnPropertyDescriptor(
-        HTMLTextAreaElement.prototype,
-        "value",
-      ).set;
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
       let next, pos;
       if (replace) {
         next = text;
@@ -1068,16 +906,10 @@
         pos = start + text.length;
       }
       setter.call(inner, next);
-      inner.dispatchEvent(
-        new Event("input", { bubbles: true, composed: true }),
-      );
-      inner.dispatchEvent(
-        new Event("change", { bubbles: true, composed: true }),
-      );
+      inner.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      inner.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
       inner.focus();
-      try {
-        inner.setSelectionRange(pos, pos);
-      } catch (_) {}
+      try { inner.setSelectionRange(pos, pos); } catch (_) {}
       return true;
     }
     // Fallback: plain textarea
@@ -1087,11 +919,8 @@
       document.querySelector("textarea.input") ||
       document.querySelector("textarea");
     if (!ta) return false;
-    const setter = Object.getOwnPropertyDescriptor(
-      HTMLTextAreaElement.prototype,
-      "value",
-    ).set;
-    const next = replace ? text : ta.value + text;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+    const next = replace ? text : (ta.value + text);
     setter ? setter.call(ta, next) : (ta.value = next);
     ta.dispatchEvent(new Event("input", { bubbles: true }));
     ta.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1103,14 +932,12 @@
    * Quick reply menu
    * ---------------------------------------------------------------------- */
   function closeQuickReplyMenus(except) {
-    document
-      .querySelectorAll(`.${QUICK_BUTTON_CLASS}.${QUICK_MENU_OPEN_CLASS}`)
-      .forEach((b) => {
-        if (b !== except) {
-          b.classList.remove(QUICK_MENU_OPEN_CLASS);
-          b.setAttribute("aria-expanded", "false");
-        }
-      });
+    document.querySelectorAll(`.${QUICK_BUTTON_CLASS}.${QUICK_MENU_OPEN_CLASS}`).forEach((b) => {
+      if (b !== except) {
+        b.classList.remove(QUICK_MENU_OPEN_CLASS);
+        b.setAttribute("aria-expanded", "false");
+      }
+    });
   }
   function populateQuickMenu(menu) {
     menu.textContent = "";
@@ -1128,9 +955,7 @@
     menu.appendChild(manage);
   }
   function refreshAllQuickMenus() {
-    document
-      .querySelectorAll(`.${QUICK_MENU_CLASS}`)
-      .forEach(populateQuickMenu);
+    document.querySelectorAll(`.${QUICK_MENU_CLASS}`).forEach(populateQuickMenu);
   }
   // 輸入框上方的快捷氣泡列（最多前 5 個；點了帶入對話框）
   function renderQuickBar(bar) {
@@ -1166,11 +991,7 @@
     renderQuickBar(bar);
   }
   function addQuickReplyButton(phoneLink) {
-    if (
-      !phoneLink ||
-      phoneLink.parentElement.querySelector(`.${QUICK_BUTTON_CLASS}`)
-    )
-      return;
+    if (!phoneLink || phoneLink.parentElement.querySelector(`.${QUICK_BUTTON_CLASS}`)) return;
     const button = document.createElement("a");
     button.href = "#";
     button.role = "button";
@@ -1212,9 +1033,7 @@
 
     const mask = document.createElement("div");
     mask.className = "loe-modal-mask";
-    mask.addEventListener("click", (e) => {
-      if (e.target === mask) closeManager();
-    });
+    mask.addEventListener("click", (e) => { if (e.target === mask) closeManager(); });
 
     const modal = document.createElement("div");
     modal.className = "loe-modal";
@@ -1357,10 +1176,7 @@
 
     saveBtn.addEventListener("click", () => {
       const text = textInput.value.trim();
-      if (!text) {
-        textInput.focus();
-        return;
-      }
+      if (!text) { textInput.focus(); return; }
       const name = nameInput.value.trim() || text.slice(0, 12);
       const arr = getReplies();
       if (editIndex >= 0 && editIndex < arr.length) {
@@ -1376,8 +1192,7 @@
     const listHint = document.createElement("div");
     listHint.className = "loe-qr-empty";
     listHint.style.cssText = "text-align:left;padding:0 0 8px;color:#94a3b8;";
-    listHint.textContent =
-      "用 ↑ ↓ 調整順序；對話框上方會顯示全部（可左右滑動）。";
+    listHint.textContent = "用 ↑ ↓ 調整順序；對話框上方會顯示全部（可左右滑動）。";
     body.appendChild(listHint);
     body.appendChild(list);
     body.appendChild(form);
@@ -1388,9 +1203,7 @@
     renderList();
     nameInput.focus();
 
-    mask._loeEsc = (e) => {
-      if (e.key === "Escape") closeManager();
-    };
+    mask._loeEsc = (e) => { if (e.key === "Escape") closeManager(); };
     document.addEventListener("keydown", mask._loeEsc);
     openManager._mask = mask;
   }
@@ -1422,10 +1235,7 @@
           url,
           headers: { "Content-Type": "application/json" },
           data: JSON.stringify(body),
-          onload: (res) =>
-            res.status >= 200 && res.status < 300
-              ? resolve()
-              : reject(new Error("HTTP " + res.status)),
+          onload: (res) => (res.status >= 200 && res.status < 300 ? resolve() : reject(new Error("HTTP " + res.status))),
           onerror: () => reject(new Error("network")),
           ontimeout: () => reject(new Error("timeout")),
         });
@@ -1434,11 +1244,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
-        })
-          .then((r) =>
-            r.ok ? resolve() : reject(new Error("HTTP " + r.status)),
-          )
-          .catch(reject);
+        }).then((r) => (r.ok ? resolve() : reject(new Error("HTTP " + r.status)))).catch(reject);
       }
     });
   }
@@ -1489,7 +1295,8 @@
     addForwardButton(bubble, textNode);
     if (chatBody.querySelector(`.${BUTTON_CLASS}`)) return;
     bubble.classList.add(BUBBLE_CLASS);
-    textNode.classList.add(TEXT_PAD_CLASS);
+    // 注意：不再加 TEXT_PAD_CLASS（內距會改變訊息高度→把對話往上頂、滑不到底）。
+    // 按鈕改為「滑過泡泡才顯示」的絕對定位浮層，完全不影響訊息高度與捲動。
     const button = document.createElement("button");
     button.type = "button";
     button.className = BUTTON_CLASS;
@@ -1541,15 +1348,13 @@
 
     // 顯示目前綁定的官方帳號（每個帳號各自獨立）
     const acct = document.createElement("div");
-    acct.style.cssText =
-      "display:inline-flex;align-items:center;margin-bottom:8px;padding:3px 9px;border-radius:999px;background:#eef4ff;color:#0b57d0;font-size:12px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+    acct.style.cssText = "display:inline-flex;align-items:center;margin-bottom:8px;padding:3px 9px;border-radius:999px;background:#eef4ff;color:#0b57d0;font-size:12px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
     acct.textContent = `此帳號：${getOaName() || getOaId()}`;
 
     // 前綴
     const hint = document.createElement("div");
     hint.className = "loe-pop-hint";
-    hint.innerHTML =
-      "群編前綴（不用加斜線，派單時會自動補上）。例如填「W0」。（僅套用於此帳號）";
+    hint.innerHTML = "群編前綴（不用加斜線，派單時會自動補上）。例如填「W0」。（僅套用於此帳號）";
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "例如：W0";
@@ -1559,8 +1364,7 @@
     const hookHint = document.createElement("div");
     hookHint.className = "loe-pop-hint";
     hookHint.style.marginTop = "4px";
-    hookHint.textContent =
-      "Discord 頻道 Webhook 網址（全部帳號共用，設定一次即可；留空＝改為複製到剪貼簿）：";
+    hookHint.textContent = "Discord 頻道 Webhook 網址（全部帳號共用，設定一次即可；留空＝改為複製到剪貼簿）：";
     const hookInput = document.createElement("input");
     hookInput.type = "text";
     hookInput.placeholder = "https://discord.com/api/webhooks/...";
@@ -1581,13 +1385,7 @@
     const clearBtn = document.createElement("button");
     clearBtn.className = "loe-btn-ghost";
     clearBtn.textContent = "清除";
-    clearBtn.addEventListener("click", () => {
-      setPrefix("");
-      setWebhook("");
-      setDispatcher("");
-      closePrefixPopover();
-      toast("已清除前綴、Webhook 與後台帳號");
-    });
+    clearBtn.addEventListener("click", () => { setPrefix(""); setWebhook(""); setDispatcher(""); closePrefixPopover(); toast("已清除前綴、Webhook 與後台帳號"); });
     const saveBtn = document.createElement("button");
     saveBtn.className = "loe-btn-primary";
     saveBtn.textContent = "儲存";
@@ -1602,10 +1400,7 @@
       setWebhook(hookInput.value.trim());
       setDispatcher(acct);
       closePrefixPopover();
-      toast(
-        "已儲存設定" +
-          (input.value.trim() ? "（前綴：" + input.value.trim() + "）" : ""),
-      );
+      toast("已儲存設定" + (input.value.trim() ? "（前綴：" + input.value.trim() + "）" : ""));
     });
     actions.appendChild(clearBtn);
     actions.appendChild(saveBtn);
@@ -1622,13 +1417,9 @@
     document.body.appendChild(pop);
     const r = anchor.getBoundingClientRect();
     pop.style.top = Math.round(r.bottom + 8) + "px";
-    pop.style.left =
-      Math.round(Math.min(r.left, window.innerWidth - 296)) + "px";
+    pop.style.left = Math.round(Math.min(r.left, window.innerWidth - 296)) + "px";
     input.focus();
-    const onKey = (e) => {
-      if (e.key === "Enter") saveBtn.click();
-      if (e.key === "Escape") closePrefixPopover();
-    };
+    const onKey = (e) => { if (e.key === "Enter") saveBtn.click(); if (e.key === "Escape") closePrefixPopover(); };
     input.addEventListener("keydown", onKey);
     hookInput.addEventListener("keydown", onKey);
     whoInput.addEventListener("keydown", onKey);
@@ -1636,10 +1427,7 @@
     openPrefixPopover._pop = pop;
   }
   function closePrefixPopover() {
-    if (openPrefixPopover._pop) {
-      openPrefixPopover._pop.remove();
-      openPrefixPopover._pop = null;
-    }
+    if (openPrefixPopover._pop) { openPrefixPopover._pop.remove(); openPrefixPopover._pop = null; }
   }
   function enhancePrefixChip() {
     const header = document.querySelector("header");
@@ -1707,28 +1495,19 @@
     const email = getDispatcher();
     const g = (groupCode || "").replace(/\/+$/, ""); // 去掉尾端斜線，統一補一個
     let body = g ? `${g}/${address}` : address;
-    if (memo) body += ` note:${memo}`; // 筆記（司機看不到，內部備記用）
+    if (memo) body += ` note:${memo}`;   // 筆記（司機看不到，內部備記用）
     if (email) body += ` mailto:${email}`;
     return body;
   }
   function closeDispatchPopover() {
-    if (openDispatchPopover._pop) {
-      openDispatchPopover._pop.remove();
-      openDispatchPopover._pop = null;
-    }
+    if (openDispatchPopover._pop) { openDispatchPopover._pop.remove(); openDispatchPopover._pop = null; }
   }
   // 自動回覆：填入訊息並按下「傳送」
   function autoSendReply(text) {
     fillReplyTextarea(text, true);
-    const sendBtn = document.querySelector(
-      ".send-group.btn-group input.btn, .send-group.btn-group button.btn",
-    );
+    const sendBtn = document.querySelector(".send-group.btn-group input.btn, .send-group.btn-group button.btn");
     if (sendBtn) {
-      window.setTimeout(() => {
-        try {
-          sendBtn.click();
-        } catch (_) {}
-      }, 120);
+      window.setTimeout(() => { try { sendBtn.click(); } catch (_) {} }, 120);
       return true;
     }
     return false;
@@ -1737,9 +1516,8 @@
   // 已是待處理（按鈕呈 btn-outline-success）就不再點，避免被切回未標記。
   function markFollowUp() {
     try {
-      const btn = [
-        ...document.querySelectorAll(".sub-header a.btn, a.btn"),
-      ].find((b) => b.textContent.trim() === "待處理");
+      const btn = [...document.querySelectorAll(".sub-header a.btn, a.btn")]
+        .find((b) => b.textContent.trim() === "待處理");
       if (!btn) return false;
       if (/btn-outline-success|\bactive\b/.test(btn.className)) return true; // 已標記
       btn.click();
@@ -1763,11 +1541,7 @@
     closeX.className = "loe-pop-close";
     closeX.textContent = "×";
     closeX.title = "關閉";
-    closeX.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      closeDispatchPopover();
-    });
+    closeX.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); closeDispatchPopover(); });
 
     // 依設定檔決定預設：此對話有店配覆寫就用覆寫的群編＋固定上車地址，否則用此帳號前綴
     const override = getCurrentOverride();
@@ -1779,8 +1553,7 @@
     const groupInput = document.createElement("input");
     groupInput.type = "text";
     groupInput.placeholder = "例如：W0";
-    groupInput.value =
-      override && override.group ? override.group : getPrefix();
+    groupInput.value = (override && override.group) ? override.group : getPrefix();
 
     const addrLabel = document.createElement("label");
     addrLabel.className = "loe-fld";
@@ -1848,17 +1621,13 @@
     groupInput.addEventListener("input", refreshPreview);
     addrInput.addEventListener("input", refreshPreview);
     memoInput.addEventListener("input", refreshPreview);
-    memoChk.addEventListener("change", () => {
-      setMemoInclude(memoChk.checked);
-      refreshPreview();
-    });
+    memoChk.addEventListener("change", () => { setMemoInclude(memoChk.checked); refreshPreview(); });
 
     // 派單後自動回覆客人（可選範本）
     const chkWrap = document.createElement("div");
     chkWrap.className = "loe-check";
     const chkLabel = document.createElement("label");
-    chkLabel.style.cssText =
-      "display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;";
+    chkLabel.style.cssText = "display:flex;align-items:center;gap:6px;cursor:pointer;margin:0;";
     const chk = document.createElement("input");
     chk.type = "checkbox";
     chk.checked = getAutoReply();
@@ -1876,20 +1645,12 @@
       o.textContent = r.name || (r.text || "").slice(0, 10);
       tplSelect.appendChild(o);
     });
-    let selIdx = reps.findIndex(
-      (r) => (r.name || "") === getDispatchTemplate(),
-    );
+    let selIdx = reps.findIndex((r) => (r.name || "") === getDispatchTemplate());
     if (selIdx < 0) selIdx = reps.findIndex((r) => (r.name || "") === "安排");
     if (selIdx < 0) selIdx = 0;
     if (reps.length) tplSelect.value = String(selIdx);
-    tplSelect.addEventListener("change", () => {
-      const r = reps[Number(tplSelect.value)];
-      if (r) setDispatchTemplate(r.name || "");
-    });
-    const selectedReplyText = () => {
-      const r = reps[Number(tplSelect.value)];
-      return r ? r.text : "";
-    };
+    tplSelect.addEventListener("change", () => { const r = reps[Number(tplSelect.value)]; if (r) setDispatchTemplate(r.name || ""); });
+    const selectedReplyText = () => { const r = reps[Number(tplSelect.value)]; return r ? r.text : ""; };
     chkWrap.appendChild(chkLabel);
     chkWrap.appendChild(tplSelect);
 
@@ -1904,14 +1665,9 @@
     sendBtn.textContent = "確認";
     sendBtn.addEventListener("click", async () => {
       const address = addrInput.value.trim();
-      if (!address) {
-        addrInput.focus();
-        return;
-      }
+      if (!address) { addrInput.focus(); return; }
       // 預覽用的內容不含對話連結；送出時才在最後加上 linechaturl:
-      const payload =
-        buildDispatchPayload(groupInput.value.trim(), address, currentMemo()) +
-        lineUrlSuffix();
+      const payload = buildDispatchPayload(groupInput.value.trim(), address, currentMemo()) + lineUrlSuffix();
       const auto = chk.checked;
       setAutoReply(auto); // 記住選擇
       sendBtn.disabled = true;
@@ -1920,18 +1676,10 @@
         closeDispatchPopover();
         if (auto) {
           autoSendReply(selectedReplyText());
-          toast(
-            how === "discord"
-              ? "已派單到 Discord，並已自動回覆客人"
-              : "已複製（未設定 Webhook），並已自動回覆客人",
-          );
+          toast(how === "discord" ? "已派單到 Discord，並已自動回覆客人" : "已複製（未設定 Webhook），並已自動回覆客人");
         } else {
           // 不勾選：只送派單，不在輸入框帶入任何訊息
-          toast(
-            how === "discord"
-              ? "已派單到 Discord（未回覆客人）"
-              : "已複製（未設定 Webhook）",
-          );
+          toast(how === "discord" ? "已派單到 Discord（未回覆客人）" : "已複製（未設定 Webhook）");
         }
         // 有勾選「標記待處理」才標記目前這個對話（在自動回覆送出之後）
         if (markChk.checked) window.setTimeout(markFollowUp, 500);
@@ -1955,8 +1703,7 @@
     memoChkWrap.style.marginTop = "0";
     markChkWrap.style.marginTop = "0";
     const checksRow = document.createElement("div");
-    checksRow.style.cssText =
-      "display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:10px;";
+    checksRow.style.cssText = "display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:10px;";
     checksRow.appendChild(memoChkWrap);
     checksRow.appendChild(markChkWrap);
     pop.appendChild(checksRow);
@@ -1971,21 +1718,17 @@
     const W = pop.offsetWidth || 300;
     if (anchor) {
       const r = anchor.getBoundingClientRect();
-      pop.style.left =
-        Math.round(Math.max(8, Math.min(r.left, window.innerWidth - W - 8))) +
-        "px";
+      pop.style.left = Math.round(Math.max(8, Math.min(r.left, window.innerWidth - W - 8))) + "px";
       pop.style.bottom = Math.round(window.innerHeight - r.top + 8) + "px";
       pop.style.top = "auto";
       pop.style.maxHeight = Math.round(r.top - 16) + "px";
     } else {
       pop.style.left = Math.round((window.innerWidth - W) / 2) + "px";
       pop.style.top = "12px";
-      pop.style.maxHeight = window.innerHeight - 24 + "px";
+      pop.style.maxHeight = (window.innerHeight - 24) + "px";
     }
     addrInput.focus();
-    pop.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeDispatchPopover();
-    });
+    pop.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDispatchPopover(); });
     openDispatchPopover._pop = pop;
   }
   function addDispatchButton() {
@@ -2027,9 +1770,7 @@
     try {
       const t = new URL(location.href).searchParams.get("send");
       return t && SEND_TOKEN_RE.test(t) ? t : null;
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { return null; }
   }
   function cleanupSendParam() {
     try {
@@ -2045,8 +1786,7 @@
       const t0 = Date.now();
       (function poll() {
         const host = getEditorHost();
-        const inner =
-          host && host.shadowRoot && host.shadowRoot.querySelector("textarea");
+        const inner = host && host.shadowRoot && host.shadowRoot.querySelector("textarea");
         if (inner && (!chatId || getChatId() === chatId)) return resolve(true);
         if (Date.now() - t0 > timeoutMs) return resolve(false);
         setTimeout(poll, 200);
@@ -2057,9 +1797,8 @@
   function findLineSendButton() {
     const group = document.querySelector(".send-group.btn-group");
     if (group) {
-      const btns = Array.from(group.querySelectorAll("button")).filter(
-        (b) => !b.disabled && b.offsetParent !== null,
-      );
+      const btns = Array.from(group.querySelectorAll("button"))
+        .filter((b) => !b.disabled && b.offsetParent !== null);
       if (btns.length) return btns[btns.length - 1];
     }
     return null;
@@ -2073,14 +1812,7 @@
       document.querySelector("textarea");
     if (!el) return false;
     el.focus();
-    const opt = {
-      key: "Enter",
-      code: "Enter",
-      keyCode: 13,
-      which: 13,
-      bubbles: true,
-      composed: true,
-    };
+    const opt = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, composed: true };
     el.dispatchEvent(new KeyboardEvent("keydown", opt));
     el.dispatchEvent(new KeyboardEvent("keypress", opt));
     el.dispatchEvent(new KeyboardEvent("keyup", opt));
@@ -2088,30 +1820,20 @@
   }
   function clickLineSendButton() {
     const btn = findLineSendButton();
-    if (btn) {
-      btn.click();
-      return true;
-    }
+    if (btn) { btn.click(); return true; }
     return pressEnterToSend(); // 備援：找不到按鈕就模擬 Enter
   }
   function httpGetJson(url) {
     return new Promise((resolve, reject) => {
-      if (typeof GM_xmlhttpRequest !== "function")
-        return reject(new Error("no GM_xmlhttpRequest"));
+      if (typeof GM_xmlhttpRequest !== "function") return reject(new Error("no GM_xmlhttpRequest"));
       GM_xmlhttpRequest({
         method: "GET",
         url,
         headers: { Accept: "application/json" },
         timeout: 15000,
         onload: (res) => {
-          if (res.status === 200) {
-            try {
-              resolve(JSON.parse(res.responseText));
-            } catch (e) {
-              reject(e);
-            }
-          } else if (res.status === 410)
-            reject(Object.assign(new Error("gone"), { gone: true }));
+          if (res.status === 200) { try { resolve(JSON.parse(res.responseText)); } catch (e) { reject(e); } }
+          else if (res.status === 410) reject(Object.assign(new Error("gone"), { gone: true }));
           else reject(new Error("HTTP " + res.status));
         },
         onerror: () => reject(new Error("network")),
@@ -2139,36 +1861,21 @@
       return;
     }
     const text = data && data.text;
-    if (!text) {
-      cleanupSendParam();
-      sendInFlight = false;
-      return;
-    }
+    if (!text) { cleanupSendParam(); sendInFlight = false; return; }
     const ready = await waitForEditorReady(data.chatId);
     if (!ready) {
       ackSend(token, "failed", "editor not ready");
-      cleanupSendParam();
-      sendInFlight = false;
-      return;
+      cleanupSendParam(); sendInFlight = false; return;
     }
     // 對話一致性：目前畫面必須就是 token 對應的對話，避免送錯人
-    if (
-      (data.chatId && data.chatId !== getChatId()) ||
-      (data.gid && data.gid !== getOaId())
-    ) {
+    if ((data.chatId && data.chatId !== getChatId()) || (data.gid && data.gid !== getOaId())) {
       ackSend(token, "failed", "chat mismatch");
-      cleanupSendParam();
-      sendInFlight = false;
-      return;
+      cleanupSendParam(); sendInFlight = false; return;
     }
     fillReplyTextarea(text, true);
     setTimeout(() => {
       const sent = clickLineSendButton();
-      ackSend(
-        token,
-        sent ? "sent" : "failed",
-        sent ? "" : "send button not found",
-      );
+      ackSend(token, sent ? "sent" : "failed", sent ? "" : "send button not found");
       cleanupSendParam();
       sendInFlight = false;
     }, 150);
@@ -2183,9 +1890,55 @@
   }
 
   /* ---------------------------------------------------------------------- *
+   * 「貼底」捲動穩定器
+   *   不論是什麼造成捲動位移，統一用聊天 App 標準做法處理：
+   *   1) 用「真實 scroll 事件的 target」找出真正在捲的容器（不用猜選擇器）。
+   *   2) 記住使用者是否貼在底部。
+   *   3) 任一 DOM 變動後，若原本貼底就把它拉回底；使用者主動往上翻就不再干涉。
+   * ---------------------------------------------------------------------- */
+  let chatScroller = null;
+  let pinnedToBottom = true;
+  function isElScrollable(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.scrollHeight <= el.clientHeight + 8) return false;
+    const oy = getComputedStyle(el).overflowY;
+    return oy === "auto" || oy === "scroll" || oy === "overlay";
+  }
+  function findScrollerByWalk() {
+    const anchor = document.querySelector(".chat-body");
+    let el = anchor ? anchor.parentElement : null;
+    while (el && el !== document.body) {
+      if (isElScrollable(el) && el.querySelector(".chat-body")) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+  function getScroller() {
+    if (chatScroller && document.contains(chatScroller)) return chatScroller;
+    chatScroller = findScrollerByWalk();
+    return chatScroller;
+  }
+  function nearBottom(sc) {
+    return sc.scrollHeight - sc.scrollTop - sc.clientHeight <= 60;
+  }
+  function stickToBottomIfPinned() {
+    const sc = getScroller();
+    if (sc && pinnedToBottom && !nearBottom(sc)) sc.scrollTop = sc.scrollHeight;
+  }
+  // 真實捲動事件：學到真正的捲動容器，並更新「是否貼底」（往上翻就解除貼底，不再硬拉）
+  document.addEventListener("scroll", (e) => {
+    const t = e.target;
+    if (t && t.nodeType === 1 && t.querySelector && t.querySelector(".chat-body")) {
+      chatScroller = t;
+      pinnedToBottom = nearBottom(t);
+    }
+  }, true);
+
+  /* ---------------------------------------------------------------------- *
    * Boot
    * ---------------------------------------------------------------------- */
   let lastOaId = getOaId();
+  let lastChatId = getChatId();
   enhanceChatBodies();
   enhanceQuickReplyToolbars();
   enhancePrefixChip();
@@ -2193,12 +1946,10 @@
   ensureQuickBar();
   paintIcons();
   checkSendToken();
+  // 進頁面先貼底幾次，接住陸續載入的訊息（只在仍貼底時動作）
+  [200, 600, 1000].forEach((ms) => setTimeout(stickToBottomIfPinned, ms));
   window.addEventListener("popstate", checkSendToken);
-  document.addEventListener("click", () => {
-    closeQuickReplyMenus();
-    closePrefixPopover();
-    closeDispatchPopover();
-  });
+  document.addEventListener("click", () => { closeQuickReplyMenus(); closePrefixPopover(); closeDispatchPopover(); });
 
   // 全域維護工作（建立按鈕/前綴/氣泡列/圖示）以 rAF 去抖動，每幀最多執行一次，避免忙迴圈卡住主執行緒。
   let maintQueued = false;
@@ -2219,6 +1970,15 @@
         closePrefixPopover();
         closeDispatchPopover();
       }
+      const chat = getChatId();
+      if (chat !== lastChatId) {
+        // 換對話：重設成「貼底」並重新尋找捲動容器，接著幾次把它拉到底
+        lastChatId = chat;
+        chatScroller = null;
+        pinnedToBottom = true;
+        if (chat) [0, 150, 400, 800, 1200].forEach((ms) => setTimeout(stickToBottomIfPinned, ms));
+      }
+      stickToBottomIfPinned();
     });
   }
 
@@ -2238,16 +1998,12 @@
         if (!(node instanceof Element)) continue;
         if (node.matches(".chat-body")) addCopyButton(node);
         else enhanceChatBodies(node);
-        if (node.matches("i.lar.la-chat-phone.la-fw.la-lg"))
-          addQuickReplyButton(node.closest("a"));
+        if (node.matches("i.lar.la-chat-phone.la-fw.la-lg")) addQuickReplyButton(node.closest("a"));
         else enhanceQuickReplyToolbars(node);
       }
     }
+    stickToBottomIfPinned();
     scheduleMaintenance();
   });
-  observer.observe(document.body, {
-    childList: true,
-    characterData: true,
-    subtree: true,
-  });
+  observer.observe(document.body, { childList: true, characterData: true, subtree: true });
 })();
