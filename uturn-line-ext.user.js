@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.25.0
+// @version      1.25.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -67,14 +67,6 @@
   const LINEURL_INCLUDE_KEY = "loe_dispatch_lineurl_v1"; // 送出是否附上對話連結(linechaturl:)
   const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
 
-
-  const DEFAULT_REPLIES = [
-    {
-      name: "安排",
-      text: "馬上幫您安排調派時間約③ - ⑧分\n有車會立即告知,請勿關閉通知\n派車期間請勿催促",
-    },
-    { name: "取消", text: "好的已幫您取消\n非常抱歉未能替您服務(⸝⸝o̴̶̷᷄ ·̭ o̴̶̷̥᷅⸝⸝)" },
-  ];
 
   // 派單後給客人的回覆訊息
   const DISPATCH_REPLY_MSG =
@@ -573,9 +565,7 @@
   }
   function getReplies() {
     const v = storeGet(STORE_KEY, null);
-    if (Array.isArray(v)) return v;
-    storeSet(STORE_KEY, DEFAULT_REPLIES);
-    return DEFAULT_REPLIES.slice();
+    return Array.isArray(v) ? v : []; // 不再內建預設樣板，一律由後端（依帳號）帶入
   }
   function setReplies(arr) {
     storeSet(STORE_KEY, arr);
