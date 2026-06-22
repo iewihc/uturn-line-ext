@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.24.2
+// @version      1.25.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -55,7 +55,8 @@
   const PREFIX_CHIP_CLASS = "loe-prefix-chip";
   const PREFIX_KEY = "loe_prefix_v1"; // 前綴設定（一組，對應目前 OA 帳號）
   const WEBHOOK_KEY = "loe_discord_webhook_v1"; // Discord 頻道 webhook 網址
-  const DISPATCHER_KEY = "loe_dispatcher_v1"; // 派單人員名稱（顯示為 Discord 訊息發送者）
+  const DISPATCHER_KEY = "loe_dispatcher_v1"; // 派單人員名稱／後台帳號（顯示為 Discord 訊息發送者；驅動遠端設定的 key）
+  const FLEET_KEY = "loe_fleet_v1"; // 目前要拉哪個車隊的遠端設定（如 HELLO）
   const DISPATCH_BUTTON_CLASS = "loe-dispatch-button"; // 派單按鈕
   const DISPATCH_POP_CLASS = "loe-dispatch-pop";
   const ESTIMATE_BUTTON_CLASS = "loe-estimate-button"; // 估價按鈕
@@ -66,191 +67,6 @@
   const LINEURL_INCLUDE_KEY = "loe_dispatch_lineurl_v1"; // 送出是否附上對話連結(linechaturl:)
   const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
 
-  /* ====================================================================== *
-   * 預設設定檔 CONFIG —— 「一鍵匯入所有設定」會套用這份。
-   *   - 沒有 chat：設定該 gid 的「群編預設」。
-   *   - 有 chat：店配，該對話固定「群編」＋「上車地址(pickup)」。
-   * 要新增門市/帳號，照格式往下加即可。
-   * ====================================================================== */
-  const CONFIG = [
-    // 帳號層級（群編預設）：{ group, gid }
-    { group: "*🐻‍❄️", gid: "U9ae75f4ea77f3f9aa04ab0f26705d676" },
-    { group: "*♾️", gid: "U8acceed382c80644a1b6b934ea143ebe" },
-    { group: "*🐡", gid: "U5273c0793f7e49250e82b9e754a21ba7" },
-    { group: "*🐶", gid: "U0094da8274701d2834e3d5214b6810b5" },
-    { group: "*⌚️", gid: "U5fcb2daab781b63cd01c3186f93d68b7" },
-    { group: "*🦑", gid: "Uef0ceb32c8be0fbd5aa1cf158718a177" },
-    { group: "*🦋", gid: "U3d0e9b69499da00fa839c4d8245aefae" },
-    { group: "*🔻", gid: "Uf257f4bdadd048d87f3fb37304cb2378" },
-    { group: "*🍩", gid: "Uf0a20ba38b64972a0f2c9d6d2c302b05" },
-    { group: "*📗", gid: "Uac542d3ffeeb279827bb2d5dfac1f26d" },
-    { group: "*🌪️", gid: "Ub8ead8093979b9ce4aaa4332921610c0" },
-    { group: "*🌊", gid: "U93634323fea8a2ce9facd79d0edfcbd1" },
-    { group: "*🍓", gid: "Ub0336775c2eabda4735e98b48dc0aa72" },
-    { group: "*🪼", gid: "U19abd947d4a982d03ca24274fc62c6c8" },
-    { group: "*🍦", gid: "U6c97c065bdbe16a3a83ec465963f2240" },
-    { group: "*🍁", gid: "U2d148b75a8b0df438e0070111baa19eb" },
-    { group: "*🍑", gid: "Ued3a794c10f0a699343f3992d12e9bee" },
-    { group: "*🍋‍🟩", gid: "U660a73ac245d76a8e4bf2986b62b4392" },
-    { group: "*🐬", gid: "Ua5e9cfeb16616c79e559133f8b9e97d9" },
-    { group: "*🏈", gid: "U1d456f5238bbb07f9229923ccad452b2" },
-    { group: "*🐑", gid: "U2e6bea0ce91ede806436c69e5bf36208" },
-    { group: "*🐦‍🔥", gid: "U6d9a3726cc6b791715d99944a4725f01" },
-    { group: "*🍿", gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7" },
-    { group: "*🍔", gid: "Uaec9e478c471c730b50e7a0b7fa35110" },
-    { group: "*🐳", gid: "U07f1858be8fa376ab889f7dc53a29c19" },
-    { group: "*🎵", gid: "U3df1c9d94b1c0454a385fe3f958c421c" },
-    { group: "*🍒", gid: "Udadf526c6163cf0f42d52e31f20dc8e8" },
-    // 對話群編覆寫（只改群編、無上車地址）：{ group, gid, chat }
-    {
-      group: "*🐞",
-      gid: "U8acceed382c80644a1b6b934ea143ebe",
-      chat: "Cf5daff1a7542183cd4b5e75120a70f84",
-    },
-    {
-      group: "*🦈",
-      gid: "U8acceed382c80644a1b6b934ea143ebe",
-      chat: "C06ec37c27d2102f21eff3052e8d7cf7c",
-    },
-    {
-      group: "*♾️1",
-      gid: "U8acceed382c80644a1b6b934ea143ebe",
-      chat: "C77e51aef562d72e41f00202a452cc207",
-    },
-    {
-      group: "*🍇",
-      gid: "U5273c0793f7e49250e82b9e754a21ba7",
-      chat: "U7a42e70b0e7593f4123905ce39e26b7d",
-    },
-    {
-      group: "*🍇群",
-      gid: "U5273c0793f7e49250e82b9e754a21ba7",
-      chat: "Ccb36aa175edd878bae1e32d1dc1fc09e",
-    },
-    {
-      group: "*🐕‍🦺",
-      gid: "U6c97c065bdbe16a3a83ec465963f2240",
-      chat: "Cc1c5f53714b9c2fb717b76224615b52c",
-    },
-    {
-      group: "*🐕‍🦺",
-      gid: "U6c97c065bdbe16a3a83ec465963f2240",
-      chat: "C90927ece39fafe7d27ecd5a0e7d9af59",
-    },
-    {
-      group: "*🐕‍🦺",
-      gid: "U6c97c065bdbe16a3a83ec465963f2240",
-      chat: "C90927ece39fafe7d27ecd5a0e7d9af59",
-    },
-    {
-      group: "*🍬",
-      gid: "U660a73ac245d76a8e4bf2986b62b4392",
-      chat: "Cc195e5223ece165e8e46eabaf5b3d9e9",
-    },
-    // 店配（對話層級：固定群編＋上車地址）：{ group, gid, chat, pickup }
-    {
-      group: "*🌪️店配",
-      gid: "Ub8ead8093979b9ce4aaa4332921610c0",
-      chat: "Cdf6e95f3f0898b31fa9b688831b6f0ec",
-      pickup: "想你好酒/霧峰區草湖路127-1號",
-    },
-    {
-      group: "*🍁",
-      gid: "U2d148b75a8b0df438e0070111baa19eb",
-      chat: "C5f7a0a12080bfabd19fb81ab93fc9f8a",
-      pickup: "北區中清路一段53號 統領大樓",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C393cc88f7683611034cdfc7fea14fb2c",
-      pickup: "西區忠明南路333號 歐菲旅店",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C857deed27479a24d1b9b3a393c2f8530",
-      pickup: "Glacier餐酒館",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C5416bea2d186e6ea899c551b92de4d06",
-      pickup: "沙鹿區台灣大道七段303號 Taluan",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C8c750ad390270edfff713e1d567c523c",
-      pickup: "老地方青海店 開進停車場最後面",
-    },
-    {
-      group: "*🍿店",
-      gid: "Udc43d66508ed86fa23adcbdfb9c2e0f7",
-      chat: "C8c750ad390270edfff713e1d567c523c",
-      pickup: "南屯區大墩路852號 非嚐不可",
-    },
-    {
-      group: "*🍒3.70店/小真",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C0a1d063f0fe80494b7997baecbce9231",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/小洪",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C510862e713d61bd19a27bb544febe3ac",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/大益",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C58119ce7ee1a2c5d14df7dbed92684ed",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/翔",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C24708f0f96952713dc4e6da05d400865",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/光少",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C56ae0c4336da4736b97898cdb3d01ae6",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/草爺",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C0d3907b8e87a8e09e2d21bcad5c5f265",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/鳳梨",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C8392f99fdce2c17c29d3beb22c65ff11",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/賢哥",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C0f48f8efa82bf025f4deb4cb44ed0bf6",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/喜董",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "C39573c444d425a2d28a05c0994f7f666",
-      pickup: "中區市府路130號 雪在燒",
-    },
-    {
-      group: "*🍒3.70店/泰泰喜歡",
-      gid: "Udadf526c6163cf0f42d52e31f20dc8e8",
-      chat: "Cf235683ce321521d157d4ddc4713b49b",
-      pickup: "西屯黎明路三段388-2號 泰泰喜歡",
-    },
-  ];
 
   const DEFAULT_REPLIES = [
     {
@@ -823,27 +639,59 @@
     if (!chat) return null;
     return getChatOverrides()[`${gid}/${chat}`] || null;
   }
-  // 一鍵匯入：把 CONFIG 套用到各帳號（前綴）與各對話（群編覆寫＋固定上車地址）
-  function applyConfig() {
+  // 套用一份車隊雲端設定（後端 /line-ext-config 回應）到本地：
+  //   - official(無 chatId)：設該 OA 的群編前綴
+  //   - store(有 chatId)：該對話固定群編＋上車地址
+  //   - 一併套用 Discord webhook（每車隊一個）
+  // 設定來源已從硬編碼 CONFIG 改為後端 DB（admin「懶惰蟲配置」頁維護）。
+  function applyFleetConfig(data) {
+    const entries = (data && data.entries) || [];
     const overrides = {};
     let gidCount = 0,
       chatCount = 0;
-    CONFIG.forEach((c) => {
-      if (!c.gid) return;
-      if (c.chat) {
-        overrides[`${c.gid}/${c.chat}`] = {
-          group: c.group || "",
-          pickup: c.pickup || "",
+    entries.forEach((e) => {
+      if (!e.groupId) return;
+      if (e.chatId) {
+        overrides[`${e.groupId}/${e.chatId}`] = {
+          group: e.group || "",
+          pickup: e.pickup || "",
         };
         chatCount++;
       } else {
-        setPrefixForGid(c.gid, c.group || "");
+        setPrefixForGid(e.groupId, e.group || "");
         gidCount++;
       }
     });
     setChatOverrides(overrides);
+    if (data && typeof data.discordWebhook === "string" && data.discordWebhook) {
+      setWebhook(data.discordWebhook);
+    }
     renderPrefixChip();
     return { gidCount, chatCount };
+  }
+  async function fetchFleetConfig(fleet) {
+    if (!fleet) return null;
+    try {
+      return await httpGetJson(
+        `${API_BASE}/line-ext-config?fleet=${encodeURIComponent(fleet)}`,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+  // 一鍵匯入：向後端拉目前車隊的設定並套用（取代舊的硬編碼 CONFIG）
+  async function applyConfig() {
+    const fleet = getFleet();
+    if (!fleet) {
+      toast("請先在設定面板填寫車隊（如 HELLO）");
+      return { gidCount: 0, chatCount: 0 };
+    }
+    const data = await fetchFleetConfig(fleet);
+    if (!data) {
+      toast("讀取雲端設定失敗，請稍後再試");
+      return { gidCount: 0, chatCount: 0 };
+    }
+    return applyFleetConfig(data);
   }
   // 取值：先讀此帳號專屬的 key；若沒有、但有舊的全域設定，搬移過來(一次性)
   function getScoped(base) {
@@ -889,6 +737,13 @@
   }
   function setDispatcher(name) {
     storeSet(DISPATCHER_KEY, (name || "").trim());
+  }
+  // 車隊（全域共用）：決定要向後端拉哪個車隊的懶惰蟲設定（webhook + 官方/店配）
+  function getFleet() {
+    return (getGlobalWithMigration(FLEET_KEY) || "").trim();
+  }
+  function setFleet(name) {
+    storeSet(FLEET_KEY, (name || "").trim().toUpperCase());
   }
   function getAutoReply() {
     return storeGet(AUTOREPLY_KEY, false) === true;
@@ -1588,6 +1443,16 @@
     whoInput.placeholder = "例如：dispatcher@uturn.com";
     whoInput.value = getDispatcher();
 
+    // 車隊 — 設定後台帳號後，依此向後端拉該車隊的 Webhook 與官方/店配設定
+    const fleetHint = document.createElement("div");
+    fleetHint.className = "loe-pop-hint";
+    fleetHint.style.marginTop = "4px";
+    fleetHint.textContent = "車隊（設定帳號後自動套用該車隊的雲端設定，如 HELLO）：";
+    const fleetInput = document.createElement("input");
+    fleetInput.type = "text";
+    fleetInput.placeholder = "例如：HELLO";
+    fleetInput.value = getFleet();
+
     const actions = document.createElement("div");
     actions.className = "loe-pop-actions";
     const clearBtn = document.createElement("button");
@@ -1597,8 +1462,9 @@
       setPrefix("");
       setWebhook("");
       setDispatcher("");
+      setFleet("");
       closePrefixPopover();
-      toast("已清除前綴、Webhook 與後台帳號");
+      toast("已清除前綴、Webhook、後台帳號與車隊");
     });
     const saveBtn = document.createElement("button");
     saveBtn.className = "loe-btn-primary";
@@ -1613,11 +1479,14 @@
       setPrefix(input.value.trim());
       setWebhook(hookInput.value.trim());
       setDispatcher(acct);
+      setFleet(fleetInput.value.trim());
       closePrefixPopover();
       toast(
         "已儲存設定" +
           (input.value.trim() ? "（前綴：" + input.value.trim() + "）" : ""),
       );
+      // 設定後台帳號後才驅動：拉該帳號的快速回覆與該車隊的 Webhook/設定
+      syncRemoteConfig();
     });
     actions.appendChild(clearBtn);
     actions.appendChild(saveBtn);
@@ -1630,6 +1499,8 @@
     pop.appendChild(hookInput);
     pop.appendChild(whoHint);
     pop.appendChild(whoInput);
+    pop.appendChild(fleetHint);
+    pop.appendChild(fleetInput);
     pop.appendChild(actions);
     document.body.appendChild(pop);
     const r = anchor.getBoundingClientRect();
@@ -1644,6 +1515,7 @@
     input.addEventListener("keydown", onKey);
     hookInput.addEventListener("keydown", onKey);
     whoInput.addEventListener("keydown", onKey);
+    fleetInput.addEventListener("keydown", onKey);
     pop.addEventListener("click", (e) => e.stopPropagation());
     openPrefixPopover._pop = pop;
   }
@@ -1670,7 +1542,7 @@
     });
     dd.insertAdjacentElement("afterend", chip);
 
-    // 一鍵匯入所有設定（套用 CONFIG）
+    // 一鍵匯入所有設定（向後端拉目前車隊的設定並套用）
     const importBtn = document.createElement("button");
     importBtn.type = "button";
     importBtn.className = "loe-import-btn";
@@ -1678,11 +1550,11 @@
     const importLabel = document.createElement("span");
     importLabel.textContent = "一鍵匯入所有設定";
     importBtn.appendChild(importLabel);
-    importBtn.title = "把預設的群編設定檔套用到各帳號／門市";
-    importBtn.addEventListener("click", (e) => {
+    importBtn.title = "向後端拉目前車隊（設定面板）的群編設定並套用到各帳號／門市";
+    importBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const r = applyConfig();
+      const r = await applyConfig();
       toast(`已匯入設定：${r.gidCount} 個帳號群編、${r.chatCount} 筆門市覆寫`);
     });
     chip.insertAdjacentElement("afterend", importBtn);
@@ -2131,6 +2003,42 @@
       });
     });
   }
+  /* ---------------------------------------------------------------------- *
+   * 遠端設定同步（account-gated）
+   *   - 後台帳號(account) 一設定，才會去後端拉設定並覆蓋本地快取。
+   *   - 快速回覆：GET /line-quick-replies?account=X（依帳號，無 auth）
+   *   - 車隊設定：GET /line-ext-config?fleet=HELLO（依車隊，無 auth，含 Discord webhook）
+   *   - 拉回的值直接寫進既有的本地 key（STORE_KEY / WEBHOOK_KEY）當快取，
+   *     既有讀取流程不需改動；後端沒設定或離線時自動沿用本地/預設值。
+   * ---------------------------------------------------------------------- */
+  async function syncRemoteQuickReplies(account) {
+    if (!account) return;
+    try {
+      const data = await httpGetJson(
+        `${API_BASE}/line-quick-replies?account=${encodeURIComponent(account)}`,
+      );
+      const replies = data && data.replies;
+      if (Array.isArray(replies) && replies.length) {
+        storeSet(STORE_KEY, replies);
+        refreshAllQuickMenus();
+        renderQuickBar();
+      }
+    } catch (_) {
+      /* 離線/錯誤：沿用本地快取，不打擾使用者 */
+    }
+  }
+  async function syncRemoteFleetConfig(fleet) {
+    if (!fleet) return;
+    const data = await fetchFleetConfig(fleet);
+    if (data) applyFleetConfig(data); // 套用 webhook + 群編前綴 + 對話覆寫
+  }
+  // 設定 account 後才驅動：沒帳號一律不動遠端設定。
+  function syncRemoteConfig() {
+    const account = getDispatcher();
+    if (!account) return;
+    syncRemoteQuickReplies(account);
+    syncRemoteFleetConfig(getFleet());
+  }
   function ackSend(token, status, error) {
     if (typeof GM_xmlhttpRequest !== "function") return;
     GM_xmlhttpRequest({
@@ -2260,6 +2168,8 @@
   ensureQuickBar();
   paintIcons();
   checkSendToken();
+  // 已設定後台帳號 → 拉雲端設定（快速回覆 + 該車隊 Webhook）覆蓋本地快取
+  syncRemoteConfig();
   // 進頁面先貼底幾次，接住陸續載入的訊息（只在仍貼底時動作）
   [200, 600, 1000].forEach((ms) => setTimeout(stickToBottomIfPinned, ms));
   window.addEventListener("popstate", checkSendToken);
