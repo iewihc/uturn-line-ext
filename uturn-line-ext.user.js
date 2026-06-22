@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.25.1
+// @version      1.25.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -733,7 +733,8 @@
     return (getGlobalWithMigration(FLEET_KEY) || "").trim();
   }
   function setFleet(name) {
-    storeSet(FLEET_KEY, (name || "").trim().toUpperCase());
+    // 不分大小寫：後端 /line-ext-config 解析車隊時已 ToUpper，這裡原樣保存即可（hello / HELLO 皆可）
+    storeSet(FLEET_KEY, (name || "").trim());
   }
   function getAutoReply() {
     return storeGet(AUTOREPLY_KEY, false) === true;
@@ -1412,17 +1413,6 @@
     input.placeholder = "例如：W0";
     input.value = getPrefix();
 
-    // Discord webhook
-    const hookHint = document.createElement("div");
-    hookHint.className = "loe-pop-hint";
-    hookHint.style.marginTop = "4px";
-    hookHint.textContent =
-      "Discord 頻道 Webhook 網址（全部帳號共用，設定一次即可；留空＝改為複製到剪貼簿）：";
-    const hookInput = document.createElement("input");
-    hookInput.type = "text";
-    hookInput.placeholder = "https://discord.com/api/webhooks/...";
-    hookInput.value = getWebhook();
-
     // 後台帳號（Email）— 全部帳號共用，顯示為這張單在 Discord 的發送者
     const whoHint = document.createElement("div");
     whoHint.className = "loe-pop-hint";
@@ -1450,11 +1440,10 @@
     clearBtn.textContent = "清除";
     clearBtn.addEventListener("click", () => {
       setPrefix("");
-      setWebhook("");
       setDispatcher("");
       setFleet("");
       closePrefixPopover();
-      toast("已清除前綴、Webhook、後台帳號與車隊");
+      toast("已清除前綴、後台帳號與車隊");
     });
     const saveBtn = document.createElement("button");
     saveBtn.className = "loe-btn-primary";
@@ -1467,7 +1456,6 @@
         return;
       }
       setPrefix(input.value.trim());
-      setWebhook(hookInput.value.trim());
       setDispatcher(acct);
       setFleet(fleetInput.value.trim());
       closePrefixPopover();
@@ -1485,8 +1473,6 @@
     pop.appendChild(acct);
     pop.appendChild(hint);
     pop.appendChild(input);
-    pop.appendChild(hookHint);
-    pop.appendChild(hookInput);
     pop.appendChild(whoHint);
     pop.appendChild(whoInput);
     pop.appendChild(fleetHint);
@@ -1503,7 +1489,6 @@
       if (e.key === "Escape") closePrefixPopover();
     };
     input.addEventListener("keydown", onKey);
-    hookInput.addEventListener("keydown", onKey);
     whoInput.addEventListener("keydown", onKey);
     fleetInput.addEventListener("keydown", onKey);
     pop.addEventListener("click", (e) => e.stopPropagation());
