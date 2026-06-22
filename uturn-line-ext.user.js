@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.26.2
+// @version      1.27.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -573,6 +573,8 @@
     storeSet(STORE_KEY, arr);
     refreshAllQuickMenus();
     renderQuickBar();
+    // ext 為主：本地改動推回後端（依後台帳號），讓 admin / 其他裝置同步到
+    pushRepliesToBackend(getDispatcher(), arr);
   }
   /* ---- 每個官方帳號(OA)獨立：前綴 + webhook 以 OA id 分開儲存 ---- */
   function getOaId() {
@@ -2013,6 +2015,17 @@
     } catch (_) {
       /* 離線/錯誤：沿用本地快取，不打擾使用者 */
     }
+  }
+  // ext 為主：本地快速回覆改動（新增/編輯/刪除/↑↓ 排序）推回後端（依帳號，無 auth）。
+  // 沒設定帳號不推；離線/錯誤靜默（本地仍是最新，下次再推）。
+  function pushRepliesToBackend(account, arr) {
+    if (!account || typeof GM_xmlhttpRequest !== "function") return;
+    GM_xmlhttpRequest({
+      method: "PUT",
+      url: `${API_BASE}/line-quick-replies?account=${encodeURIComponent(account)}`,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({ replies: Array.isArray(arr) ? arr : [] }),
+    });
   }
   async function syncRemoteFleetConfig(fleet) {
     if (!fleet) return;
