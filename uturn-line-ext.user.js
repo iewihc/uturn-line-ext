@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.25.2
+// @version      1.26.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -22,7 +22,7 @@
 (function () {
   "use strict";
 
-  const UTURN_BUILD = "1.24.2";
+  const UTURN_BUILD = "1.26.2";
   try {
     console.log(
       "%c[UTurn懶惰蟲] loaded build " + UTURN_BUILD,
@@ -386,6 +386,8 @@
     }
     /* 有轉發按鈕的泡泡需要更多右側留白 */
     .loe-has-forward.${TEXT_PAD_CLASS} { padding-right: 56px !important; }
+    /* 位置訊息：泡泡右側留白，固定顯示的轉發/複製鈕不會蓋住箭頭 */
+    .loe-loc-pad { padding-right: 60px !important; }
 
     /* 自訂 tooltip（轉發 / 複製）— 按鈕本身已是 position:absolute */
     [data-loe-tip]::after {
@@ -789,7 +791,8 @@
   function getMessageText(chatBody) {
     const node =
       chatBody.querySelector("[data-copy-target].chat-item-text") ||
-      chatBody.querySelector(".chat-item-text");
+      chatBody.querySelector(".chat-item-text") ||
+      chatBody.querySelector(".chat-item-loc .small"); // 位置訊息：地址在這
     return node ? node.innerText.trim() : "";
   }
   async function copyText(text) {
@@ -843,6 +846,10 @@
     link.rel = "noopener noreferrer";
     link.textContent = address;
     link.title = "在 Google Maps 開啟導航";
+    // inline + !important：避免被 LINE 自家 CSS 蓋掉底線/顏色（class 樣式壓不過）
+    link.style.cssText =
+      "color:#0b57d0 !important;text-decoration:underline !important;" +
+      "text-underline-offset:2px;cursor:pointer !important;";
     link.addEventListener("click", (e) => e.stopPropagation());
     return link;
   }
@@ -852,9 +859,11 @@
     ADDRESS_PATTERN.lastIndex = 0;
     if (!ADDRESS_PATTERN.test(container.textContent || "")) return;
 
-    // 就地替換：只動「含地址的那一個文字節點」，不清空／重建整個容器，
-    // 避免容器內容瞬間被掏空造成瀏覽器失去捲動定位、把對話頂上去。
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    // LINE 的訊息文字被包在內層 <div> 裡，Vue 會不斷重建它，直接對 live 文字節點
+    // replaceChild 會因節點已被換掉而丟錯 → 改在「clone（離線、穩定）」上處理，
+    // 最後用 innerHTML 一次換上（已驗證：設 .chat-item-text 的 innerHTML 不會被 Vue 洗掉）。
+    const clone = container.cloneNode(true);
+    const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, {
       acceptNode(node) {
         const p = node.parentElement;
         if (!p) return NodeFilter.FILTER_REJECT;
@@ -864,17 +873,17 @@
           )
         )
           return NodeFilter.FILTER_REJECT;
-        ADDRESS_PATTERN.lastIndex = 0;
-        return ADDRESS_PATTERN.test(node.nodeValue || "")
-          ? NodeFilter.FILTER_ACCEPT
-          : NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
       },
     });
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
 
+    let changed = false;
     nodes.forEach((textNode) => {
       const text = textNode.nodeValue;
+      ADDRESS_PATTERN.lastIndex = 0;
+      if (!text || !ADDRESS_PATTERN.test(text)) return; // 此節點沒地址就跳過
       ADDRESS_PATTERN.lastIndex = 0;
       const frag = document.createDocumentFragment();
       let last = 0,
@@ -887,14 +896,12 @@
       }
       if (last < text.length)
         frag.appendChild(document.createTextNode(text.slice(last)));
-      // Vue 可能已把節點換掉；用 contains 確認仍是子節點，再包 try 保證絕不丟錯中斷後續處理。
-      const p = textNode.parentNode;
-      if (p && p.contains(textNode)) {
-        try {
-          p.replaceChild(frag, textNode);
-        } catch (_) {}
+      if (textNode.parentNode) {
+        textNode.parentNode.replaceChild(frag, textNode); // 在 clone 上，穩定不丟錯
+        changed = true;
       }
     });
+    if (changed) container.innerHTML = clone.innerHTML; // 一次換上，原子且不被 Vue 洗掉
   }
 
   /* ---------------------------------------------------------------------- *
@@ -1339,15 +1346,20 @@
    * ---------------------------------------------------------------------- */
   function addCopyButton(chatBody) {
     const bubble = chatBody.querySelector(".chat-item");
+    if (!bubble) return;
     const textNode =
       chatBody.querySelector("[data-copy-target].chat-item-text") ||
       chatBody.querySelector(".chat-item-text");
-    if (!bubble || !textNode) return;
-    linkifyAddresses(textNode);
-    addForwardButton(bubble, textNode);
+    // 位置訊息（LINE location）：沒有 .chat-item-text，地址在 .chat-item-loc .small
+    const locNode = textNode ? null : bubble.querySelector(".chat-item-loc .small");
+    const srcNode = textNode || locNode;
+    if (!srcNode) return;
+    if (textNode) linkifyAddresses(textNode);
+    addForwardButton(bubble, srcNode);
     if (chatBody.querySelector(`.${BUTTON_CLASS}`)) return;
     bubble.classList.add(BUBBLE_CLASS);
-    textNode.classList.add(TEXT_PAD_CLASS); // 預留右側空間，固定顯示的按鈕不會蓋到文字
+    if (textNode) textNode.classList.add(TEXT_PAD_CLASS); // 預留右側空間，固定顯示的按鈕不會蓋到文字
+    else bubble.classList.add("loe-loc-pad");            // 位置訊息：泡泡右側留白，按鈕不蓋住箭頭
     const button = document.createElement("button");
     button.type = "button";
     button.className = BUTTON_CLASS;
