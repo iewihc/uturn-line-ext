@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.26.2
+// @version      1.28.5
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -22,7 +22,7 @@
 (function () {
   "use strict";
 
-  const UTURN_BUILD = "1.26.2";
+  const UTURN_BUILD = "1.28.5";
   try {
     console.log(
       "%c[UTurn懶惰蟲] loaded build " + UTURN_BUILD,
@@ -111,39 +111,41 @@
   const style = document.createElement("style");
   style.textContent = `
     .${BUBBLE_CLASS} { position: relative !important; }
-    .${TEXT_PAD_CLASS} { padding-right: 30px !important; }
+    .${TEXT_PAD_CLASS} { padding-right: 34px !important; }
 
-    /* 每則訊息的複製按鈕 (藍色) */
+    /* 每則訊息的複製按鈕（白底膠囊、淡陰影描邊、hover 微浮起變藍） */
     .${BUTTON_CLASS} {
       position: absolute;
-      top: 6px;
-      right: 6px;
+      top: 7px;
+      right: 7px;
       z-index: 2;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       padding: 0;
-      border: 1px solid rgba(28, 108, 243, 0.30);
-      border-radius: 7px;
-      background: rgba(255, 255, 255, 0.86);
-      color: ${BLUE};
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.94);
+      color: #64748b;
       cursor: pointer;
-      opacity: 0.5;
+      opacity: 0.55;
       user-select: none;
-      backdrop-filter: blur(3px);
-      transition: opacity .12s ease, background .12s ease, border-color .12s ease;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 1px 3px rgba(16,24,40,.12), 0 0 0 1px rgba(16,24,40,.06);
+      transition: opacity .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
     }
     .${BUBBLE_CLASS}:hover .${BUTTON_CLASS} { opacity: 1; }
     .${BUTTON_CLASS}:hover,
     .${BUTTON_CLASS}:focus-visible {
-      border-color: ${BLUE};
-      background: ${BLUE_SOFT};
-      color: ${BLUE_HOVER};
+      color: ${BLUE};
       opacity: 1;
       outline: none;
+      box-shadow: 0 2px 7px rgba(28,108,243,.28), 0 0 0 1px rgba(28,108,243,.40);
+      transform: translateY(-1px);
     }
+    .${BUTTON_CLASS}:active, .${FORWARD_BUTTON_CLASS}:active { transform: translateY(0); }
     .${ICON_CLASS},
     .${BUTTON_CLASS} > svg,
     .${FORWARD_BUTTON_CLASS} > svg {
@@ -152,10 +154,10 @@
       stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
     }
     .${BUTTON_CLASS}.${COPIED_CLASS} {
-      border-color: rgba(6, 199, 85, 0.55);
       color: #06c755;
       background: #effaf1;
       opacity: 1;
+      box-shadow: 0 1px 4px rgba(6,199,85,.25), 0 0 0 1px rgba(6,199,85,.45);
     }
 
     /* 地址 -> Google Maps 連結 */
@@ -250,26 +252,42 @@
 
     /* 輸入框上方的快捷氣泡列 */
     .${QR_BAR_CLASS} {
-      display: flex; gap: 6px; align-items: center;
-      padding: 6px 10px;
+      display: flex; gap: 8px; align-items: center;
+      padding: 8px 10px;
       overflow-x: auto;
+      background: linear-gradient(180deg, rgba(28,108,243,.04), rgba(28,108,243,0));
       border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      scrollbar-width: thin;
     }
-    .${QR_BAR_CLASS}::-webkit-scrollbar { height: 4px; }
-    .${QR_BAR_CLASS}::-webkit-scrollbar-thumb { background: rgba(15,23,42,.15); border-radius: 4px; }
+    .${QR_BAR_CLASS}::-webkit-scrollbar { height: 5px; }
+    .${QR_BAR_CLASS}::-webkit-scrollbar-thumb { background: rgba(15,23,42,.14); border-radius: 6px; }
+    .${QR_BAR_CLASS}::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,.26); }
     .${QR_CHIP_CLASS} {
       flex-shrink: 0;
-      padding: 5px 12px;
-      border: 1px solid rgba(28, 108, 243, 0.35);
+      display: inline-flex; align-items: center;
+      padding: 6px 14px;
+      border: 1px solid rgba(15, 23, 42, 0.10);
       border-radius: 999px;
-      background: ${BLUE_SOFT};
-      color: ${BLUE_HOVER};
-      font: inherit; font-size: 12px; font-weight: 600;
-      line-height: 1.2;
+      background: #fff;
+      color: #334155;
+      font: inherit; font-size: 12.5px; font-weight: 500;
+      line-height: 1.25;
       cursor: pointer; white-space: nowrap;
-      max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+      max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+      box-shadow: 0 1px 2px rgba(16,24,40,.06);
+      transition: background .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease, transform .1s ease;
     }
-    .${QR_CHIP_CLASS}:hover { background: #e0ecff; border-color: ${BLUE}; }
+    .${QR_CHIP_CLASS}:hover {
+      background: ${BLUE_SOFT};
+      border-color: rgba(28,108,243,.50);
+      color: ${BLUE_HOVER};
+      box-shadow: 0 2px 7px rgba(28,108,243,.18);
+      transform: translateY(-1px);
+    }
+    .${QR_CHIP_CLASS}:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 2px rgba(16,24,40,.08);
+    }
 
     /* 管理視窗 */
     .loe-modal-mask {
@@ -350,44 +368,48 @@
     }
     .loe-btn-ghost:hover { background: #f1f5f9; }
 
-    /* 轉發按鈕（地址訊息專用，放在複製按鈕左邊） */
+    /* 轉發按鈕（放在複製按鈕左邊，樣式與複製一致） */
     .${FORWARD_BUTTON_CLASS} {
       position: absolute;
-      top: 6px;
-      right: 32px;
+      top: 7px;
+      right: 39px;
       z-index: 2;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 22px;
-      height: 22px;
+      width: 24px;
+      height: 24px;
       padding: 0;
-      border: 1px solid rgba(28, 108, 243, 0.30);
-      border-radius: 7px;
-      background: rgba(255, 255, 255, 0.86);
-      color: ${BLUE};
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.94);
+      color: #64748b;
       cursor: pointer;
-      opacity: 0.5;
-      backdrop-filter: blur(3px);
-      transition: opacity .12s ease, background .12s ease, border-color .12s ease;
+      opacity: 0.55;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 1px 3px rgba(16,24,40,.12), 0 0 0 1px rgba(16,24,40,.06);
+      transition: opacity .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
     }
     .${BUBBLE_CLASS}:hover .${FORWARD_BUTTON_CLASS} { opacity: 1; }
     .${FORWARD_BUTTON_CLASS}:hover,
     .${FORWARD_BUTTON_CLASS}:focus-visible {
-      border-color: ${BLUE}; background: ${BLUE_SOFT}; color: ${BLUE_HOVER}; opacity: 1; outline: none;
+      color: ${BLUE}; opacity: 1; outline: none;
+      box-shadow: 0 2px 7px rgba(28,108,243,.28), 0 0 0 1px rgba(28,108,243,.40);
+      transform: translateY(-1px);
     }
-    .${FORWARD_BUTTON_CLASS}.${COPIED_CLASS},
-    .${BUTTON_CLASS}.${COPIED_CLASS} {
-      border-color: rgba(6,199,85,.55); color: #06c755; background: #effaf1; opacity: 1;
+    .${FORWARD_BUTTON_CLASS}.${COPIED_CLASS} {
+      color: #06c755; background: #effaf1; opacity: 1;
+      box-shadow: 0 1px 4px rgba(6,199,85,.25), 0 0 0 1px rgba(6,199,85,.45);
     }
     /* 失敗閃紅（不更換 icon） */
     .${FORWARD_BUTTON_CLASS}.loe-err, .${BUTTON_CLASS}.loe-err {
-      border-color: rgba(220,38,38,.55); color: #dc2626; background: #fef2f2; opacity: 1;
+      color: #dc2626; background: #fef2f2; opacity: 1;
+      box-shadow: 0 1px 4px rgba(220,38,38,.22), 0 0 0 1px rgba(220,38,38,.45);
     }
     /* 有轉發按鈕的泡泡需要更多右側留白 */
-    .loe-has-forward.${TEXT_PAD_CLASS} { padding-right: 56px !important; }
+    .loe-has-forward.${TEXT_PAD_CLASS} { padding-right: 70px !important; }
     /* 位置訊息：泡泡右側留白，固定顯示的轉發/複製鈕不會蓋住箭頭 */
-    .loe-loc-pad { padding-right: 60px !important; }
+    .loe-loc-pad { padding-right: 72px !important; }
 
     /* 自訂 tooltip（轉發 / 複製）— 按鈕本身已是 position:absolute */
     [data-loe-tip]::after {
@@ -1429,7 +1451,7 @@
     const whoHint = document.createElement("div");
     whoHint.className = "loe-pop-hint";
     whoHint.style.marginTop = "4px";
-    whoHint.textContent = "後台帳號（Email，全部帳號共用，設定一次即可）：";
+    whoHint.textContent = "UTurn後台帳號（Email，全部帳號共用，設定一次即可）：";
     const whoInput = document.createElement("input");
     whoInput.type = "email";
     whoInput.placeholder = "例如：dispatcher@uturn.com";
@@ -1439,7 +1461,7 @@
     const fleetHint = document.createElement("div");
     fleetHint.className = "loe-pop-hint";
     fleetHint.style.marginTop = "4px";
-    fleetHint.textContent = "車隊（設定帳號後自動套用該車隊的雲端設定，如 HELLO）：";
+    fleetHint.textContent = "車隊：請填入您的車隊（請輸入全大寫，例如：HELLO）";
     const fleetInput = document.createElement("input");
     fleetInput.type = "text";
     fleetInput.placeholder = "例如：HELLO";
@@ -1605,18 +1627,46 @@
     return false;
   }
   // 標記目前對話為「待處理」：點 LINE 自己的待處理按鈕（用它的驗證 token，API 直打會 403）。
-  // 已是待處理（按鈕呈 btn-outline-success）就不再點，避免被切回未標記。
+  function findFollowUpBtn() {
+    // 注意：可能是 <a> 也可能是 <button>，文字含「待處理」（用 includes 容錯）。
+    return (
+      [
+        ...document.querySelectorAll(
+          ".sub-header a, .sub-header button, a.btn, button.btn, header a, header button",
+        ),
+      ].find((b) => (b.textContent || "").trim().includes("待處理")) || null
+    );
+  }
+  function isFollowUpMarked(btn) {
+    return (
+      /btn-outline-success|\bactive\b/.test(btn.className) ||
+      btn.getAttribute("aria-pressed") === "true"
+    );
+  }
+  // 穩健標記：輪詢等待按鈕就緒（送出/換頁後可能還沒 render），點一次後持續確認，
+  // 已標記就不再點（避免切回未標記）。最多 ~6 秒。
   function markFollowUp() {
-    try {
-      const btn = [
-        ...document.querySelectorAll(".sub-header a.btn, a.btn"),
-      ].find((b) => b.textContent.trim() === "待處理");
-      if (!btn) return false;
-      if (/btn-outline-success|\bactive\b/.test(btn.className)) return true; // 已標記
-      btn.click();
-      return true;
-    } catch (_) {}
-    return false;
+    let waited = 0,
+      clicked = false;
+    const STEP = 300,
+      MAX = 6000;
+    (function loop() {
+      let btn = null;
+      try {
+        btn = findFollowUpBtn();
+      } catch (_) {}
+      if (btn) {
+        if (isFollowUpMarked(btn)) return; // 已標記，完成
+        if (!clicked) {
+          try {
+            btn.click();
+          } catch (_) {}
+          clicked = true;
+        }
+      }
+      waited += STEP;
+      if (waited < MAX) window.setTimeout(loop, STEP);
+    })();
   }
   function openDispatchPopover(prefillAddress) {
     closeDispatchPopover();
