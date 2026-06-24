@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.28.5
+// @version      1.29.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -22,7 +22,7 @@
 (function () {
   "use strict";
 
-  const UTURN_BUILD = "1.28.5";
+  const UTURN_BUILD = "1.29.0";
   try {
     console.log(
       "%c[UTurn懶惰蟲] loaded build " + UTURN_BUILD,
@@ -42,7 +42,6 @@
   const TEXT_PAD_CLASS = "loe-copy-text-pad";
   const ICON_CLASS = "loe-copy-icon";
   const COPIED_CLASS = "loe-copy-copied";
-  const MAP_LINK_CLASS = "loe-map-link";
 
   const QUICK_BUTTON_CLASS = "loe-quick-reply-button";
   const QUICK_MENU_CLASS = "loe-quick-reply-menu";
@@ -72,8 +71,6 @@
   const DISPATCH_REPLY_MSG =
     "馬上幫您安排調派時間約③ - ⑧分\n有車會立即告知,請勿關閉通知\n派車期間請勿催促";
 
-  const ADDRESS_PATTERN =
-    /((?:(?:(?:台|臺)北|新北|桃園|(?:台|臺)中|(?:台|臺)南|高雄|基隆|新竹|嘉義|苗栗|彰化|南投|雲林|屏東|宜蘭|花蓮|(?:台|臺)東|澎湖|金門|連江)[縣市])?(?:[一-鿿]{1,8}[鄉鎮市區])?[一-鿿]{1,14}(?:路|街|大道)(?:[一二三四五六七八九十\d]+段)?(?:\d+巷)?(?:\d+弄)?\d+(?:-\d+)?號(?:\d+樓)?)/g;
 
   // 內建 SVG 圖示（Lucide 風格），定義一次、用名稱引用 ic("copy")。
   // 不依賴任何外部 CDN，避免因連不到外站而整個腳本無法載入。
@@ -160,13 +157,6 @@
       box-shadow: 0 1px 4px rgba(6,199,85,.25), 0 0 0 1px rgba(6,199,85,.45);
     }
 
-    /* 地址 -> Google Maps 連結 */
-    .${MAP_LINK_CLASS} {
-      color: ${BLUE_HOVER};
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      cursor: pointer;
-    }
 
     /* 快速回覆按鈕 (藍色，與通話邀請 icon 對齊) */
     .${QUICK_BUTTON_CLASS} {
@@ -858,75 +848,6 @@
   }
 
   /* ---------------------------------------------------------------------- *
-   * Address -> Google Maps (clone-based, survives framework re-render)
-   * ---------------------------------------------------------------------- */
-  function createMapLink(address) {
-    const link = document.createElement("a");
-    link.className = MAP_LINK_CLASS;
-    link.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = address;
-    link.title = "在 Google Maps 開啟導航";
-    // inline + !important：避免被 LINE 自家 CSS 蓋掉底線/顏色（class 樣式壓不過）
-    link.style.cssText =
-      "color:#0b57d0 !important;text-decoration:underline !important;" +
-      "text-underline-offset:2px;cursor:pointer !important;";
-    link.addEventListener("click", (e) => e.stopPropagation());
-    return link;
-  }
-  function linkifyAddresses(container) {
-    if (!container) return;
-    if (container.querySelector(`a.${MAP_LINK_CLASS}`)) return;
-    ADDRESS_PATTERN.lastIndex = 0;
-    if (!ADDRESS_PATTERN.test(container.textContent || "")) return;
-
-    // LINE 的訊息文字被包在內層 <div> 裡，Vue 會不斷重建它，直接對 live 文字節點
-    // replaceChild 會因節點已被換掉而丟錯 → 改在「clone（離線、穩定）」上處理，
-    // 最後用 innerHTML 一次換上（已驗證：設 .chat-item-text 的 innerHTML 不會被 Vue 洗掉）。
-    const clone = container.cloneNode(true);
-    const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        const p = node.parentElement;
-        if (!p) return NodeFilter.FILTER_REJECT;
-        if (
-          p.closest(
-            `a, button, script, style, textarea, input, .${MAP_LINK_CLASS}`,
-          )
-        )
-          return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      },
-    });
-    const nodes = [];
-    while (walker.nextNode()) nodes.push(walker.currentNode);
-
-    let changed = false;
-    nodes.forEach((textNode) => {
-      const text = textNode.nodeValue;
-      ADDRESS_PATTERN.lastIndex = 0;
-      if (!text || !ADDRESS_PATTERN.test(text)) return; // 此節點沒地址就跳過
-      ADDRESS_PATTERN.lastIndex = 0;
-      const frag = document.createDocumentFragment();
-      let last = 0,
-        m;
-      while ((m = ADDRESS_PATTERN.exec(text)) !== null) {
-        if (m.index > last)
-          frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-        frag.appendChild(createMapLink(m[0]));
-        last = m.index + m[0].length;
-      }
-      if (last < text.length)
-        frag.appendChild(document.createTextNode(text.slice(last)));
-      if (textNode.parentNode) {
-        textNode.parentNode.replaceChild(frag, textNode); // 在 clone 上，穩定不丟錯
-        changed = true;
-      }
-    });
-    if (changed) container.innerHTML = clone.innerHTML; // 一次換上，原子且不被 Vue 洗掉
-  }
-
-  /* ---------------------------------------------------------------------- *
    * Reply input (custom <textarea-ex> with shadow DOM)
    * ---------------------------------------------------------------------- */
   function getEditorHost() {
@@ -1376,7 +1297,6 @@
     const locNode = textNode ? null : bubble.querySelector(".chat-item-loc .small");
     const srcNode = textNode || locNode;
     if (!srcNode) return;
-    if (textNode) linkifyAddresses(textNode);
     addForwardButton(bubble, srcNode);
     if (chatBody.querySelector(`.${BUTTON_CLASS}`)) return;
     bubble.classList.add(BUBBLE_CLASS);
