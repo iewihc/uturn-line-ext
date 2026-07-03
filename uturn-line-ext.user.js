@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.30.3
+// @version      1.30.4
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -540,6 +540,9 @@
     storeSet(STORE_KEY, arr);
     refreshAllQuickMenus();
     renderQuickBar();
+    // ext 為主：本地改動（新增/編輯/刪除/排序）即時推回雲端個人副本，
+    // 「匯入自己的模板」才拿得到最新內容（沒設帳號不推、離線靜默）
+    pushRepliesToBackend(getDispatcher(), arr);
   }
   /* ---- 每個官方帳號(OA)獨立：前綴 + webhook 以 OA id 分開儲存 ---- */
   function getOaId() {
@@ -927,20 +930,11 @@
     button.title = "快速回覆";
     // 內嵌 SVG icon，與通話邀請 (la-chat-phone) icon 對齊
     button.insertAdjacentHTML("beforeend", QUICK_ICON);
-    const menu = document.createElement("div");
-    menu.className = QUICK_MENU_CLASS;
-    menu.setAttribute("role", "menu");
-    menu.addEventListener("click", (e) => e.stopPropagation());
-    populateQuickMenu(menu);
-    button.appendChild(menu);
+    // 點擊直接開「快捷回覆管理」modal（原本先彈一層只有一個選項的選單）
     button.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const willOpen = !button.classList.contains(QUICK_MENU_OPEN_CLASS);
-      closeQuickReplyMenus(button);
-      if (willOpen) populateQuickMenu(menu);
-      button.classList.toggle(QUICK_MENU_OPEN_CLASS, willOpen);
-      button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      openManager();
     });
     phoneLink.insertAdjacentElement("afterend", button);
   }
@@ -968,7 +962,7 @@
 
     const head = document.createElement("div");
     head.className = "loe-modal-head";
-    head.innerHTML = `<span>快速回覆管理</span>`;
+    head.innerHTML = `<span>快捷回覆管理（個人模板）</span>`;
     const closeBtn = document.createElement("button");
     closeBtn.className = "loe-modal-close";
     closeBtn.textContent = "×";
