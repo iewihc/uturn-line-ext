@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.30.2
+// @version      1.30.3
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2144,6 +2144,7 @@
    * ---------------------------------------------------------------------- */
   let chatScroller = null;
   let pinnedToBottom = true;
+  let lastScrollIntentAt = 0;
   function isElScrollable(el) {
     if (!el || el.nodeType !== 1) return false;
     if (el.scrollHeight <= el.clientHeight + 8) return false;
@@ -2167,14 +2168,28 @@
   function nearBottom(sc) {
     return sc.scrollHeight - sc.scrollTop - sc.clientHeight <= 60;
   }
+  // 換對話/進頁後的「強制貼底窗」：載入期不管貼底狀態一律拉到底，
+  // 但讓給使用者的即時操作（400ms 內有捲動意圖就不強拉）。
+  let forceStickUntil = 0;
   function stickToBottomIfPinned() {
     const sc = getScroller();
-    if (sc && pinnedToBottom && !nearBottom(sc)) sc.scrollTop = sc.scrollHeight;
+    if (!sc) return;
+    const userJustScrolled = performance.now() - lastScrollIntentAt < 400;
+    const force = performance.now() < forceStickUntil && !userJustScrolled;
+    if ((force || pinnedToBottom) && !nearBottom(sc)) {
+      sc.scrollTop = sc.scrollHeight;
+    }
+    if (force) pinnedToBottom = true; // 載入期結束前維持貼底狀態
   }
+  // 獨立心跳：不依賴 MutationObserver/rAF 鏈路（圖片後載、背景分頁回前景、
+  // LINE 內部重排等都接得住）。250ms 一次成本可忽略。
+  setInterval(stickToBottomIfPinned, 250);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) stickToBottomIfPinned();
+  });
   // 只有「使用者主動操作」（滾輪/觸控/拖曳/鍵盤）造成的捲動才允許解除貼底。
   // LINE 載入舊訊息、瀏覽器 scroll anchoring 也會觸發 scroll 事件；
   // 若把那些誤判成使用者上翻，貼底會被永久解除（症狀：進聊天後捲動條自己往上跑、新訊息不貼底）。
-  let lastScrollIntentAt = 0;
   // 只有發生在「聊天捲動容器內」的操作才算捲動意圖：
   // 點左側對話列表（pointerdown）不會再誤判成上翻——那正是換對話後
   // 貼底被解除、卡在上面的 race 來源。容器未知時保守視為有意圖。
@@ -2233,8 +2248,8 @@
   checkSendToken();
   // 已設定後台帳號 → 拉雲端設定（快速回覆 + 該車隊 Webhook）覆蓋本地快取
   syncRemoteConfig();
-  // 進頁面先貼底幾次，接住陸續載入的訊息（只在仍貼底時動作）
-  [200, 600, 1000].forEach((ms) => setTimeout(stickToBottomIfPinned, ms));
+  // 進頁面給 3 秒強制貼底窗，接住陸續載入的訊息（獨立心跳會持續拉底）
+  forceStickUntil = performance.now() + 3000;
   window.addEventListener("popstate", checkSendToken);
   document.addEventListener("click", () => {
     closeQuickReplyMenus();
@@ -2268,10 +2283,10 @@
         lastChatId = chat;
         chatScroller = null;
         pinnedToBottom = true;
-        if (chat)
-          [0, 150, 400, 800, 1200, 2000, 3000].forEach((ms) =>
-            setTimeout(stickToBottomIfPinned, ms),
-          );
+        if (chat) {
+          forceStickUntil = performance.now() + 3000; // 載入期強制貼底
+          stickToBottomIfPinned();
+        }
       }
       stickToBottomIfPinned();
     });
