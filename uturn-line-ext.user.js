@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.30.4
+// @version      1.31.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -323,6 +323,28 @@
       padding: 9px 14px;
     }
     .loe-btn-ghost:hover { background: #f1f5f9; }
+    /* $ 餘額紀錄按鈕（工具列，與快速回覆 icon 對齊） */
+    .loe-ledger-button {
+      font-weight: 800; font-size: 15px; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 6px;
+      color: #16a34a; text-decoration: none;
+    }
+    .loe-ledger-button:hover { background: rgba(22,163,74,0.12); color: #15803d; }
+    .loe-ledger-balance { font-size: 16px; font-weight: 800; margin-bottom: 10px; }
+    .loe-ledger-row { display: flex; justify-content: space-between; gap: 10px;
+      padding: 8px 12px; border: 1px solid rgba(15,23,42,0.08); border-radius: 8px; background: #fafbfc; }
+    .loe-ledger-row .loe-amt-pos { color: #16a34a; font-weight: 700; }
+    .loe-ledger-row .loe-amt-neg { color: #dc2626; font-weight: 700; }
+    .loe-ledger-date { color: #94a3b8; font-size: 12px; margin-left: 8px; }
+    .loe-ledger-formrow { display: flex; gap: 8px; align-items: center; }
+    .loe-ledger-formrow select.loe-input { width: 64px; flex: none; }
+    .loe-ledger-formrow input.loe-amt { flex: 1; }
+    .loe-ledger-del {
+      margin-left: 8px; border: none; background: none; cursor: pointer;
+      color: #cbd5e1; font-size: 14px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+    }
+    .loe-ledger-del:hover { color: #dc2626; background: rgba(220,38,38,0.08); }
 
     /* 轉發按鈕（放在複製按鈕左邊，樣式與複製一致） */
     .${FORWARD_BUTTON_CLASS} {
@@ -938,9 +960,236 @@
     });
     phoneLink.insertAdjacentElement("afterend", button);
   }
+  /* ---------------------------------------------------------------------- *
+   * $ 餘額紀錄（聊天窗帳本）——以 chatId 為鍵存在後端，所有操作員共享。
+   * ---------------------------------------------------------------------- */
+  const LEDGER_BUTTON_CLASS = "loe-ledger-button";
+  function httpSendJson(method, url, bodyObj) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest !== "function")
+        return reject(new Error("no GM_xmlhttpRequest"));
+      GM_xmlhttpRequest({
+        method,
+        url,
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        data: bodyObj == null ? undefined : JSON.stringify(bodyObj),
+        timeout: 15000,
+        onload: (res) => {
+          if (res.status >= 200 && res.status < 300) {
+            try {
+              resolve(JSON.parse(res.responseText));
+            } catch (e) {
+              reject(e);
+            }
+          } else reject(new Error("HTTP " + res.status));
+        },
+        onerror: () => reject(new Error("network")),
+        ontimeout: () => reject(new Error("timeout")),
+      });
+    });
+  }
+  function closeLedger() {
+    const m = document.querySelector(".loe-ledger-mask");
+    if (m) m.remove();
+  }
+  function fmtLedgerDate(iso) {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  function openLedger() {
+    const chatId = getChatId();
+    if (!chatId) {
+      toast("請先進入某個對話再開啟餘額紀錄");
+      return;
+    }
+    closeLedger();
+    const mask = document.createElement("div");
+    mask.className = "loe-modal-mask loe-ledger-mask";
+    mask.addEventListener("click", (e) => {
+      if (e.target === mask) closeLedger();
+    });
+    const modal = document.createElement("div");
+    modal.className = "loe-modal";
+    modal.addEventListener("click", (e) => e.stopPropagation());
+    const head = document.createElement("div");
+    head.className = "loe-modal-head";
+    head.innerHTML = `<span>餘額紀錄（此對話）</span>`;
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "loe-modal-close";
+    closeBtn.textContent = "×";
+    closeBtn.title = "關閉";
+    closeBtn.addEventListener("click", closeLedger);
+    head.appendChild(closeBtn);
+    const body = document.createElement("div");
+    body.className = "loe-modal-body";
+
+    const balanceEl = document.createElement("div");
+    balanceEl.className = "loe-ledger-balance";
+    balanceEl.textContent = "當前餘額：載入中…";
+    const list = document.createElement("div");
+    list.className = "loe-list";
+
+    function render(data) {
+      balanceEl.textContent = `當前餘額：${data.balance}`;
+      list.textContent = "";
+      (data.records || []).forEach((r) => {
+        const row = document.createElement("div");
+        row.className = "loe-ledger-row";
+        const left = document.createElement("span");
+        left.textContent = r.item;
+        const right = document.createElement("span");
+        right.style.display = "inline-flex";
+        right.style.alignItems = "center";
+        const amt = document.createElement("span");
+        amt.className = r.amount >= 0 ? "loe-amt-pos" : "loe-amt-neg";
+        amt.textContent = (r.amount > 0 ? "+" : "") + r.amount;
+        const date = document.createElement("span");
+        date.className = "loe-ledger-date";
+        date.textContent =
+          fmtLedgerDate(r.createdAt) + (r.by ? ` ${r.by}` : "");
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "loe-ledger-del";
+        del.textContent = "×";
+        del.title = "刪除此筆（會回沖餘額）";
+        del.addEventListener("click", async () => {
+          if (!confirm(`刪除「${r.item} ${r.amount > 0 ? "+" : ""}${r.amount}」？餘額將回沖。`)) return;
+          try {
+            const updated = await httpSendJson(
+              "DELETE",
+              `${API_BASE}/line-chat-ledger?chatId=${encodeURIComponent(chatId)}&recordId=${encodeURIComponent(r.id)}`,
+            );
+            render(updated);
+            toast("已刪除並回沖餘額");
+          } catch (err) {
+            toast(`刪除失敗（${(err && err.message) || "網路錯誤"}）`);
+          }
+        });
+        right.appendChild(amt);
+        right.appendChild(date);
+        right.appendChild(del);
+        row.appendChild(left);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+      if (!(data.records || []).length) {
+        const empty = document.createElement("div");
+        empty.style.color = "#94a3b8";
+        empty.textContent = "尚無紀錄";
+        list.appendChild(empty);
+      }
+    }
+
+    // 新增表單：項目 / 種類(+−) / 金額
+    const form = document.createElement("div");
+    form.className = "loe-form";
+    const formTitle = document.createElement("div");
+    formTitle.className = "loe-form-title";
+    formTitle.textContent = "新增紀錄";
+    const itemInput = document.createElement("input");
+    itemInput.className = "loe-input";
+    itemInput.placeholder = "項目（例如：儲值、乘車扣）";
+    const rowEl = document.createElement("div");
+    rowEl.className = "loe-ledger-formrow";
+    const signSel = document.createElement("select");
+    signSel.className = "loe-input";
+    [["+", "+"], ["-", "−"]].forEach(([v, label]) => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = label;
+      signSel.appendChild(o);
+    });
+    const amtInput = document.createElement("input");
+    amtInput.className = "loe-input loe-amt";
+    amtInput.type = "number";
+    amtInput.min = "1";
+    amtInput.placeholder = "金額（例如 100）";
+    rowEl.appendChild(signSel);
+    rowEl.appendChild(amtInput);
+    const actions = document.createElement("div");
+    actions.className = "loe-form-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "loe-btn-primary";
+    saveBtn.textContent = "新增";
+    actions.appendChild(saveBtn);
+    form.appendChild(formTitle);
+    form.appendChild(itemInput);
+    form.appendChild(rowEl);
+    form.appendChild(actions);
+
+    saveBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const item = itemInput.value.trim();
+      const raw = Math.abs(Number(amtInput.value));
+      if (!item) {
+        toast("請填寫項目");
+        return;
+      }
+      if (!raw || !isFinite(raw)) {
+        toast("請填寫正確的金額");
+        return;
+      }
+      const amount = signSel.value === "-" ? -raw : raw;
+      saveBtn.disabled = true;
+      try {
+        const data = await httpSendJson(
+          "POST",
+          `${API_BASE}/line-chat-ledger?chatId=${encodeURIComponent(chatId)}`,
+          { item, amount, by: getDispatcher() || "" },
+        );
+        render(data);
+        itemInput.value = "";
+        amtInput.value = "";
+        toast(`已新增：${item} ${amount > 0 ? "+" : ""}${amount}`);
+      } catch (err) {
+        toast(`新增失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    body.appendChild(balanceEl);
+    body.appendChild(list);
+    body.appendChild(form);
+    modal.appendChild(head);
+    modal.appendChild(body);
+    mask.appendChild(modal);
+    document.body.appendChild(mask);
+
+    httpGetJson(
+      `${API_BASE}/line-chat-ledger?chatId=${encodeURIComponent(chatId)}`,
+    )
+      .then(render)
+      .catch((err) => {
+        balanceEl.textContent = `載入失敗（${(err && err.message) || "網路錯誤"}）`;
+      });
+  }
+  function addLedgerButton(phoneLink) {
+    if (
+      !phoneLink ||
+      phoneLink.parentElement.querySelector(`.${LEDGER_BUTTON_CLASS}`)
+    )
+      return;
+    const button = document.createElement("a");
+    button.href = "#";
+    button.role = "button";
+    button.className = `mr-2 ${LEDGER_BUTTON_CLASS}`;
+    button.setAttribute("aria-label", "餘額紀錄");
+    button.title = "餘額紀錄（此對話）";
+    button.textContent = "$";
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openLedger();
+    });
+    phoneLink.insertAdjacentElement("afterend", button);
+  }
+
   function enhanceQuickReplyToolbars(root = document) {
     root.querySelectorAll("i.lar.la-chat-phone.la-fw.la-lg").forEach((icon) => {
-      addQuickReplyButton(icon.closest("a"));
+      const a = icon.closest("a");
+      addQuickReplyButton(a);
+      addLedgerButton(a);
     });
   }
 
