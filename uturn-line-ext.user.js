@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.30.0
+// @version      1.30.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -1404,16 +1404,15 @@
     });
     dd.insertAdjacentElement("afterend", chip);
 
-    // 同步設定（向後端拉目前車隊的設定＋自己的快捷回覆並套用）
+    // 同步群編設定（向後端拉目前車隊的群編/店配/webhook 設定並套用）
     const importBtn = document.createElement("button");
     importBtn.type = "button";
     importBtn.className = "loe-import-btn";
     importBtn.insertAdjacentHTML("beforeend", ic("download"));
     const importLabel = document.createElement("span");
-    importLabel.textContent = "同步設定";
+    importLabel.textContent = "同步群編設定";
     importBtn.appendChild(importLabel);
-    importBtn.title =
-      "向後端拉目前車隊（設定面板）的群編設定與自己的快捷回覆並套用";
+    importBtn.title = "向後端拉目前車隊（設定面板）的群編/店配設定並套用";
     importBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -1427,11 +1426,9 @@
           `${API_BASE}/line-ext-config?fleet=${encodeURIComponent(fleet)}`,
         );
         const r = applyFleetConfig(data);
-        // 一併同步自己的快捷回覆（有設後台帳號才拉；雲端沒有就保留本地）
-        await syncRemoteQuickReplies(getDispatcher());
         // toast 帶出車隊名：車隊填錯（拉到別隊設定）時一眼可見
         toast(
-          `已同步 ${fleet}：${r.gidCount} 個帳號群編、${r.chatCount} 筆店配覆寫、快捷回覆已更新`,
+          `已同步 ${fleet}：${r.gidCount} 個帳號群編、${r.chatCount} 筆店配覆寫`,
         );
       } catch (err) {
         // 失敗原因直接呈現（HTTP 4xx/5xx、timeout、network）
@@ -1446,7 +1443,7 @@
     replySyncBtn.className = "loe-import-btn";
     replySyncBtn.insertAdjacentHTML("beforeend", ic("download"));
     const replySyncLabel = document.createElement("span");
-    replySyncLabel.textContent = "同步快捷回覆";
+    replySyncLabel.textContent = "同步快捷";
     replySyncBtn.appendChild(replySyncLabel);
     replySyncBtn.title =
       "匯入快捷回覆模板（車隊統一或自己的雲端副本），會取代本地清單";
