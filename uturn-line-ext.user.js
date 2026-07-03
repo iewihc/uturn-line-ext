@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.32.7
+// @version      1.32.8
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2282,7 +2282,7 @@
       return null;
     }
     const data = await httpGetJson(
-      `${API_BASE}/line-fleet-quick-replies?fleet=${encodeURIComponent(fleet)}`,
+      `${API_BASE}/line-fleet-quick-replies?fleet=${encodeURIComponent(fleet)}&t=${Date.now()}`,
     );
     const replies = (data && data.replies) || [];
     storeSet(FLEET_STORE_KEY, replies); // 常駐（含空清單——後台清空要跟著清）
