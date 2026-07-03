@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.32.4
+// @version      1.32.5
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -47,7 +47,8 @@
   const QUICK_MENU_CLASS = "loe-quick-reply-menu";
   const QUICK_MENU_OPEN_CLASS = "loe-quick-reply-open";
   const STORE_KEY = "loe_quick_replies_v1";
-  const FLEET_STORE_KEY = "loe_fleet_quick_replies_v1"; // 車隊統一模板（匯入後常駐，與個人並存）
+  const FLEET_STORE_KEY = "loe_fleet_quick_replies_v1"; // 車隊統一模板（匯入後常駐）
+  const QR_MODE_KEY = "loe_qr_display_mode_v1"; // 氣泡列顯示模式：personal | fleet | both
   const QR_BAR_CLASS = "loe-qr-bar"; // 輸入框上方的快捷氣泡列
   const QR_CHIP_CLASS = "loe-qr-chip";
 
@@ -940,9 +941,10 @@
       });
       bar.appendChild(chip);
     };
-    // 車隊統一模板（匯入後常駐、唯讀）在前、個人模板在後，兩者並存
-    getFleetReplies().forEach((r) => addChip(r, true));
-    getReplies().forEach((r) => addChip(r, false));
+    // 顯示模式：同步個人=只顯示個人、同步車隊=只顯示車隊、同步個人＋車隊=並存
+    const mode = storeGet(QR_MODE_KEY, "both") || "both";
+    if (mode !== "personal") getFleetReplies().forEach((r) => addChip(r, true));
+    if (mode !== "fleet") getReplies().forEach((r) => addChip(r, false));
   }
   function ensureQuickBar() {
     const host = getEditorHost();
@@ -2297,16 +2299,9 @@
       /* 離線沿用本地常駐副本 */
     }
   }
-  // 同步快捷（mode: "personal" | "fleet" | "both" | "removeFleet"）
+  // 同步快捷（mode: "personal" | "fleet" | "both"）——同步對應來源並切換顯示模式：
+  // 個人=只顯示個人、車隊=只顯示車隊、個人＋車隊=並存（資料都保留，只影響顯示）
   async function syncQuickReplies(mode) {
-    if (mode === "removeFleet") {
-      // 取消匯入：清除本地常駐的車隊模板（回到純個人模式；雲端車隊模板不受影響）
-      storeSet(FLEET_STORE_KEY, null);
-      refreshAllQuickMenus();
-      renderQuickBar();
-      toast("已移除車隊模板（回到純個人模式）");
-      return;
-    }
     const fleet = getFleet();
     const account = getDispatcher();
     const wantFleet = mode === "fleet" || mode === "both";
@@ -2323,6 +2318,7 @@
       let fleetReplies = null;
       if (wantFleet) fleetReplies = await importFleetQuickReplies();
       if (wantPersonal) await syncRemoteQuickReplies(account, true); // 手動：以雲端為準
+      storeSet(QR_MODE_KEY, mode); // 切換顯示模式
       renderQuickBar();
       const parts = [];
       if (wantFleet) parts.push(`車隊統一 ${fleetReplies ? fleetReplies.length : 0} 則`);
@@ -2351,7 +2347,6 @@
       ["同步個人", "personal"],
       ["同步車隊", "fleet"],
       ["同步個人＋車隊", "both"],
-      ["移除車隊模板", "removeFleet"],
     ].forEach(([label, mode]) => {
       const b = document.createElement("button");
       b.type = "button";
