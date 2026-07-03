@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.32.6
+// @version      1.32.7
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -1730,7 +1730,7 @@
       }
       try {
         const data = await httpGetJson(
-          `${API_BASE}/line-ext-config?fleet=${encodeURIComponent(fleet)}`,
+          `${API_BASE}/line-ext-config?fleet=${encodeURIComponent(fleet)}&t=${Date.now()}`,
         );
         const r = applyFleetConfig(data);
         // toast 帶出車隊名：車隊填錯（拉到別隊設定）時一眼可見
