@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.32.3
+// @version      1.32.4
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2297,8 +2297,16 @@
       /* 離線沿用本地常駐副本 */
     }
   }
-  // 同步快捷（mode: "personal" | "fleet" | "both"）
+  // 同步快捷（mode: "personal" | "fleet" | "both" | "removeFleet"）
   async function syncQuickReplies(mode) {
+    if (mode === "removeFleet") {
+      // 取消匯入：清除本地常駐的車隊模板（回到純個人模式；雲端車隊模板不受影響）
+      storeSet(FLEET_STORE_KEY, null);
+      refreshAllQuickMenus();
+      renderQuickBar();
+      toast("已移除車隊模板（回到純個人模式）");
+      return;
+    }
     const fleet = getFleet();
     const account = getDispatcher();
     const wantFleet = mode === "fleet" || mode === "both";
@@ -2343,6 +2351,7 @@
       ["同步個人", "personal"],
       ["同步車隊", "fleet"],
       ["同步個人＋車隊", "both"],
+      ["移除車隊模板", "removeFleet"],
     ].forEach(([label, mode]) => {
       const b = document.createElement("button");
       b.type = "button";
