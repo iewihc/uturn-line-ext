@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.32.1
+// @version      1.32.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2295,24 +2295,29 @@
       /* 離線沿用本地常駐副本 */
     }
   }
-  // 同步快捷（withFleet=false 只同步個人；true 再匯入/更新車隊統一模板，並存顯示）
-  async function syncQuickReplies(withFleet) {
+  // 同步快捷（mode: "personal" | "fleet" | "both"）
+  async function syncQuickReplies(mode) {
     const fleet = getFleet();
     const account = getDispatcher();
-    if (!account && !(withFleet && fleet)) {
-      toast("請先在設定面板填寫後台帳號" + (withFleet ? "與車隊" : ""));
+    const wantFleet = mode === "fleet" || mode === "both";
+    const wantPersonal = mode === "personal" || mode === "both";
+    if (wantPersonal && !account) {
+      toast("請先在設定面板填寫後台帳號");
+      return;
+    }
+    if (wantFleet && !fleet) {
+      toast("請先在設定面板填寫車隊（如 HELLO）");
       return;
     }
     try {
       let fleetReplies = null;
-      if (withFleet) fleetReplies = fleet ? await importFleetQuickReplies() : null;
-      await syncRemoteQuickReplies(account);
+      if (wantFleet) fleetReplies = await importFleetQuickReplies();
+      if (wantPersonal) await syncRemoteQuickReplies(account);
       renderQuickBar();
-      toast(
-        withFleet
-          ? `已同步快捷：車隊統一 ${fleetReplies ? fleetReplies.length : 0} 則、個人 ${getReplies().length} 則`
-          : `已同步個人快捷：${getReplies().length} 則`,
-      );
+      const parts = [];
+      if (wantFleet) parts.push(`車隊統一 ${fleetReplies ? fleetReplies.length : 0} 則`);
+      if (wantPersonal) parts.push(`個人 ${getReplies().length} 則`);
+      toast(`已同步快捷：${parts.join("、")}`);
     } catch (err) {
       toast(`同步失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
     }
@@ -2333,9 +2338,10 @@
     menu.style.zIndex = "99999";
     menu.addEventListener("click", (e) => e.stopPropagation());
     [
-      ["同步個人", false],
-      ["同步個人＋車隊", true],
-    ].forEach(([label, withFleet]) => {
+      ["同步個人", "personal"],
+      ["同步車隊", "fleet"],
+      ["同步個人＋車隊", "both"],
+    ].forEach(([label, mode]) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "loe-import-btn";
@@ -2348,7 +2354,7 @@
         e.stopPropagation();
         toggleReplySyncMenu._menu && toggleReplySyncMenu._menu.remove();
         toggleReplySyncMenu._menu = null;
-        await syncQuickReplies(withFleet);
+        await syncQuickReplies(mode);
       });
       menu.appendChild(b);
     });
