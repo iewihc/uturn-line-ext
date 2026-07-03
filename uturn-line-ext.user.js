@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.31.0
+// @version      1.31.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -328,9 +328,9 @@
       font-weight: 800; font-size: 15px; line-height: 1;
       display: inline-flex; align-items: center; justify-content: center;
       width: 22px; height: 22px; border-radius: 6px;
-      color: #16a34a; text-decoration: none;
+      color: ${BLUE}; text-decoration: none;
     }
-    .loe-ledger-button:hover { background: rgba(22,163,74,0.12); color: #15803d; }
+    .loe-ledger-button:hover { background: ${BLUE_SOFT}; color: ${BLUE_HOVER}; }
     .loe-ledger-balance { font-size: 16px; font-weight: 800; margin-bottom: 10px; }
     .loe-ledger-row { display: flex; justify-content: space-between; gap: 10px;
       padding: 8px 12px; border: 1px solid rgba(15,23,42,0.08); border-radius: 8px; background: #fafbfc; }
@@ -991,6 +991,13 @@
   function closeLedger() {
     const m = document.querySelector(".loe-ledger-mask");
     if (m) m.remove();
+    document.removeEventListener("keydown", ledgerEscHandler, true);
+  }
+  function ledgerEscHandler(e) {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      closeLedger();
+    }
   }
   function fmtLedgerDate(iso) {
     const d = new Date(iso);
@@ -1013,7 +1020,11 @@
     modal.addEventListener("click", (e) => e.stopPropagation());
     const head = document.createElement("div");
     head.className = "loe-modal-head";
-    head.innerHTML = `<span>餘額紀錄（此對話）</span>`;
+    const custName = getCustomerName();
+    head.innerHTML = "<span></span>";
+    head.querySelector("span").textContent = custName
+      ? `餘額紀錄｜${custName}`
+      : "餘額紀錄";
     const closeBtn = document.createElement("button");
     closeBtn.className = "loe-modal-close";
     closeBtn.textContent = "×";
@@ -1155,6 +1166,7 @@
     modal.appendChild(body);
     mask.appendChild(modal);
     document.body.appendChild(mask);
+    document.addEventListener("keydown", ledgerEscHandler, true);
 
     httpGetJson(
       `${API_BASE}/line-chat-ledger?chatId=${encodeURIComponent(chatId)}`,
@@ -1189,7 +1201,9 @@
     root.querySelectorAll("i.lar.la-chat-phone.la-fw.la-lg").forEach((icon) => {
       const a = icon.closest("a");
       addQuickReplyButton(a);
-      addLedgerButton(a);
+      // $ 放在快速回覆按鈕右邊
+      const quickBtn = a && a.parentElement.querySelector(`.${QUICK_BUTTON_CLASS}`);
+      addLedgerButton(quickBtn || a);
     });
   }
 
@@ -1711,7 +1725,7 @@
       e.stopPropagation();
       window.open("https://calc-fare.mr-chi-tech.com/", "_blank", "noopener");
     });
-    importBtn.insertAdjacentElement("afterend", estBtn);
+    replySyncBtn.insertAdjacentElement("afterend", estBtn); // 順序：同步群編設定 → 同步快捷 → 估價
 
     renderPrefixChip();
   }
