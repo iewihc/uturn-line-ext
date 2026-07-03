@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.31.1
+// @version      1.31.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -1667,7 +1667,7 @@
     importBtn.className = "loe-import-btn";
     importBtn.insertAdjacentHTML("beforeend", ic("download"));
     const importLabel = document.createElement("span");
-    importLabel.textContent = "同步群編設定";
+    importLabel.textContent = "同步群編";
     importBtn.appendChild(importLabel);
     importBtn.title = "向後端拉目前車隊（設定面板）的群編/店配設定並套用";
     importBtn.addEventListener("click", async (e) => {
@@ -2222,8 +2222,9 @@
       data: JSON.stringify({ replies: Array.isArray(arr) ? arr : [] }),
     });
   }
-  // 匯入車隊統一模板：GET /line-fleet-quick-replies?fleet=X；
-  // 匯入後同步覆蓋個人雲端副本（pushRepliesToBackend），跨裝置一致。
+  // 匯入車隊統一模板：GET /line-fleet-quick-replies?fleet=X。
+  // 只取代「本地」清單，不動個人雲端副本——「匯入自己的模板」隨時換得回自己的；
+  // 注意：重新整理頁面時 auto-sync 會以個人雲端副本復原（車隊模板屬臨時套用）。
   async function importFleetQuickReplies() {
     const fleet = getFleet();
     if (!fleet) {
@@ -2239,11 +2240,10 @@
         toast(`車隊 ${fleet} 尚未設定統一模板（後台懶惰蟲配置可維護）`);
         return;
       }
-      storeSet(STORE_KEY, replies); // 整組取代（舊的本地清單移除）
+      storeSet(STORE_KEY, replies); // 整組取代本地清單（個人雲端副本不動）
       refreshAllQuickMenus();
       renderQuickBar();
-      pushRepliesToBackend(getDispatcher(), replies);
-      toast(`已匯入車隊統一模板：${replies.length} 則（已取代原有快捷回覆）`);
+      toast(`已匯入車隊統一模板：${replies.length} 則（已取代畫面上的快捷回覆）`);
     } catch (err) {
       toast(`讀取車隊統一模板失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
     }
