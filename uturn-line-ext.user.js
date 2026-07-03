@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.29.1
+// @version      1.30.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -1404,22 +1404,58 @@
     });
     dd.insertAdjacentElement("afterend", chip);
 
-    // 一鍵匯入所有設定（向後端拉目前車隊的設定並套用）
+    // 同步設定（向後端拉目前車隊的設定＋自己的快捷回覆並套用）
     const importBtn = document.createElement("button");
     importBtn.type = "button";
     importBtn.className = "loe-import-btn";
     importBtn.insertAdjacentHTML("beforeend", ic("download"));
     const importLabel = document.createElement("span");
-    importLabel.textContent = "一鍵匯入所有設定";
+    importLabel.textContent = "同步設定";
     importBtn.appendChild(importLabel);
-    importBtn.title = "向後端拉目前車隊（設定面板）的群編設定並套用到各帳號／門市";
+    importBtn.title =
+      "向後端拉目前車隊（設定面板）的群編設定與自己的快捷回覆並套用";
     importBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const r = await applyConfig();
-      toast(`已匯入設定：${r.gidCount} 個帳號群編、${r.chatCount} 筆門市覆寫`);
+      const fleet = getFleet();
+      if (!fleet) {
+        toast("請先在設定面板填寫車隊（如 HELLO）");
+        return;
+      }
+      try {
+        const data = await httpGetJson(
+          `${API_BASE}/line-ext-config?fleet=${encodeURIComponent(fleet)}`,
+        );
+        const r = applyFleetConfig(data);
+        // 一併同步自己的快捷回覆（有設後台帳號才拉；雲端沒有就保留本地）
+        await syncRemoteQuickReplies(getDispatcher());
+        // toast 帶出車隊名：車隊填錯（拉到別隊設定）時一眼可見
+        toast(
+          `已同步 ${fleet}：${r.gidCount} 個帳號群編、${r.chatCount} 筆店配覆寫、快捷回覆已更新`,
+        );
+      } catch (err) {
+        // 失敗原因直接呈現（HTTP 4xx/5xx、timeout、network）
+        toast(`同步失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
+      }
     });
     chip.insertAdjacentElement("afterend", importBtn);
+
+    // 同步快捷回覆（選單：車隊統一模板 / 自己的模板；匯入＝整組取代本地）
+    const replySyncBtn = document.createElement("button");
+    replySyncBtn.type = "button";
+    replySyncBtn.className = "loe-import-btn";
+    replySyncBtn.insertAdjacentHTML("beforeend", ic("download"));
+    const replySyncLabel = document.createElement("span");
+    replySyncLabel.textContent = "同步快捷回覆";
+    replySyncBtn.appendChild(replySyncLabel);
+    replySyncBtn.title =
+      "匯入快捷回覆模板（車隊統一或自己的雲端副本），會取代本地清單";
+    replySyncBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleReplySyncMenu(replySyncBtn);
+    });
+    importBtn.insertAdjacentElement("afterend", replySyncBtn);
 
     // 估價按鈕（頂部，放在「一鍵匯入所有設定」旁邊）
     const estBtn = document.createElement("button");
@@ -1920,6 +1956,117 @@
     if (!fleet) return;
     const data = await fetchFleetConfig(fleet);
     if (data) applyFleetConfig(data); // 套用 webhook + 群編前綴 + 對話覆寫
+  }
+  /* ---- 「同步快捷回覆」：手動匯入模板（整組取代本地清單） ---- */
+  // 把快捷回覆清單推回後端個人副本（依帳號，無 auth）；沒帳號不推、離線靜默。
+  function pushRepliesToBackend(account, arr) {
+    if (!account || typeof GM_xmlhttpRequest !== "function") return;
+    GM_xmlhttpRequest({
+      method: "PUT",
+      url: `${API_BASE}/line-quick-replies?account=${encodeURIComponent(account)}`,
+      headers: { "Content-Type": "application/json" },
+      data: JSON.stringify({ replies: Array.isArray(arr) ? arr : [] }),
+    });
+  }
+  // 匯入車隊統一模板：GET /line-fleet-quick-replies?fleet=X；
+  // 匯入後同步覆蓋個人雲端副本（pushRepliesToBackend），跨裝置一致。
+  async function importFleetQuickReplies() {
+    const fleet = getFleet();
+    if (!fleet) {
+      toast("請先在設定面板填寫車隊（如 HELLO）");
+      return;
+    }
+    try {
+      const data = await httpGetJson(
+        `${API_BASE}/line-fleet-quick-replies?fleet=${encodeURIComponent(fleet)}`,
+      );
+      const replies = (data && data.replies) || [];
+      if (!replies.length) {
+        toast(`車隊 ${fleet} 尚未設定統一模板（後台懶惰蟲配置可維護）`);
+        return;
+      }
+      storeSet(STORE_KEY, replies); // 整組取代（舊的本地清單移除）
+      refreshAllQuickMenus();
+      renderQuickBar();
+      pushRepliesToBackend(getDispatcher(), replies);
+      toast(`已匯入車隊統一模板：${replies.length} 則（已取代原有快捷回覆）`);
+    } catch (err) {
+      toast(`讀取車隊統一模板失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
+    }
+  }
+  // 匯入自己的模板：GET /line-quick-replies?account=X（自己的雲端副本）
+  async function importMyQuickReplies() {
+    const account = getDispatcher();
+    if (!account) {
+      toast("請先在設定面板填寫後台帳號");
+      return;
+    }
+    try {
+      const data = await httpGetJson(
+        `${API_BASE}/line-quick-replies?account=${encodeURIComponent(account)}`,
+      );
+      const replies = (data && data.replies) || [];
+      if (!replies.length) {
+        toast("雲端沒有你的個人模板");
+        return;
+      }
+      storeSet(STORE_KEY, replies); // 整組取代（舊的本地清單移除）
+      refreshAllQuickMenus();
+      renderQuickBar();
+      toast(`已匯入自己的模板：${replies.length} 則（已取代原有快捷回覆）`);
+    } catch (err) {
+      toast(`讀取個人模板失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
+    }
+  }
+  // 同步快捷回覆的小選單（兩個匯入選項），點外面自動關閉
+  function toggleReplySyncMenu(anchor) {
+    if (toggleReplySyncMenu._menu) {
+      toggleReplySyncMenu._menu.remove();
+      toggleReplySyncMenu._menu = null;
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    const menu = document.createElement("div");
+    menu.className = "loe-prefix-pop"; // 重用既有 popover 外觀
+    menu.style.position = "fixed";
+    menu.style.top = `${rect.bottom + 6}px`;
+    menu.style.left = `${rect.left}px`;
+    menu.style.zIndex = "99999";
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    [
+      ["匯入車隊統一模板", importFleetQuickReplies],
+      ["匯入自己的模板", importMyQuickReplies],
+    ].forEach(([label, fn]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "loe-import-btn";
+      b.style.display = "block";
+      b.style.width = "100%";
+      b.style.marginBottom = "6px";
+      b.textContent = label;
+      b.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleReplySyncMenu._menu && toggleReplySyncMenu._menu.remove();
+        toggleReplySyncMenu._menu = null;
+        await fn();
+      });
+      menu.appendChild(b);
+    });
+    document.body.appendChild(menu);
+    toggleReplySyncMenu._menu = menu;
+    setTimeout(() => {
+      document.addEventListener(
+        "click",
+        () => {
+          if (toggleReplySyncMenu._menu) {
+            toggleReplySyncMenu._menu.remove();
+            toggleReplySyncMenu._menu = null;
+          }
+        },
+        { once: true },
+      );
+    }, 0);
   }
   // 設定 account 後才驅動：沒帳號一律不動遠端設定。
   function syncRemoteConfig() {
