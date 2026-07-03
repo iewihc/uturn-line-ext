@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.32.2
+// @version      1.32.3
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2238,14 +2238,16 @@
    *   - 拉回的值直接寫進既有的本地 key（STORE_KEY / WEBHOOK_KEY）當快取，
    *     既有讀取流程不需改動；後端沒設定或離線時自動沿用本地/預設值。
    * ---------------------------------------------------------------------- */
-  async function syncRemoteQuickReplies(account) {
+  async function syncRemoteQuickReplies(account, force) {
     if (!account) return;
     try {
       const data = await httpGetJson(
         `${API_BASE}/line-quick-replies?account=${encodeURIComponent(account)}`,
       );
       const replies = data && data.replies;
-      if (Array.isArray(replies) && replies.length) {
+      // 自動同步：雲端空清單不覆蓋本地（防帳號打錯/新裝置誤清）；
+      // 手動「同步個人」(force)：完全以雲端為準，空清單也套用
+      if (Array.isArray(replies) && (replies.length || force)) {
         storeSet(STORE_KEY, replies);
         refreshAllQuickMenus();
         renderQuickBar();
@@ -2312,7 +2314,7 @@
     try {
       let fleetReplies = null;
       if (wantFleet) fleetReplies = await importFleetQuickReplies();
-      if (wantPersonal) await syncRemoteQuickReplies(account);
+      if (wantPersonal) await syncRemoteQuickReplies(account, true); // 手動：以雲端為準
       renderQuickBar();
       const parts = [];
       if (wantFleet) parts.push(`車隊統一 ${fleetReplies ? fleetReplies.length : 0} 則`);
