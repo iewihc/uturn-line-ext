@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.29.0
+// @version      1.29.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -63,14 +63,7 @@
   const MEMO_INCLUDE_KEY = "loe_dispatch_memo_include_v1"; // 派單是否帶入筆記(note:)
   const DISPATCH_TEMPLATE_KEY = "loe_dispatch_template_v1"; // 自動回覆要送的範本名稱
   const MARK_FOLLOWUP_KEY = "loe_dispatch_mark_followup_v1"; // 派單後是否標記待處理
-  const LINEURL_INCLUDE_KEY = "loe_dispatch_lineurl_v1"; // 送出是否附上對話連結(linechaturl:)
   const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
-
-
-  // 派單後給客人的回覆訊息
-  const DISPATCH_REPLY_MSG =
-    "馬上幫您安排調派時間約③ - ⑧分\n有車會立即告知,請勿關閉通知\n派車期間請勿催促";
-
 
   // 內建 SVG 圖示（Lucide 風格），定義一次、用名稱引用 ic("copy")。
   // 不依賴任何外部 CDN，避免因連不到外站而整個腳本無法載入。
@@ -98,9 +91,6 @@
   const ERROR_ICON = ic("x");
   const QUICK_ICON = ic("message-square");
   const FORWARD_ICON = ic("forward");
-  function paintIcons() {
-    /* 內建 SVG 直接渲染，無需後處理 */
-  }
 
   /* ---------------------------------------------------------------------- *
    * Styles
@@ -129,7 +119,6 @@
       cursor: pointer;
       opacity: 0.55;
       user-select: none;
-      backdrop-filter: blur(4px);
       box-shadow: 0 1px 3px rgba(16,24,40,.12), 0 0 0 1px rgba(16,24,40,.06);
       transition: opacity .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
     }
@@ -197,35 +186,12 @@
     .${QUICK_BUTTON_CLASS}.${QUICK_MENU_OPEN_CLASS} .${QUICK_MENU_CLASS} { display: block; }
     .${QUICK_MENU_CLASS} ul { list-style: none; margin: 0; padding: 0; }
     .${QUICK_MENU_CLASS} li { margin: 0; padding: 0; }
-    .loe-qr-item {
-      display: block;
-      width: 100%;
-      padding: 8px 10px;
-      border: 0;
-      border-radius: 7px;
-      background: transparent;
-      color: #1f2937;
-      font: inherit;
-      font-size: 13px;
-      line-height: 1.35;
-      text-align: left;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      cursor: pointer;
-    }
-    .loe-qr-item:hover, .loe-qr-item:focus-visible {
-      background: ${BLUE_SOFT};
-      color: ${BLUE_HOVER};
-      outline: none;
-    }
     .loe-qr-empty {
       padding: 10px;
       color: #94a3b8;
       font-size: 12px;
       text-align: center;
     }
-    .loe-qr-sep { height: 1px; margin: 6px 4px; background: rgba(15,23,42,0.08); }
     .loe-qr-manage {
       display: flex; align-items: center; gap: 6px;
       width: 100%;
@@ -376,7 +342,6 @@
       color: #64748b;
       cursor: pointer;
       opacity: 0.55;
-      backdrop-filter: blur(4px);
       box-shadow: 0 1px 3px rgba(16,24,40,.12), 0 0 0 1px rgba(16,24,40,.06);
       transition: opacity .15s ease, color .15s ease, box-shadow .15s ease, transform .12s ease;
     }
@@ -390,11 +355,6 @@
     .${FORWARD_BUTTON_CLASS}.${COPIED_CLASS} {
       color: #06c755; background: #effaf1; opacity: 1;
       box-shadow: 0 1px 4px rgba(6,199,85,.25), 0 0 0 1px rgba(6,199,85,.45);
-    }
-    /* 失敗閃紅（不更換 icon） */
-    .${FORWARD_BUTTON_CLASS}.loe-err, .${BUTTON_CLASS}.loe-err {
-      color: #dc2626; background: #fef2f2; opacity: 1;
-      box-shadow: 0 1px 4px rgba(220,38,38,.22), 0 0 0 1px rgba(220,38,38,.45);
     }
     /* 有轉發按鈕的泡泡需要更多右側留白 */
     .loe-has-forward.${TEXT_PAD_CLASS} { padding-right: 70px !important; }
@@ -530,11 +490,6 @@
       font-size: 20px; line-height: 1; color: #94a3b8; padding: 2px 6px; border-radius: 6px;
     }
     .${DISPATCH_POP_CLASS} .loe-pop-close:hover { background: #f1f5f9; color: #1f2937; }
-    .${DISPATCH_POP_CLASS} .loe-prefix-badge {
-      display: inline-flex; align-items: center; gap: 5px;
-      margin-bottom: 6px; padding: 2px 8px; border-radius: 999px;
-      background: ${BLUE_SOFT}; color: ${BLUE_HOVER}; font-size: 11px; font-weight: 600;
-    }
     .${DISPATCH_POP_CLASS} label.loe-fld { display: block; font-size: 11px; color: #475569; margin: 6px 0 2px; }
     .${DISPATCH_POP_CLASS} input:not([type=checkbox]), .${DISPATCH_POP_CLASS} textarea {
       width: 100%; box-sizing: border-box; border: 1px solid rgba(15,23,42,.18);
@@ -775,12 +730,6 @@
   function setMarkFollowUp(on) {
     storeSet(MARK_FOLLOWUP_KEY, !!on);
   }
-  function getLineUrlInclude() {
-    return storeGet(LINEURL_INCLUDE_KEY, true) !== false; // 預設附上
-  }
-  function setLineUrlInclude(on) {
-    storeSet(LINEURL_INCLUDE_KEY, !!on);
-  }
 
   /* ---------------------------------------------------------------------- *
    * Toast
@@ -831,19 +780,9 @@
   function flashCopied(button, ok) {
     button.innerHTML = ok ? CHECK_ICON : ERROR_ICON;
     button.classList.toggle(COPIED_CLASS, ok);
-    paintIcons();
     window.setTimeout(() => {
       button.innerHTML = COPY_ICON;
       button.classList.remove(COPIED_CLASS);
-      paintIcons();
-    }, 1000);
-  }
-  // 只閃一下成功/失敗顏色，不更換 icon（給轉發按鈕用，維持「轉發」樣式）
-  function flashState(button, ok) {
-    button.classList.toggle(COPIED_CLASS, ok);
-    button.classList.toggle("loe-err", !ok);
-    window.setTimeout(() => {
-      button.classList.remove(COPIED_CLASS, "loe-err");
     }, 1000);
   }
 
@@ -1259,11 +1198,6 @@
     await copyText(payload);
     return "clipboard";
   }
-  function buildForwardPayload(addresses) {
-    const prefix = getPrefix();
-    // 每個地址都加上前綴，格式直接相接，例如：W0/潭富路二段176號
-    return addresses.map((a) => `${prefix}${a}`).join("\n");
-  }
   function addForwardButton(bubble, textNode) {
     if (bubble.querySelector(`.${FORWARD_BUTTON_CLASS}`)) return;
     // 不論是否地址類型，所有文字訊息都加上「轉發」
@@ -1281,13 +1215,14 @@
       openDispatchPopover(textNode.innerText.trim());
     });
     bubble.appendChild(fwd);
-    paintIcons();
   }
 
   /* ---------------------------------------------------------------------- *
    * Per-message copy button + address linkify
    * ---------------------------------------------------------------------- */
   function addCopyButton(chatBody) {
+    // 已處理過就先返回：observer 對同一則訊息會重複觸發，這裡是熱路徑
+    if (chatBody.querySelector(`.${BUTTON_CLASS}`)) return;
     const bubble = chatBody.querySelector(".chat-item");
     if (!bubble) return;
     const textNode =
@@ -1298,7 +1233,6 @@
     const srcNode = textNode || locNode;
     if (!srcNode) return;
     addForwardButton(bubble, srcNode);
-    if (chatBody.querySelector(`.${BUTTON_CLASS}`)) return;
     bubble.classList.add(BUBBLE_CLASS);
     if (textNode) textNode.classList.add(TEXT_PAD_CLASS); // 預留右側空間，固定顯示的按鈕不會蓋到文字
     else bubble.classList.add("loe-loc-pad");            // 位置訊息：泡泡右側留白，按鈕不蓋住箭頭
@@ -1341,7 +1275,6 @@
     span.textContent = prefix ? prefix : "設定前綴";
     chip.appendChild(span);
     chip.title = prefix ? `目前前綴：${prefix}（點擊編輯）` : "設定轉發前綴";
-    paintIcons();
   }
   function openPrefixPopover(anchor) {
     closePrefixPopover();
@@ -1512,7 +1445,6 @@
    * 並把「尋車中」訊息填入輸入框
    * ---------------------------------------------------------------------- */
   const TRUCK_ICON = ic("truck");
-  const CALC_ICON = ic("calculator");
   // 固定格式：群編/地址 [note:筆記] mailto:後台帳號
   // 群編不需自行加斜線，這裡自動補上一個（已有斜線也不會重複）。
   // 例：W0/虎尾高中 note:王小明 mailto:dc@gmail.com
@@ -2095,22 +2027,35 @@
     const sc = getScroller();
     if (sc && pinnedToBottom && !nearBottom(sc)) sc.scrollTop = sc.scrollHeight;
   }
-  // 真實捲動事件：學到真正的捲動容器，並更新「是否貼底」（往上翻就解除貼底，不再硬拉）
+  // 只有「使用者主動操作」（滾輪/觸控/拖曳/鍵盤）造成的捲動才允許解除貼底。
+  // LINE 載入舊訊息、瀏覽器 scroll anchoring 也會觸發 scroll 事件；
+  // 若把那些誤判成使用者上翻，貼底會被永久解除（症狀：進聊天後捲動條自己往上跑、新訊息不貼底）。
+  let lastScrollIntentAt = 0;
+  const noteScrollIntent = () => {
+    lastScrollIntentAt = performance.now();
+  };
+  ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"].forEach((ev) =>
+    document.addEventListener(ev, noteScrollIntent, {
+      capture: true,
+      passive: true,
+    }),
+  );
   document.addEventListener(
     "scroll",
     (e) => {
       const t = e.target;
-      if (
-        t &&
-        t.nodeType === 1 &&
-        t.querySelector &&
-        t.querySelector(".chat-body")
-      ) {
-        chatScroller = t;
-        pinnedToBottom = nearBottom(t);
+      if (!t || t.nodeType !== 1) return;
+      // 熱路徑：捲動每幀都會觸發，已知容器就不再掃 DOM
+      if (t !== chatScroller) {
+        if (!(t.querySelector && t.querySelector(".chat-body"))) return;
+        chatScroller = t; // 學到真正的捲動容器
       }
+      if (nearBottom(t)) pinnedToBottom = true;
+      else if (performance.now() - lastScrollIntentAt < 400)
+        pinnedToBottom = false; // 使用者剛操作過 → 真的往上翻
+      // 其餘（程式/瀏覽器自己造成的捲動）不改變貼底狀態，rAF 迴圈會再拉回底部
     },
-    true,
+    { capture: true, passive: true },
   );
 
   /* ---------------------------------------------------------------------- *
@@ -2123,7 +2068,6 @@
   enhancePrefixChip();
   addDispatchButton();
   ensureQuickBar();
-  paintIcons();
   checkSendToken();
   // 已設定後台帳號 → 拉雲端設定（快速回覆 + 該車隊 Webhook）覆蓋本地快取
   syncRemoteConfig();
@@ -2143,10 +2087,11 @@
     maintQueued = true;
     requestAnimationFrame(() => {
       maintQueued = false;
+      enhanceChatBodies();
+      enhanceQuickReplyToolbars();
       enhancePrefixChip();
       addDispatchButton();
       ensureQuickBar();
-      paintIcons();
       checkSendToken();
       const oa = getOaId();
       if (oa !== lastOaId) {
@@ -2170,30 +2115,9 @@
     });
   }
 
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      if (mutation.type === "characterData") {
-        const chatBody = mutation.target.parentElement?.closest(".chat-body");
-        if (chatBody) addCopyButton(chatBody);
-        continue;
-      }
-      for (const node of mutation.addedNodes) {
-        if (node instanceof Text) {
-          const chatBody = node.parentElement?.closest(".chat-body");
-          if (chatBody) addCopyButton(chatBody);
-          continue;
-        }
-        if (!(node instanceof Element)) continue;
-        if (node.matches(".chat-body")) addCopyButton(node);
-        else enhanceChatBodies(node);
-        if (node.matches("i.lar.la-chat-phone.la-fw.la-lg"))
-          addQuickReplyButton(node.closest("a"));
-        else enhanceQuickReplyToolbars(node);
-      }
-    }
-    stickToBottomIfPinned();
-    scheduleMaintenance();
-  });
+  // 所有增強工作（含 stickToBottomIfPinned）都在 rAF 維護迴圈裡做，
+  // callback 本身不讀 layout、不掃 DOM——LINE 大量載入訊息時才不會 layout thrashing。
+  const observer = new MutationObserver(scheduleMaintenance);
   observer.observe(document.body, {
     childList: true,
     characterData: true,
