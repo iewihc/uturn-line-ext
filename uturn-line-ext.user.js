@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.30.1
+// @version      1.30.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2175,14 +2175,32 @@
   // LINE 載入舊訊息、瀏覽器 scroll anchoring 也會觸發 scroll 事件；
   // 若把那些誤判成使用者上翻，貼底會被永久解除（症狀：進聊天後捲動條自己往上跑、新訊息不貼底）。
   let lastScrollIntentAt = 0;
-  const noteScrollIntent = () => {
-    lastScrollIntentAt = performance.now();
+  // 只有發生在「聊天捲動容器內」的操作才算捲動意圖：
+  // 點左側對話列表（pointerdown）不會再誤判成上翻——那正是換對話後
+  // 貼底被解除、卡在上面的 race 來源。容器未知時保守視為有意圖。
+  const noteScrollIntent = (e) => {
+    const sc = chatScroller;
+    if (!sc || sc === e.target || (sc.contains && sc.contains(e.target))) {
+      lastScrollIntentAt = performance.now();
+    }
   };
   ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"].forEach((ev) =>
     document.addEventListener(ev, noteScrollIntent, {
       capture: true,
       passive: true,
     }),
+  );
+  // 圖片/貼圖後載會把內容撐高但不觸發 childList mutation——
+  // 載入完成時若仍貼底就補拉到底，避免停在半路
+  document.addEventListener(
+    "load",
+    (e) => {
+      const t = e.target;
+      if (t && t.tagName === "IMG" && chatScroller && chatScroller.contains(t)) {
+        stickToBottomIfPinned();
+      }
+    },
+    { capture: true, passive: true },
   );
   document.addEventListener(
     "scroll",
@@ -2251,7 +2269,7 @@
         chatScroller = null;
         pinnedToBottom = true;
         if (chat)
-          [0, 150, 400, 800, 1200].forEach((ms) =>
+          [0, 150, 400, 800, 1200, 2000, 3000].forEach((ms) =>
             setTimeout(stickToBottomIfPinned, ms),
           );
       }
