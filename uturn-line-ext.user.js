@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.31.2
+// @version      1.32.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -47,6 +47,7 @@
   const QUICK_MENU_CLASS = "loe-quick-reply-menu";
   const QUICK_MENU_OPEN_CLASS = "loe-quick-reply-open";
   const STORE_KEY = "loe_quick_replies_v1";
+  const FLEET_STORE_KEY = "loe_fleet_quick_replies_v1"; // 車隊統一模板（匯入後常駐，與個人並存）
   const QR_BAR_CLASS = "loe-qr-bar"; // 輸入框上方的快捷氣泡列
   const QR_CHIP_CLASS = "loe-qr-chip";
 
@@ -340,6 +341,15 @@
     .loe-ledger-formrow { display: flex; gap: 8px; align-items: center; }
     .loe-ledger-formrow select.loe-input { width: 64px; flex: none; }
     .loe-ledger-formrow input.loe-amt { flex: 1; }
+    /* 車隊統一模板 chip：琥珀色系，與個人（白底）區隔 */
+    .loe-qr-chip-fleet {
+      background: #fff7e6;
+      border-color: rgba(217,119,6,0.35);
+      color: #92400e;
+    }
+    .loe-qr-chip-fleet:hover { background: #ffedcc; }
+    .loe-mgr-fleet-note { color: #92400e; font-size: 12px; margin: 2px 0 8px; }
+    .loe-row-fleet { background: #fff7e6; border-color: rgba(217,119,6,0.25); }
     .loe-ledger-del {
       margin-left: 8px; border: none; background: none; cursor: pointer;
       color: #cbd5e1; font-size: 14px; line-height: 1; padding: 2px 4px; border-radius: 4px;
@@ -557,6 +567,14 @@
   function getReplies() {
     const v = storeGet(STORE_KEY, null);
     return Array.isArray(v) ? v : []; // 不再內建預設樣板，一律由後端（依帳號）帶入
+  }
+  function getFleetReplies() {
+    const v = storeGet(FLEET_STORE_KEY, null);
+    return Array.isArray(v) ? v : [];
+  }
+  // 是否曾匯入車隊模板（匯入後常駐；沒匯入過＝純個人模式，開頁不自動抓）
+  function hasImportedFleetReplies() {
+    return Array.isArray(storeGet(FLEET_STORE_KEY, null));
   }
   function setReplies(arr) {
     storeSet(STORE_KEY, arr);
@@ -909,20 +927,22 @@
     bar = bar || document.querySelector(`.${QR_BAR_CLASS}`);
     if (!bar) return;
     bar.textContent = "";
-    const reps = getReplies(); // 全部顯示（氣泡列可水平滑動）
-    reps.forEach((r) => {
+    const addChip = (r, isFleet) => {
       const chip = document.createElement("button");
       chip.type = "button";
-      chip.className = QR_CHIP_CLASS;
+      chip.className = QR_CHIP_CLASS + (isFleet ? " loe-qr-chip-fleet" : "");
       chip.textContent = r.name || r.text;
-      chip.title = r.text;
+      chip.title = (isFleet ? "【車隊統一】" : "") + r.text;
       chip.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         fillReplyTextarea(r.text);
       });
       bar.appendChild(chip);
-    });
+    };
+    // 車隊統一模板（匯入後常駐、唯讀）在前、個人模板在後，兩者並存
+    getFleetReplies().forEach((r) => addChip(r, true));
+    getReplies().forEach((r) => addChip(r, false));
   }
   function ensureQuickBar() {
     const host = getEditorHost();
@@ -1279,6 +1299,34 @@
     function renderList() {
       const replies = getReplies();
       list.textContent = "";
+      // 車隊統一模板（後台維護，唯讀）——僅展示，不能編輯/刪除
+      const fleetReps = getFleetReplies();
+      if (fleetReps.length) {
+        const note = document.createElement("div");
+        note.className = "loe-mgr-fleet-note";
+        note.textContent = "車隊統一模板（後台維護，唯讀）";
+        list.appendChild(note);
+        fleetReps.forEach((r) => {
+          const row = document.createElement("div");
+          row.className = "loe-row loe-row-fleet";
+          const info = document.createElement("div");
+          info.className = "loe-row-info";
+          const nm = document.createElement("div");
+          nm.className = "loe-row-name";
+          nm.textContent = r.name || "(未命名)";
+          const tx = document.createElement("div");
+          tx.className = "loe-row-text";
+          tx.textContent = r.text;
+          info.appendChild(nm);
+          info.appendChild(tx);
+          row.appendChild(info);
+          list.appendChild(row);
+        });
+        const sep = document.createElement("div");
+        sep.className = "loe-mgr-fleet-note";
+        sep.textContent = "個人模板（可編輯）";
+        list.appendChild(sep);
+      }
       if (!replies.length) {
         const empty = document.createElement("div");
         empty.className = "loe-qr-empty";
@@ -1703,11 +1751,11 @@
     replySyncLabel.textContent = "同步快捷";
     replySyncBtn.appendChild(replySyncLabel);
     replySyncBtn.title =
-      "匯入快捷回覆模板（車隊統一或自己的雲端副本），會取代本地清單";
-    replySyncBtn.addEventListener("click", (e) => {
+      "匯入/更新車隊統一模板＋同步自己的個人模板（並存顯示，車隊模板匯入後常駐）";
+    replySyncBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      toggleReplySyncMenu(replySyncBtn);
+      await syncQuickReplies();
     });
     importBtn.insertAdjacentElement("afterend", replySyncBtn);
 
@@ -2222,105 +2270,49 @@
       data: JSON.stringify({ replies: Array.isArray(arr) ? arr : [] }),
     });
   }
-  // 匯入車隊統一模板：GET /line-fleet-quick-replies?fleet=X。
-  // 只取代「本地」清單，不動個人雲端副本——「匯入自己的模板」隨時換得回自己的；
-  // 注意：重新整理頁面時 auto-sync 會以個人雲端副本復原（車隊模板屬臨時套用）。
+  // 匯入/更新車隊統一模板：抓雲端最新 → 存本地常駐（與個人並存、唯讀）。
   async function importFleetQuickReplies() {
     const fleet = getFleet();
     if (!fleet) {
       toast("請先在設定面板填寫車隊（如 HELLO）");
-      return;
+      return null;
     }
+    const data = await httpGetJson(
+      `${API_BASE}/line-fleet-quick-replies?fleet=${encodeURIComponent(fleet)}`,
+    );
+    const replies = (data && data.replies) || [];
+    storeSet(FLEET_STORE_KEY, replies); // 常駐（含空清單——後台清空要跟著清）
+    refreshAllQuickMenus();
+    renderQuickBar();
+    return replies;
+  }
+  // 已匯入者開頁自動刷新最新版；從未匯入（純個人模式）不動。
+  async function refreshFleetRepliesIfImported() {
+    if (!hasImportedFleetReplies()) return;
     try {
-      const data = await httpGetJson(
-        `${API_BASE}/line-fleet-quick-replies?fleet=${encodeURIComponent(fleet)}`,
-      );
-      const replies = (data && data.replies) || [];
-      if (!replies.length) {
-        toast(`車隊 ${fleet} 尚未設定統一模板（後台懶惰蟲配置可維護）`);
-        return;
-      }
-      storeSet(STORE_KEY, replies); // 整組取代本地清單（個人雲端副本不動）
-      refreshAllQuickMenus();
-      renderQuickBar();
-      toast(`已匯入車隊統一模板：${replies.length} 則（已取代畫面上的快捷回覆）`);
-    } catch (err) {
-      toast(`讀取車隊統一模板失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
+      await importFleetQuickReplies();
+    } catch (_) {
+      /* 離線沿用本地常駐副本 */
     }
   }
-  // 匯入自己的模板：GET /line-quick-replies?account=X（自己的雲端副本）
-  async function importMyQuickReplies() {
+  // 同步快捷：匯入/更新車隊統一模板 ＋ 同步自己的個人模板（並存顯示）
+  async function syncQuickReplies() {
+    const fleet = getFleet();
     const account = getDispatcher();
-    if (!account) {
-      toast("請先在設定面板填寫後台帳號");
+    if (!fleet && !account) {
+      toast("請先在設定面板填寫車隊與後台帳號");
       return;
     }
     try {
-      const data = await httpGetJson(
-        `${API_BASE}/line-quick-replies?account=${encodeURIComponent(account)}`,
-      );
-      const replies = (data && data.replies) || [];
-      if (!replies.length) {
-        toast("雲端沒有你的個人模板");
-        return;
-      }
-      storeSet(STORE_KEY, replies); // 整組取代（舊的本地清單移除）
-      refreshAllQuickMenus();
+      const fleetReplies = fleet ? await importFleetQuickReplies() : null;
+      await syncRemoteQuickReplies(account);
       renderQuickBar();
-      toast(`已匯入自己的模板：${replies.length} 則（已取代原有快捷回覆）`);
-    } catch (err) {
-      toast(`讀取個人模板失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
-    }
-  }
-  // 同步快捷回覆的小選單（兩個匯入選項），點外面自動關閉
-  function toggleReplySyncMenu(anchor) {
-    if (toggleReplySyncMenu._menu) {
-      toggleReplySyncMenu._menu.remove();
-      toggleReplySyncMenu._menu = null;
-      return;
-    }
-    const rect = anchor.getBoundingClientRect();
-    const menu = document.createElement("div");
-    menu.className = "loe-prefix-pop"; // 重用既有 popover 外觀
-    menu.style.position = "fixed";
-    menu.style.top = `${rect.bottom + 6}px`;
-    menu.style.left = `${rect.left}px`;
-    menu.style.zIndex = "99999";
-    menu.addEventListener("click", (e) => e.stopPropagation());
-    [
-      ["匯入車隊統一模板", importFleetQuickReplies],
-      ["匯入自己的模板", importMyQuickReplies],
-    ].forEach(([label, fn]) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "loe-import-btn";
-      b.style.display = "block";
-      b.style.width = "100%";
-      b.style.marginBottom = "6px";
-      b.textContent = label;
-      b.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleReplySyncMenu._menu && toggleReplySyncMenu._menu.remove();
-        toggleReplySyncMenu._menu = null;
-        await fn();
-      });
-      menu.appendChild(b);
-    });
-    document.body.appendChild(menu);
-    toggleReplySyncMenu._menu = menu;
-    setTimeout(() => {
-      document.addEventListener(
-        "click",
-        () => {
-          if (toggleReplySyncMenu._menu) {
-            toggleReplySyncMenu._menu.remove();
-            toggleReplySyncMenu._menu = null;
-          }
-        },
-        { once: true },
+      toast(
+        `已同步快捷：車隊統一 ${fleetReplies ? fleetReplies.length : 0} 則、個人 ${getReplies().length} 則`,
       );
-    }, 0);
+    } catch (err) {
+      toast(`同步失敗（${(err && err.message) || "網路錯誤"}），請稍後再試`);
+    }
   }
   // 設定 account 後才驅動：沒帳號一律不動遠端設定。
   function syncRemoteConfig() {
@@ -2328,6 +2320,7 @@
     if (!account) return;
     syncRemoteQuickReplies(account);
     syncRemoteFleetConfig(getFleet());
+    refreshFleetRepliesIfImported(); // 車隊模板常駐者自動更新到雲端最新
   }
   function ackSend(token, status, error) {
     if (typeof GM_xmlhttpRequest !== "function") return;
