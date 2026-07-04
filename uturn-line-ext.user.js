@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.32.8
+// @version      1.33.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -327,10 +327,10 @@
     .loe-btn-ghost:hover { background: #f1f5f9; }
     /* $ 餘額紀錄按鈕（工具列，與快速回覆 icon 對齊） */
     .loe-ledger-button {
-      font-weight: 800; font-size: 15px; line-height: 1;
+      font-weight: 800; font-size: 14px; line-height: 1;
       display: inline-flex; align-items: center; justify-content: center;
-      width: 22px; height: 22px; border-radius: 6px;
-      color: ${BLUE}; text-decoration: none;
+      min-width: 22px; height: 22px; border-radius: 6px; padding: 0 5px;
+      color: ${BLUE}; text-decoration: none; white-space: nowrap;
     }
     .loe-ledger-button:hover { background: ${BLUE_SOFT}; color: ${BLUE_HOVER}; }
     .loe-ledger-balance { font-size: 16px; font-weight: 800; margin-bottom: 10px; }
@@ -1010,6 +1010,55 @@
       });
     });
   }
+  // $ 按鈕直接顯示當前對話餘額（延遲載入，不卡主 render；失敗保持 "$" 不重試轟炸）
+  let ledgerBalSeq = 0;
+  let ledgerBalNextTryAt = 0;
+  function updateLedgerButtonsText(chatId, balance) {
+    document.querySelectorAll(`.${LEDGER_BUTTON_CLASS}`).forEach((b) => {
+      b.dataset.loeChat = chatId;
+      b.dataset.loeLoaded = "1";
+      b.textContent =
+        typeof balance === "number" ? `$${balance.toLocaleString()}` : "$";
+    });
+  }
+  function refreshLedgerBalance(force) {
+    const btn = document.querySelector(`.${LEDGER_BUTTON_CLASS}`);
+    if (!btn) return;
+    const chatId = getChatId();
+    if (!chatId) return;
+    if (!force && btn.dataset.loeChat === chatId && btn.dataset.loeLoaded === "1")
+      return;
+    if (!force && Date.now() < ledgerBalNextTryAt) return;
+    // 換了對話先退回 "$"，避免短暫顯示上一個客戶的餘額
+    if (btn.dataset.loeChat !== chatId) {
+      document.querySelectorAll(`.${LEDGER_BUTTON_CLASS}`).forEach((b) => {
+        b.dataset.loeChat = chatId;
+        delete b.dataset.loeLoaded;
+        b.textContent = "$";
+      });
+    }
+    ledgerBalNextTryAt = Date.now() + 10000;
+    const seq = ++ledgerBalSeq;
+    httpGetJson(
+      `${API_BASE}/line-chat-ledger?chatId=${encodeURIComponent(chatId)}&t=${Date.now()}`,
+    )
+      .then((data) => {
+        if (seq !== ledgerBalSeq || getChatId() !== chatId) return;
+        ledgerBalNextTryAt = 0;
+        updateLedgerButtonsText(
+          chatId,
+          data && typeof data.balance === "number" ? data.balance : 0,
+        );
+      })
+      .catch(() => {
+        /* 失敗保持 "$"，10 秒後才允許再試 */
+      });
+  }
+  function scheduleLedgerBalanceRefresh() {
+    if (typeof requestIdleCallback === "function")
+      requestIdleCallback(() => refreshLedgerBalance(), { timeout: 2000 });
+    else setTimeout(() => refreshLedgerBalance(), 800);
+  }
   function closeLedger() {
     const m = document.querySelector(".loe-ledger-mask");
     if (m) m.remove();
@@ -1064,6 +1113,7 @@
 
     function render(data) {
       balanceEl.textContent = `當前餘額：${data.balance}`;
+      updateLedgerButtonsText(chatId, data.balance);
       list.textContent = "";
       (data.records || []).forEach((r) => {
         const row = document.createElement("div");
@@ -1191,7 +1241,7 @@
     document.addEventListener("keydown", ledgerEscHandler, true);
 
     httpGetJson(
-      `${API_BASE}/line-chat-ledger?chatId=${encodeURIComponent(chatId)}`,
+      `${API_BASE}/line-chat-ledger?chatId=${encodeURIComponent(chatId)}&t=${Date.now()}`,
     )
       .then(render)
       .catch((err) => {
@@ -1217,6 +1267,7 @@
       openLedger();
     });
     phoneLink.insertAdjacentElement("afterend", button);
+    scheduleLedgerBalanceRefresh();
   }
 
   function enhanceQuickReplyToolbars(root = document) {
@@ -2499,6 +2550,7 @@
   // 獨立心跳：不依賴 MutationObserver/rAF 鏈路（圖片後載、背景分頁回前景、
   // LINE 內部重排等都接得住）。250ms 一次成本可忽略。
   setInterval(stickToBottomIfPinned, 250);
+  setInterval(() => refreshLedgerBalance(), 1000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) stickToBottomIfPinned();
   });
