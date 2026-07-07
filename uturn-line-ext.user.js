@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.33.0
+// @version      1.33.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -1847,11 +1847,18 @@
     if (email) body += ` mailto:${email}`;
     return body;
   }
+  function dispatchEscHandler(e) {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      closeDispatchPopover();
+    }
+  }
   function closeDispatchPopover() {
     if (openDispatchPopover._pop) {
       openDispatchPopover._pop.remove();
       openDispatchPopover._pop = null;
     }
+    document.removeEventListener("keydown", dispatchEscHandler, true);
   }
   // 自動回覆：填入訊息並按下「傳送」
   function autoSendReply(text) {
@@ -2147,9 +2154,8 @@
       pop.style.maxHeight = window.innerHeight - 24 + "px";
     }
     addrInput.focus();
-    pop.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeDispatchPopover();
-    });
+    // ESC 全域可關（不需焦點在窗內）；capture 搶在 LINE 頁面自身的 ESC 行為前
+    document.addEventListener("keydown", dispatchEscHandler, true);
     openDispatchPopover._pop = pop;
   }
   function addDispatchButton() {
@@ -2621,7 +2627,7 @@
   document.addEventListener("click", () => {
     closeQuickReplyMenus();
     closePrefixPopover();
-    closeDispatchPopover();
+    // 派單窗不因點旁邊關閉（填單時常要點聊天內容對照）；由 ESC / × / 取消 / 送出關閉
   });
 
   // 全域維護工作（建立按鈕/前綴/氣泡列/圖示）以 rAF 去抖動，每幀最多執行一次，避免忙迴圈卡住主執行緒。
