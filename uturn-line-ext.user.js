@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.33.1
+// @version      1.33.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -22,7 +22,7 @@
 (function () {
   "use strict";
 
-  const UTURN_BUILD = "1.29.0";
+  const UTURN_BUILD = "1.33.2";
   try {
     console.log(
       "%c[UTurn懶惰蟲] loaded build " + UTURN_BUILD,
@@ -1877,45 +1877,115 @@
     return false;
   }
   // 標記目前對話為「待處理」：點 LINE 自己的待處理按鈕（用它的驗證 token，API 直打會 403）。
+  // 實際 DOM（2026/07 在 chat.line.biz live 驗證）：
+  //   <a class="btn btn-sm btn-outline-info"><i class="las la-chats"></i>待處理</a>
+  //   已標記時 btn-outline-info 變 btn-outline-success，其餘不變（無 title/active/aria-pressed）。
+  // 另有一種只剩 icon 沒文字的版型（使用者截圖，滑過顯示 tooltip「設為『待處理』」，
+  // 桌機縮到 552px 重現不出來，疑似平板/手機版），所以認按鈕不能只靠文字：
+  // 用 icon（la-chats／la-chat-check）＋文字＋tooltip 屬性三重保險。
+  // 按鈕的 tooltip 文案（title / aria-label / data-original-title 都可能放）
+  function followUpHintText(el) {
+    return (
+      (el.getAttribute("title") || "") +
+      " " +
+      (el.getAttribute("aria-label") || "") +
+      " " +
+      (el.getAttribute("data-original-title") || "")
+    );
+  }
   function findFollowUpBtn() {
-    // 注意：可能是 <a> 也可能是 <button>，文字含「待處理」（用 includes 容錯）。
+    const hintText = followUpHintText;
+    const isFollowUpEl = (el) =>
+      !!el.querySelector(".la-chats") ||
+      (el.textContent || "").trim() === "待處理" ||
+      hintText(el).includes("待處理");
+    const isDoneEl = (el) =>
+      !!el.querySelector(".la-chat-check") ||
+      (el.textContent || "").trim() === "處理完畢" ||
+      hintText(el).includes("處理完畢");
+    // 排除本擴充自己的元素（loe-*）與下拉切換鈕（左側篩選停在「待處理」時，下拉鈕文字也是「待處理」）
+    const btns = [...document.querySelectorAll("a.btn, button.btn")].filter(
+      (el) =>
+        !/(^|\s)loe-|dropdown-toggle/.test(String(el.className || "")) &&
+        el.getAttribute("data-toggle") !== "dropdown" &&
+        !el.getAttribute("aria-haspopup"),
+    );
+    // 最可靠的定位：旁邊有「處理完畢」兄弟按鈕的「待處理」才是聊天室頂端的狀態列
+    //（左側清單的「待處理」篩選不會跟「處理完畢」成對出現，不會誤點）。
+    const paired = btns.find(
+      (el) =>
+        isFollowUpEl(el) &&
+        el.parentElement &&
+        [...el.parentElement.children].some(
+          (sib) => sib !== el && isDoneEl(sib),
+        ),
+    );
+    if (paired) return paired;
+    // 沒找到成對的（LINE 又改版？）：退回舊法，只在聊天室頂端區域用文字找
     return (
       [
         ...document.querySelectorAll(
-          ".sub-header a, .sub-header button, a.btn, button.btn, header a, header button",
+          ".sub-header a, .sub-header button, header a, header button",
         ),
       ].find((b) => (b.textContent || "").trim().includes("待處理")) || null
     );
   }
   function isFollowUpMarked(btn) {
+    // 實際觀察：未標記是 btn-outline-info（藍）、標記後轉 success（綠）。
+    const cls = String(btn.className || "");
     return (
-      /btn-outline-success|\bactive\b/.test(btn.className) ||
+      /btn-outline-success|\bbtn-success\b|\bactive\b/.test(cls) ||
       btn.getAttribute("aria-pressed") === "true"
     );
   }
-  // 穩健標記：輪詢等待按鈕就緒（送出/換頁後可能還沒 render），點一次後持續確認，
-  // 已標記就不再點（避免切回未標記）。最多 ~6 秒。
+  // 穩健標記：輪詢等待按鈕就緒（送出/換頁後可能還沒 render）。點下去後持續確認，
+  // 被 LINE 切回未標記（例如自動回覆送達後 LINE 重設狀態）就補點，最多點 3 次、
+  // 每次點完等 ~900ms 再判斷（避免連點把標記切掉）。連續 3 輪都已標記才算完成，
+  // 整體最多 ~10 秒；最後仍失敗會在 console 留紀錄方便回報。
   function markFollowUp() {
-    let waited = 0,
-      clicked = false;
     const STEP = 300,
-      MAX = 6000;
+      MAX = 10000,
+      MAX_CLICKS = 3;
+    let waited = 0,
+      clicks = 0,
+      cooldown = 0,
+      stable = 0;
     (function loop() {
       let btn = null;
       try {
         btn = findFollowUpBtn();
       } catch (_) {}
-      if (btn) {
-        if (isFollowUpMarked(btn)) return; // 已標記，完成
-        if (!clicked) {
-          try {
-            btn.click();
-          } catch (_) {}
-          clicked = true;
+      if (btn && isFollowUpMarked(btn)) {
+        stable++;
+        if (stable >= 3) return; // 已標記且狀態穩定，完成
+      } else {
+        stable = 0;
+        if (btn) {
+          if (cooldown > 0) cooldown--;
+          else if (clicks < MAX_CLICKS) {
+            try {
+              btn.click();
+            } catch (_) {}
+            clicks++;
+            cooldown = 3;
+          }
         }
       }
       waited += STEP;
-      if (waited < MAX) window.setTimeout(loop, STEP);
+      if (waited < MAX) {
+        window.setTimeout(loop, STEP);
+        return;
+      }
+      if (!btn || !isFollowUpMarked(btn)) {
+        try {
+          console.warn(
+            "[UTurn懶惰蟲] 標記待處理失敗：" +
+              (btn
+                ? "點了 " + clicks + " 次都沒生效"
+                : "找不到「待處理」按鈕，LINE 介面可能又改版了"),
+          );
+        } catch (_) {}
+      }
     })();
   }
   function openDispatchPopover(prefillAddress) {
