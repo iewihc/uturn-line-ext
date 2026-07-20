@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.33.2
+// @version      1.35.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -477,6 +477,9 @@
       opacity: 0; transition: opacity .18s ease;
     }
     .loe-toast.show { opacity: 1; }
+    .loe-toast.ok  { background: rgba(5,102,54,.95); }
+    .loe-toast.err { background: rgba(153,27,27,.95); }
+    .loe-toast.warn { background: rgba(146,64,14,.95); }
 
     /* 派單按鈕（傳送左邊，藍色） */
     .${DISPATCH_BUTTON_CLASS} {
@@ -778,16 +781,16 @@
   /* ---------------------------------------------------------------------- *
    * Toast
    * ---------------------------------------------------------------------- */
-  function toast(msg) {
+  function toast(msg, kind, durationMs) {
     const t = document.createElement("div");
-    t.className = "loe-toast";
+    t.className = "loe-toast" + (kind ? " " + kind : "");
     t.textContent = msg;
     document.body.appendChild(t);
     requestAnimationFrame(() => t.classList.add("show"));
     setTimeout(() => {
       t.classList.remove("show");
       setTimeout(() => t.remove(), 250);
-    }, 2200);
+    }, durationMs || 2200);
   }
 
   /* ---------------------------------------------------------------------- *
@@ -1547,6 +1550,19 @@
       }
     });
   }
+  /* 直接派單（API 優先）：後端同步建單、返回即結果。
+   * 回 null = 後端不可達（網路錯誤 / 404 舊後端 / 5xx）→ caller fallback 到 webhook 老路；
+   * 回物件（含 success:false 業務失敗）= 明確結果，不再 fallback（避免失敗單被 webhook 重複派出）。 */
+  async function tryApiDispatch(payload) {
+    try {
+      return await httpSendJson("POST", `${API_BASE}/line-dispatch`, {
+        text: payload,
+        dispatcher: getDispatcher(),
+      });
+    } catch (e) {
+      return null;
+    }
+  }
   async function sendForward(payload) {
     const url = getWebhook();
     if (url) {
@@ -2157,28 +2173,58 @@
       setAutoReply(auto); // 記住選擇
       sendBtn.disabled = true;
       try {
+        // 1) 直接派單 API：返回即建單結果（成功=綠、失敗=紅，失敗不回覆客人不標記）
+        const api = await tryApiDispatch(payload);
+        if (api) {
+          closeDispatchPopover();
+          if (api.success) {
+            if (auto) autoSendReply(selectedReplyText());
+            toast(
+              `✅ 派單成功：${api.oriText || ""}` +
+                (api.shortId ? `（單號 ${api.shortId}）` : "") +
+                (auto ? "，已自動回覆客人" : ""),
+              "ok",
+              5000,
+            );
+            if (markChk.checked) window.setTimeout(markFollowUp, 500);
+          } else {
+            // 建單失敗：不自動回覆客人、不標記待處理，避免「已安排」卻沒單
+            toast(
+              `❌ 派單失敗：${api.message || "未知原因"}`,
+              "err",
+              8000,
+            );
+          }
+          return;
+        }
+
+        // 2) 後端不可達 → fallback webhook 老路（後端掛了無從確認結果，誠實告知請去頻道看）
         const how = await sendForward(payload);
         closeDispatchPopover();
         if (auto) {
           autoSendReply(selectedReplyText());
           toast(
             how === "discord"
-              ? "已派單到 Discord，並已自動回覆客人"
+              ? "⚠️ 已送出到 Discord，但後端暫時無法確認建單結果，請至頻道確認（已自動回覆客人）"
               : "已複製（未設定 Webhook），並已自動回覆客人",
+            how === "discord" ? "warn" : undefined,
+            how === "discord" ? 6000 : undefined,
           );
         } else {
           // 不勾選：只送派單，不在輸入框帶入任何訊息
           toast(
             how === "discord"
-              ? "已派單到 Discord（未回覆客人）"
+              ? "⚠️ 已送出到 Discord，但後端暫時無法確認建單結果，請至頻道確認"
               : "已複製（未設定 Webhook）",
+            how === "discord" ? "warn" : undefined,
+            how === "discord" ? 6000 : undefined,
           );
         }
         // 有勾選「標記待處理」才標記目前這個對話（在自動回覆送出之後）
         if (markChk.checked) window.setTimeout(markFollowUp, 500);
       } catch (err) {
         sendBtn.disabled = false;
-        toast("派單失敗：" + (err && err.message ? err.message : "未知錯誤"));
+        toast("派單失敗：" + (err && err.message ? err.message : "未知錯誤"), "err");
       }
     });
     actions.appendChild(cancelBtn);
