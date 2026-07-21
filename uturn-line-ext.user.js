@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.35.0
+// @version      1.35.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -22,7 +22,7 @@
 (function () {
   "use strict";
 
-  const UTURN_BUILD = "1.33.2";
+  const UTURN_BUILD = "1.35.1";
   try {
     console.log(
       "%c[UTurn懶惰蟲] loaded build " + UTURN_BUILD,
@@ -2656,10 +2656,38 @@
   function nearBottom(sc) {
     return sc.scrollHeight - sc.scrollTop - sc.clientHeight <= 60;
   }
+  // 訊息搜尋模式偵測：聊天標題列（.sub-header）的搜尋列開啟時 input 才可見
+  // （關閉後 input 留在 DOM 但 offsetParent 為 null）。
+  // 搜尋中 LINE 會把訊息捲到命中處，貼底穩定器必須完全停手，
+  // 否則 250ms 心跳會把定位硬拉回底部 → 搜尋跳轉等於不能用。
+  function isChatSearchOpen() {
+    const sh = document.querySelector(".sub-header");
+    const inp = sh && sh.querySelector("input");
+    return !!(inp && inp.offsetParent);
+  }
+  // 左側對話清單搜尋（結果列表模式）：點結果進聊天要停在命中訊息，
+  // 換對話的強制貼底窗要跳過。
+  function isChatlistSearchActive() {
+    const inp = document.querySelector("input.chatlist-search");
+    return !!(inp && inp.offsetParent && inp.value.trim());
+  }
   // 換對話/進頁後的「強制貼底窗」：載入期不管貼底狀態一律拉到底，
   // 但讓給使用者的即時操作（400ms 內有捲動意圖就不強拉）。
   let forceStickUntil = 0;
+  let chatSearchWasOpen = false;
   function stickToBottomIfPinned() {
+    const searchOpen = isChatSearchOpen();
+    if (searchOpen !== chatSearchWasOpen) {
+      chatSearchWasOpen = searchOpen;
+      if (!searchOpen) {
+        // 搜尋剛關閉：使用者多半停在命中訊息看上下文，不能馬上拉底；
+        // 只有本來就在底部才恢復貼底。
+        forceStickUntil = 0;
+        const sc = getScroller();
+        pinnedToBottom = !!sc && nearBottom(sc);
+      }
+    }
+    if (searchOpen) return; // 搜尋中：捲動定位權完全交給 LINE
     const sc = getScroller();
     if (!sc) return;
     const userJustScrolled = performance.now() - lastScrollIntentAt < 400;
@@ -2771,8 +2799,11 @@
         // 換對話：重設成「貼底」並重新尋找捲動容器，接著幾次把它拉到底
         lastChatId = chat;
         chatScroller = null;
-        pinnedToBottom = true;
-        if (chat) {
+        // 例外：從搜尋（訊息搜尋列開啟中，或左側清單搜尋結果點進來）
+        // 切換的對話要停在命中訊息，強制貼底窗必須跳過。
+        const viaSearch = isChatSearchOpen() || isChatlistSearchActive();
+        pinnedToBottom = !viaSearch;
+        if (chat && !viaSearch) {
           forceStickUntil = performance.now() + 3000; // 載入期強制貼底
           stickToBottomIfPinned();
         }
