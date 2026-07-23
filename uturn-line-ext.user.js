@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.35.1
+// @version      1.36.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -22,7 +22,13 @@
 (function () {
   "use strict";
 
-  const UTURN_BUILD = "1.35.1";
+  // 版本單一來源＝標頭 @version（Tampermonkey 自動更新必讀此行）。
+  // 這裡不再各寫一份，改從 GM_info.script.version 衍生，杜絕漂移。
+  const UTURN_BUILD =
+    (typeof GM_info !== "undefined" &&
+      GM_info.script &&
+      GM_info.script.version) ||
+    "dev";
   try {
     console.log(
       "%c[UTurn懶惰蟲] loaded build " + UTURN_BUILD,
@@ -508,6 +514,16 @@
     }
     .${ESTIMATE_BUTTON_CLASS}:hover { background: ${BLUE_SOFT}; color: ${BLUE_HOVER}; border-color: ${BLUE_HOVER}; }
     .${ESTIMATE_BUTTON_CLASS} > svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* 懶惰蟲版本號（估價右邊，灰色小字） */
+    .loe-version-chip {
+      position: relative;
+      top: 4px;                 /* 與估價按鈕同基線 */
+      display: inline-flex; align-items: center;
+      margin-right: 8px;
+      font: inherit; font-size: 11px; font-weight: 600; line-height: 1;
+      color: #9aa0a6; white-space: nowrap; user-select: none;
+    }
 
     /* 派單彈出視窗（精簡版，限制高度避免超出畫面） */
     .${DISPATCH_POP_CLASS} {
@@ -1843,6 +1859,13 @@
       window.open("https://calc-fare.mr-chi-tech.com/", "_blank", "noopener");
     });
     replySyncBtn.insertAdjacentElement("afterend", estBtn); // 順序：同步群編設定 → 同步快捷 → 估價
+
+    // 版本號（估價右邊）：UTURN_BUILD 已衍生自 @version，單一來源
+    const verChip = document.createElement("span");
+    verChip.className = "loe-version-chip";
+    verChip.textContent = "v" + UTURN_BUILD;
+    verChip.title = "懶惰蟲版本 v" + UTURN_BUILD;
+    estBtn.insertAdjacentElement("afterend", verChip);
 
     renderPrefixChip();
   }
