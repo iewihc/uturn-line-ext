@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.36.0
+// @version      1.36.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -474,12 +474,12 @@
 
     /* Toast */
     .loe-toast {
-      position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
+      position: fixed; top: 16px; right: 16px;
       z-index: 2147483647;
       background: rgba(15,23,42,.92); color: #fff;
       padding: 10px 16px; border-radius: 10px; font-size: 13px;
       box-shadow: 0 10px 30px rgba(15,23,42,.3);
-      max-width: 80vw; white-space: pre-wrap; text-align: center;
+      max-width: 80vw; white-space: pre-wrap; text-align: left;
       opacity: 0; transition: opacity .18s ease;
     }
     .loe-toast.show { opacity: 1; }
