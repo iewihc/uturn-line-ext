@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.36.1
+// @version      1.36.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2029,6 +2029,10 @@
   }
   function openDispatchPopover(prefillAddress) {
     closeDispatchPopover();
+    // 對話連結綁定「開啟面板當下」的對話（#39435：面板掛在 body、切對話不會關，
+    // 送出時才讀 location 會抓到別人的對話）；開啟時拍不到快照才退回送出當下的網址
+    const chatIdAtOpen = getChatId();
+    const oaIdAtOpen = getOaId();
     const anchor = document.querySelector(`.${DISPATCH_BUTTON_CLASS}`);
     const pop = document.createElement("div");
     pop.className = DISPATCH_POP_CLASS;
@@ -2106,11 +2110,13 @@
 
     // 取目前要送出的筆記值（沒勾就視為空）
     const currentMemo = () => (memoChk.checked ? memoInput.value.trim() : "");
-    // 對話連結（linechaturl:）— 永遠在送出時加在最後；預覽不顯示
+    // 對話連結（linechaturl:）— 送出時加在最後；預覽不顯示。
+    // 用開啟面板當下的快照，切過對話再送出也指向原本的客人
     const lineUrlSuffix = () => {
-      const chat = getChatId();
+      const chat = chatIdAtOpen || getChatId();
+      const oa = chatIdAtOpen ? oaIdAtOpen : getOaId();
       if (!chat) return "";
-      return ` linechaturl:https://chat.line.biz/${getOaId()}/chat/${chat}`;
+      return ` linechaturl:https://chat.line.biz/${oa}/chat/${chat}`;
     };
 
     // 預覽單號（即時顯示送出的完整字串）
@@ -2819,7 +2825,10 @@
       }
       const chat = getChatId();
       if (chat !== lastChatId) {
-        // 換對話：重設成「貼底」並重新尋找捲動容器，接著幾次把它拉到底
+        // 換對話：關掉派單窗（第二道保險，見 chatIdAtOpen 快照）——面板掛在 body 不隨
+        // 聊天區重繪消失，留著會讓「填的是 A 客人、人在 B 對話」有機會發生（#39435）
+        closeDispatchPopover();
+        // 重設成「貼底」並重新尋找捲動容器，接著幾次把它拉到底
         lastChatId = chat;
         chatScroller = null;
         // 例外：從搜尋（訊息搜尋列開啟中，或左側清單搜尋結果點進來）
