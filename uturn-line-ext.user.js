@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.36.2
+// @version      1.36.3
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -515,12 +515,11 @@
     .${ESTIMATE_BUTTON_CLASS}:hover { background: ${BLUE_SOFT}; color: ${BLUE_HOVER}; border-color: ${BLUE_HOVER}; }
     .${ESTIMATE_BUTTON_CLASS} > svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-    /* 懶惰蟲版本號（估價右邊，灰色小字） */
+    /* 懶惰蟲版本號（快捷列估價右邊，灰色小字）
+       跟 .loe-import-btn 膠囊同高(28px)同間距(margin-left:6px)，垂直置中對齊 */
     .loe-version-chip {
-      position: relative;
-      top: 4px;                 /* 與估價按鈕同基線 */
       display: inline-flex; align-items: center;
-      margin-right: 8px;
+      height: 28px; margin-left: 6px;
       font: inherit; font-size: 11px; font-weight: 600; line-height: 1;
       color: #9aa0a6; white-space: nowrap; user-select: none;
     }
