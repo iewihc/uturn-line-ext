@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.36.4
+// @version      1.36.5
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -1703,10 +1703,10 @@
     const fleetHint = document.createElement("div");
     fleetHint.className = "loe-pop-hint";
     fleetHint.style.marginTop = "4px";
-    fleetHint.textContent = "車隊：請填入您的車隊（請輸入全大寫，例如：HELLO）";
+    fleetHint.textContent = "車隊：請填入您的車隊代碼或名稱（不分大小寫，例如：HELLO）";
     const fleetInput = document.createElement("input");
     fleetInput.type = "text";
-    fleetInput.placeholder = "例如：HELLO";
+    fleetInput.placeholder = "例如：HELLO 或車隊顯示名稱";
     fleetInput.value = getFleet();
 
     const actions = document.createElement("div");
