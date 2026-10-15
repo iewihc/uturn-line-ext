@@ -2,7 +2,11 @@
 
 優惠券及多頁訊息已依後端完成版契約接上：同源讀清單、提交數字 ID、失效後重新選擇、授權恢復，以及保留原 requestId 重試。**依後端提供的進度，程式與單元測試已完成，但尚未部署及對真實 LINE 驗收。** 本次前端以模擬後端驗證，沒有部署後端或實發群發。原生格式與 Python 參考見[優惠券規格](docs/line-coupon-backend-spec.md)及[多頁訊息規格](docs/line-card-type-backend-spec.md)。
 
-Tampermonkey userscript：`uturn-line-ext.user.js`。版本 **1.45.0** 已對齊發送 KEY 與過濾名單完成版契約：顯示後端實際收件人數及過濾名單人數、依後端紀錄處理舊作業、保留恢復失敗的提示。延續 v1.44.0 的「群發訊息 - 懶惰蟲」視窗、隱藏識別碼、選單圖示及「身份授權」名稱；腳本不輸出 Console 訊息。
+Tampermonkey userscript：`uturn-line-ext.user.js`。版本 **1.47.0**：發送 KEY 改在「身份授權」輸入一次（`PUT /line-ext-cookie` 帶 `X-Line-Send-Key`，後端驗 KEY 通過才存 Cookie），通過後依後台帳號記在本機（GM 儲存），群發視窗不再輸入 KEY，建立／恢復自動帶入；KEY 失效時提示重新身份授權。
+
+版本 **1.46.0**：發送 KEY 改為只綁後台帳號（不限官方帳號）、新增「群組不發送」（預設開，剔除 C 開頭的群組聊天 chatId，設定存本機）、KEY 驗證失敗過多改用 `429 SEND_KEY_TOO_MANY_ATTEMPTS` 獨立提示。
+
+版本 **1.45.0** 已對齊發送 KEY 與過濾名單完成版契約：顯示後端實際收件人數及過濾名單人數、依後端紀錄處理舊作業、保留恢復失敗的提示。延續 v1.44.0 的「群發訊息 - 懶惰蟲」視窗、隱藏識別碼、選單圖示及「身份授權」名稱；腳本不輸出 Console 訊息。
 
 必填「過濾名單（不發送）」與「發送 KEY」已串接；依後端提供的進度，**後端已完成、測試通過，但尚未部署**。先部署後端，再發布目前的 v1.45.0；後端部署後，沒有 KEY 的舊版會收到 `401 SEND_KEY_MISSING`。完整契約見 [過濾名單與發送 KEY 串接文件](docs/line-send-access-backend-spec.md)。前端不自行判斷 KEY 是否有效，也不推算到期日。
 
@@ -31,7 +35,7 @@ Cookie 僅由手動點「身份授權」擷取，不在載入或切換對話時�
 - 一次只針對同一官方帳號，選一位或多位客戶。
 - 過濾名單至少一位；從客戶旁點「過濾」或貼上後台提供的名單。貼上欄位以密碼遮罩顯示，支援多行貼上；重複對象合併，格式錯誤時整批不加入。無名稱時顯示「未命名客戶」，不以 ID 當名稱或滑鼠提示。已貼上但尚未加入的內容也會阻擋傳送。
 - 全選、搜尋、翻頁都保留過濾設定，顯示「已選 − 過濾 = 實際發送」；全被過濾時不能送。文字、圖片、優惠券、多頁訊息均使用扣除後的同一套收件人規則。
-- 發送 KEY 使用遮罩輸入，可切換顯示；只放在本次視窗，關閉、重整或切換帳號後重填，不存 GM／localStorage／sessionStorage 或 Console。KEY 以 `X-Line-Send-Key` header 隨建立及恢復請求傳送；後端需驗證效期、撤銷與帳號範圍。
+- 發送 KEY 在「身份授權」以遮罩輸入（預填已存的 KEY），驗證通過後依後台帳號存在 GM 儲存，不輸出到 Console。KEY 以 `X-Line-Send-Key` header 隨身份授權、建立及恢復請求傳送；後端驗證效期、撤銷與後台帳號（KEY 只綁後台帳號，不限官方帳號）。
 - 重試固定沿用原本收件人及 `excludedChatIds`，KEY header 可更換，不改原 requestId/body。缺 KEY 時不能重試或恢復，但仍能查看進度和取消。
 - KEY 由後台發放，固定一個月到期。建立及進度回應的 `recipientCount` 是實際收件人數；`excludedCount` 是過濾名單去重筆數，不是這次實際扣除人數。後端回 0 表示舊作業，不可恢復；若後端已有非空快照，恢復不要求本機保有 ID 名單。
 - 恢復收到 KEY 或過濾快照錯誤時，提示會保留至使用者處理，不會被隨後的進度查詢清掉。限流提示一分鐘後手動重試，不自動重送；結果不明仍保留原請求。
@@ -51,7 +55,7 @@ Cookie 僅由手動點「身份授權」擷取，不在載入或切換對話時�
 - 「取消尚未傳送」停止剩餘訊息；「恢復傳送」繼續等待 Cookie 的作業。已成功及結果不明的訊息不會自動重送。
 - 可按目前作業的失敗、結果不明、成功等狀態查看分頁收件結果。沒有接管理員發送日誌。
 
-每次按「傳送」產生 UUID `requestId`；提交前保存原始內容與 ID，連點只提交一次。逾時、網路錯誤、5xx 或無法解析成功回應時，提供「重試同一次傳送」，完整沿用原始內容與 requestId。傳送中或提交結果未確認時，暫時鎖定編輯；首次提交若明確被拒絕，可直接修改再送，不需要返回編輯的額外步驟。已接受後保存目前作業參考、進度及過濾快照，不保留待提交的文字及收件陣列。這些狀態依 account/groupId 存在本機設定，沒有 Cookie 或發送 KEY。升級前缺少過濾快照的舊作業不可直接重試或恢復，需先確認舊作業結果。
+每次按「傳送」產生 UUID `requestId`；提交前保存原始內容與 ID，連點只提交一次。逾時、網路錯誤、5xx 或無法解析成功回應時，提供「重試同一次傳送」，完整沿用原始內容與 requestId。傳送中或提交結果未確認時，暫時鎖定編輯；首次提交若明確被拒絕，可直接修改再送，不需要返回編輯的額外步驟。已接受後保存目前作業參考、進度及過濾快照，不保留待提交的文字及收件陣列。這些狀態依 account/groupId 存在本機設定，沒有 Cookie 或發送 KEY（KEY 另依後台帳號存放）。升級前缺少過濾快照的舊作業不可直接重試或恢復，需先確認舊作業結果。
 
 ## 後端契約（優惠券、多頁訊息已完成開發，待部署驗收）
 
@@ -62,7 +66,7 @@ Cookie 僅由手動點「身份授權」擷取，不在載入或切換對話時�
 - [多頁訊息列表／發送格式紀錄](docs/line-card-type-browser-evidence.json)
 - [Python 文字、圖片、優惠券及多頁訊息發送參考](scripts/line_chat_send.py)
 
-以下為已完成、待部署的契約；[OpenAPI](docs/line-messages.openapi.json) 已同步。只有建立與恢復帶 `X-Line-Send-Key`，建立 body 必填 `excludedChatIds`；上傳原圖、進度、逐則結果和取消不帶 KEY。前端不附 Bearer Authorization，不額外傳 Cookie。
+以下為已完成、待部署的契約；[OpenAPI](docs/line-messages.openapi.json) 已同步。只有身份授權（`PUT /line-ext-cookie`）、建立與恢復帶 `X-Line-Send-Key`，建立 body 必填 `excludedChatIds`；上傳原圖、進度、逐則結果和取消不帶 KEY。前端不附 Bearer Authorization，不額外傳 Cookie。
 
 | 方法及路徑 | 內容 |
 | --- | --- |
@@ -129,6 +133,7 @@ Content-Type 為 `application/problem+json`，依 code 判斷，顯示 detail：
 | 503 | IMAGE_STORAGE_UNAVAILABLE | 顯示 detail，手動重試；建立作業前的明確拒絕不算已入隊 |
 | 422 | RECIPIENT_NOT_FOUND | 先同步客戶清單再選取 |
 | 429 | MESSAGE_JOB_SUBMIT_TOO_OFTEN | 稍後手動重試，不自動連續提交 |
+| 429 | SEND_KEY_TOO_MANY_ATTEMPTS | 同一來源 KEY 驗證失敗過多；確認 KEY 正確後稍候一分鐘再試 |
 
 ## 圖片實測：兩段式與 token 重用
 

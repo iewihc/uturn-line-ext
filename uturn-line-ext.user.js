@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.45.0
+// @version      1.47.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -67,6 +67,8 @@
   const DISPATCH_TEMPLATE_KEY = "loe_dispatch_template_v1"; // 自動回覆要送的範本名稱
   const MARK_FOLLOWUP_KEY = "loe_dispatch_mark_followup_v1"; // 派單後是否標記待處理
   const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
+  const SEND_KEY_STORE_PREFIX = "loe_line_send_key_v1::"; // 身份授權通過的發送 KEY（依後台帳號存；傳送／恢復自動帶入）
+  const SKIP_GROUP_CHATS_KEY = "loe_line_skip_group_chats_v1"; // 群發「群組不發送」：過濾 chatId C 開頭的群組聊天（預設開）
 
   // 內建 SVG 圖示（Lucide 風格），定義一次、用名稱引用 ic("copy")。
   // 不依賴任何外部 CDN，避免因連不到外站而整個腳本無法載入。
@@ -313,6 +315,8 @@
     .loe-send-requirements details summary { cursor: pointer; color: ${BLUE}; font-size: 12px; }
     .loe-send-requirements textarea { min-height: 72px; margin-top: 8px; }
     .loe-send-key-row { display: flex; gap: 6px; }
+    .loe-key-dialog { width: min(440px, 92vw); }
+    .loe-key-dialog form { display: flex; flex-direction: column; gap: 10px; }
     .loe-send-key-row input { flex: 1; min-width: 0; }
     .loe-send-ready { margin: 10px 0; font-size: 12px; color: #64748b; }
     .loe-customer-row input, .loe-customers-toolbar input { accent-color: ${BLUE}; }
@@ -1104,10 +1108,68 @@
     });
   }
 
+  const SEND_KEY_PATTERN = /^[\x21-\x7e]{1,512}$/;
+  const sendKeyStoreKey = (account) => SEND_KEY_STORE_PREFIX + encodeURIComponent(account);
+  // 身份授權通過後存的發送 KEY；沒有或格式不符回空字串。
+  function storedSendKey(account) {
+    const key = account ? storeGet(sendKeyStoreKey(account), "") : "";
+    return typeof key === "string" && SEND_KEY_PATTERN.test(key) ? key : "";
+  }
+
+  // 身份授權時輸入發送 KEY（預填此帳號已存的 KEY，可直接確認）；取消回 null。
+  function askSendKey(account) {
+    return new Promise((resolve) => {
+      const dialog = document.createElement("dialog");
+      dialog.className = "loe-customers-dialog loe-key-dialog";
+      dialog.setAttribute("aria-labelledby", "loe-auth-title");
+      dialog.innerHTML = `
+        <div class="loe-modal-head"><span id="loe-auth-title">身份授權</span><button type="button" class="loe-modal-close" aria-label="取消身份授權">×</button></div>
+        <form class="loe-modal-body">
+          <label for="loe-auth-key">後台帳號 <strong data-role="account"></strong> 的發送 KEY</label>
+          <div class="loe-send-key-row"><input id="loe-auth-key" class="loe-input" type="password" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="貼上後台發放的 KEY"><button class="loe-mini" type="button" data-role="toggle" aria-label="顯示發送 KEY" aria-pressed="false">顯示</button></div>
+          <div class="loe-customers-muted">KEY 由後台發放，有效期一個月。授權後會記在此瀏覽器，傳送時自動帶入，不必再輸入。</div>
+          <div class="loe-customers-muted" data-role="error" role="alert"></div>
+          <button class="loe-btn-primary" type="submit">授權</button>
+        </form>`;
+      const input = dialog.querySelector("#loe-auth-key");
+      const toggle = dialog.querySelector('[data-role="toggle"]');
+      dialog.querySelector('[data-role="account"]').textContent = account;
+      input.value = storedSendKey(account);
+      let result = null;
+      toggle.addEventListener("click", () => {
+        const show = input.type === "password";
+        input.type = show ? "text" : "password";
+        toggle.textContent = show ? "隱藏" : "顯示";
+        toggle.setAttribute("aria-label", `${show ? "隱藏" : "顯示"}發送 KEY`);
+        toggle.setAttribute("aria-pressed", String(show));
+      });
+      dialog.querySelector("form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const key = input.value.trim();
+        if (!SEND_KEY_PATTERN.test(key)) {
+          dialog.querySelector('[data-role="error"]').textContent = key ? "KEY 格式不符，請重新貼上後台發放的 KEY。" : "請輸入後台發放的發送 KEY。";
+          return;
+        }
+        result = key;
+        dialog.close();
+      });
+      dialog.querySelector(".loe-modal-close").addEventListener("click", () => dialog.close());
+      dialog.addEventListener("close", () => { input.value = ""; dialog.remove(); resolve(result); }, { once: true });
+      document.body.appendChild(dialog);
+      dialog.showModal();
+      input.focus();
+    });
+  }
+
+  // 身份授權：輸入發送 KEY → 擷取 LINE cookie → 後端驗 KEY 通過才存 cookie → KEY 記在本機。取消回 { cancelled: true }。
   async function saveLineCookie() {
     const account = getDispatcher();
     const groupId = getOaId();
     if (!account) throw new Error("請先在轉發設定填寫後台帳號");
+    const key = await askSendKey(account);
+    if (key === null) return { cancelled: true };
+    if (getDispatcher() !== account || getOaId() !== groupId)
+      throw new Error("帳號已變更，請在目前帳號重新操作");
     const snapshot = await captureLineApiParams();
     if (!snapshot) throw new Error("Cookie 未擷取完成，請重試");
     if (getDispatcher() !== account || getOaId() !== groupId)
@@ -1117,9 +1179,10 @@
         "；請在 Tampermonkey 進階設定將 Allow scripts to access cookies 設為 All，儲存後重新整理");
     const result = await lineBackendRequest("PUT",
       `/line-ext-cookie?account=${encodeURIComponent(account)}`,
-      { extCookie: snapshot.params.Cookie });
+      { extCookie: snapshot.params.Cookie }, undefined, { "X-Line-Send-Key": key });
     if (!result || result.account !== account || result.updated !== true)
       throw new Error("後端尚未確認 Cookie 儲存成功");
+    storeSet(sendKeyStoreKey(account), key);
     return result;
   }
 
@@ -1188,7 +1251,7 @@
     INVALID_COUPON: "coupon", COUPON_NOT_FOUND: "coupon", COUPON_EXPIRED: "coupon", COUPON_UNAVAILABLE: "coupon",
     INVALID_CARD_TYPE_MESSAGE: "cardType", CARD_TYPE_MESSAGE_NOT_FOUND: "cardType",
   };
-  // 這些狀態驗證在 requestId 冪等查找後，明確表示原作業尚未建立。
+  // 這些素材驗證在 requestId 冪等查找後（發送 KEY 在查找前），明確表示原作業尚未建立。
   const LINE_INVALID_CONTENT_CODES = new Set(["COUPON_NOT_FOUND", "COUPON_EXPIRED", "COUPON_UNAVAILABLE", "CARD_TYPE_MESSAGE_NOT_FOUND"]);
   const lineMessageJobEntries = new Map();
 
@@ -1294,9 +1357,10 @@
       const errorCode = value?.actionErrorCode || value?.errorCode;
       const missingFilter = value?.status === "waiting_credentials" && (value.excludedCount === 0 || errorCode === "MESSAGE_JOB_FILTER_MISSING");
       const help = missingFilter ? "此舊作業沒有過濾名單，無法恢復。請先確認已送結果並取消剩餘訊息，再以新規則建立作業。" :
-        errorCode?.startsWith("SEND_KEY_") ? (value.uncertain ? "請填入有效的發送 KEY，再重試同一次傳送以確認原作業結果。" :
-          ["SEND_KEY_EXPIRED", "SEND_KEY_REVOKED"].includes(errorCode) ? "請向後台申請新的 KEY，填入後再手動傳送或恢復。" :
-          "請確認後台發放的 KEY 適用目前官方帳號，更新後再傳送或恢復。") :
+        errorCode === "SEND_KEY_TOO_MANY_ATTEMPTS" ? "KEY 驗證失敗次數過多，請確認 KEY 正確後稍候一分鐘再試。" :
+        errorCode?.startsWith("SEND_KEY_") ? (value.uncertain ? "請點「身份授權」輸入有效的發送 KEY，再重試同一次傳送以確認原作業結果。" :
+          ["SEND_KEY_EXPIRED", "SEND_KEY_REVOKED"].includes(errorCode) ? "請向後台申請新的 KEY，點「身份授權」輸入後再傳送或恢復。" :
+          "請點「身份授權」重新輸入屬於目前後台帳號的 KEY，再傳送或恢復。") :
         errorCode === "MESSAGE_JOB_SUBMIT_TOO_OFTEN" ? "請稍候一分鐘再手動重試；先前結果不明時，仍須沿用原本那次傳送。" :
         value?.status === "waiting_credentials" ? "請重新點「身份授權」，再按「恢復傳送」。只會繼續尚未傳送的訊息。" :
         value?.status === "needs_review" ? "請檢查結果不明的客戶，確認對方是否已收到；系統不會自動重送。" :
@@ -1325,7 +1389,8 @@
       const ended = LINE_JOB_TERMINAL.has(value?.status);
       find("retry").hidden = !value?.payload || (!!value.rejected && !value.retrySameRequest);
       find("refresh").hidden = !value?.jobId || (!entry.notice && Number.isInteger(value.excludedCount));
-      find("save-cookie").hidden = !(value?.status === "waiting_credentials" || ["LINE_COOKIE_MISSING", "LINE_COOKIE_INVALID"].includes(value?.errorCode));
+      const keyRejected = !!errorCode?.startsWith("SEND_KEY_") && errorCode !== "SEND_KEY_TOO_MANY_ATTEMPTS";
+      find("save-cookie").hidden = !(value?.status === "waiting_credentials" || keyRejected || ["LINE_COOKIE_MISSING", "LINE_COOKIE_INVALID"].includes(value?.errorCode));
       find("resume").hidden = value?.status !== "waiting_credentials";
       find("cancel").hidden = !value?.jobId || ended || value.status === "cancelling";
       find("dismiss").hidden = locked();
@@ -1384,7 +1449,8 @@
         entry.notice = data.reused ? "已接回原本的傳送作業，沒有重複建立。" : "";
       } catch (error) {
         entry.notice = error.message;
-        // 後端先依 requestId 找既有作業，再驗證素材；明確失效時可重新選擇並建立新作業。
+        // 後端順序：提交限流 → 發送 KEY → 依 requestId 找既有作業 → 驗證素材。素材明確失效時可重新選擇並建立新作業；
+        // KEY 在冪等查找之前，KEY 失效時無法確認原作業，換有效 KEY 重試同一次即可接回（KEY 不參與內容比對）。
         const invalidImage = (error.status === 404 && error.code === "IMAGE_ASSET_NOT_FOUND") ||
           (error.status === 409 && error.code === "IMAGE_ASSET_EXPIRED");
         const invalidContent = error.status === 422 && LINE_INVALID_CONTENT_CODES.has(error.code);
@@ -1469,8 +1535,10 @@
     find("save-cookie").addEventListener("click", async () => {
       if (!active() || entry.busy) return;
       entry.busy = true; entry.notice = ""; notify();
-      try { await saveLineCookie(); entry.notice = entry.value?.rejected && !entry.value.retrySameRequest ? "已授權，可直接按「傳送」。" : "已授權，請按恢復傳送；若尚未入隊，請重試同一次傳送。"; }
-      catch (error) { entry.notice = error.message; }
+      try {
+        if ((await saveLineCookie()).cancelled) return;
+        entry.notice = entry.value?.rejected && !entry.value.retrySameRequest ? "已授權，可直接按「傳送」。" : "已授權，請按恢復傳送；若尚未入隊，請重試同一次傳送。";
+      } catch (error) { entry.notice = error.message; }
       finally { entry.busy = false; notify(); }
     });
     function clearPreviousView() {
@@ -1548,7 +1616,8 @@
       allController: null, searchTimer: null, updatedAt: null, pendingRequestId: null,
       coupons: [], coupon: null, couponController: null, couponTimer: null, couponsLoaded: false,
       cards: [], card: null, cardController: null, cardsLoaded: false, messageType: "text", pendingType: null,
-      handledSelectionError: null, excluded: new Map(), restoredFilterRequestId: null, syncing: false };
+      handledSelectionError: null, excluded: new Map(), restoredFilterRequestId: null, syncing: false,
+      skipGroups: storeGet(SKIP_GROUP_CHATS_KEY, true) !== false };
     let jobView = null;
     const dialog = document.createElement("dialog");
     dialog.className = "loe-customers-dialog";
@@ -1615,6 +1684,7 @@
           <div class="loe-card-preview" data-role="card-preview" role="region" aria-label="多頁訊息內容預覽" tabindex="0" hidden></div>
           <div class="loe-customers-muted" data-role="card-preview-note" hidden>可左右捲動查看圖片與文字摘要，實際版面以 LINE 顯示為準。</div>
           </div>
+          <label class="loe-customers-muted"><input type="checkbox" data-role="skip-groups"> 群組不發送（過濾所有 C 開頭的群組聊天）</label>
           <div class="loe-send-requirements" role="group" aria-label="發送必填設定">
             <div class="loe-send-requirement">
               <div class="loe-send-requirement-head"><strong>1. 過濾名單 <small>（不發送）</small></strong><span class="loe-send-badge" data-role="filter-badge">尚未設定</span></div>
@@ -1628,9 +1698,9 @@
               <div class="loe-customers-muted" data-role="filter-status" role="status" aria-live="polite"></div>
             </div>
             <div class="loe-send-requirement">
-              <div class="loe-send-requirement-head"><label for="loe-send-key"><strong>2. 發送 KEY</strong></label><span class="loe-send-badge" data-role="key-badge">尚未填寫</span></div>
-              <div class="loe-send-key-row"><input id="loe-send-key" class="loe-input" type="password" aria-label="發送 KEY" autocomplete="off" spellcheck="false" autocapitalize="none" placeholder="輸入後台發放的 KEY" aria-describedby="loe-send-key-help"><button class="loe-mini" type="button" data-role="key-toggle" aria-label="顯示發送 KEY" aria-pressed="false">顯示</button></div>
-              <div id="loe-send-key-help" class="loe-customers-muted">KEY 由後台發放，有效期一個月；關閉視窗後需重新輸入。</div>
+              <div class="loe-send-requirement-head"><strong>2. 發送 KEY</strong><span class="loe-send-badge" data-role="key-badge">尚未授權</span></div>
+              <div class="loe-customers-muted">在「身份授權」輸入後台發放的 KEY（有效期一個月），傳送時自動帶入。</div>
+              <button class="loe-mini" type="button" data-role="authorize">身份授權</button>
             </div>
           </div>
           <div class="loe-send-ready" data-role="send-ready" role="status" aria-live="polite"></div>
@@ -1641,14 +1711,16 @@
     const find = (role) => dialog.querySelector(`[data-role="${role}"]`);
     const searchInput = dialog.querySelector('input[type="search"]');
     const textInput = dialog.querySelector("#loe-customers-text");
-    const keyInput = dialog.querySelector("#loe-send-key");
     const fileInput = dialog.querySelector('input[type="file"]');
     const status = dialog.querySelector(".loe-customers-status");
     const list = dialog.querySelector(".loe-customers-list");
     find("account-name").textContent = getOaName() || "目前官方帳號";
     const current = () => !state.closed && getOaId() === groupId && getDispatcher() === account;
-    const effectiveChatIds = () => [...state.selected.keys()].filter(id => !state.excluded.has(id));
-    const sendKey = () => keyInput.value.trim();
+    // LINE chatId：U＝個人、C＝群組聊天、R＝多人聊天室；「群組不發送」開啟時剔除 C 開頭
+    const isGroupChat = id => id.startsWith("C");
+    const effectiveChatIds = () => [...state.selected.keys()]
+      .filter(id => !state.excluded.has(id) && !(state.skipGroups && isGroupChat(id)));
+    const sendKey = () => storedSendKey(account);
     const sendGateError = (job) => {
       const ids = job ? (job.payload?.excludedChatIds || job.excludedChatIds) : [...state.excluded.keys()];
       if (job?.jobId) {
@@ -1660,8 +1732,7 @@
         return job ? "這筆作業沒有過濾名單紀錄，請先向後台確認或取消舊作業，再重新設定傳送。" : "請先設定過濾名單（不發送的對象）。";
       if (!job?.jobId && (ids.length > LINE_RECIPIENT_LIMIT || ids.some(id => !/^U[0-9a-f]{32}$/.test(id)))) return "過濾名單格式不符，請重新設定。";
       if (!job && find("filter-input").value.trim()) return "貼上的名單尚未加入，請按「加入過濾名單」或清除輸入。";
-      if (!sendKey()) return "請輸入後台發放的發送 KEY。";
-      if (!/^[\x21-\x7e]{1,512}$/.test(sendKey())) return "發送 KEY 格式不符，請重新貼上後台發放的 KEY。";
+      if (!sendKey()) return "請先點「身份授權」輸入後台發放的發送 KEY。";
       return "";
     };
     const renderExcluded = () => {
@@ -1745,15 +1816,18 @@
       find("selected").textContent = `已選 ${state.selected.size.toLocaleString()} 位客戶`;
       const effective = effectiveChatIds();
       const filteredCount = state.selected.size - effective.length;
+      const skippedGroups = state.skipGroups ? [...state.selected.keys()].filter(id => isGroupChat(id) && !state.excluded.has(id)).length : 0;
       const filterCount = locked && job?.jobId && Number.isInteger(job.excludedCount) ? job.excludedCount : state.excluded.size;
       const filterReady = filterCount > 0;
       find("filter-badge").textContent = filterReady ? `已設定 ${filterCount.toLocaleString()} 位` : "尚未設定";
       find("filter-badge").dataset.ready = String(filterReady);
-      const keyReady = /^[\x21-\x7e]{1,512}$/.test(sendKey());
-      find("key-badge").textContent = keyReady ? "已填寫" : sendKey() ? "格式不符" : "尚未填寫";
+      const keyReady = !!sendKey();
+      find("key-badge").textContent = keyReady ? "已授權" : "尚未授權";
       find("key-badge").dataset.ready = String(keyReady);
       find("filter-input").disabled = find("filter-add").disabled = locked || allBusy;
       find("filter-clear").hidden = !state.excluded.size;
+      find("skip-groups").checked = state.skipGroups;
+      find("skip-groups").disabled = locked || allBusy;
       find("filter-clear").disabled = locked || allBusy;
       find("excluded-list").querySelectorAll("button").forEach(button => { button.disabled = locked || allBusy; });
       find("prev").disabled = state.loading || allBusy || state.page <= 1;
@@ -1771,7 +1845,8 @@
       const gateError = sendGateError();
       find("send").disabled = locked || allBusy || !effective.length || !hasContent || !!gateError;
       find("send-ready").textContent = locked ? "目前作業使用提交時的收件人與過濾名單，編輯暫時鎖定。" :
-        `已選 ${state.selected.size.toLocaleString()} 位 − 過濾 ${filteredCount.toLocaleString()} 位 = 實際發送 ${effective.length.toLocaleString()} 位。` +
+        `已選 ${state.selected.size.toLocaleString()} 位 − 過濾 ${filteredCount.toLocaleString()} 位` +
+        (skippedGroups ? `（含群組 ${skippedGroups.toLocaleString()} 個）` : "") + ` = 實際發送 ${effective.length.toLocaleString()} 位。` +
         (gateError ? ` ${gateError}` : !effective.length ? " 請選擇至少一位未被過濾的客戶。" : !hasContent ? " 請完成訊息內容。" : " 可以傳送。KEY 將交由後台驗證。");
       jobView?.refreshSendGate();
       dialog.querySelectorAll('[name="loe-message-type"]').forEach(input => {
@@ -2013,17 +2088,23 @@
       find("filter-status").textContent = `已加入名單，重複對象自動合併。共 ${state.excluded.size.toLocaleString()} 位不發送。`;
       renderExcluded(); updateControls();
     });
+    find("skip-groups").addEventListener("change", (event) => {
+      state.skipGroups = event.target.checked;
+      storeSet(SKIP_GROUP_CHATS_KEY, state.skipGroups);
+      updateControls();
+    });
     find("filter-clear").addEventListener("click", () => {
       if (!current() || jobView?.locked() || state.allController || state.syncing) return;
       state.excluded.clear(); find("filter-status").textContent = ""; renderExcluded(); updateControls();
     });
-    keyInput.addEventListener("input", updateControls);
-    find("key-toggle").addEventListener("click", () => {
-      const show = keyInput.type === "password";
-      keyInput.type = show ? "text" : "password";
-      find("key-toggle").textContent = show ? "隱藏" : "顯示";
-      find("key-toggle").setAttribute("aria-label", `${show ? "隱藏" : "顯示"}發送 KEY`);
-      find("key-toggle").setAttribute("aria-pressed", String(show));
+    find("authorize").addEventListener("click", async () => {
+      if (!current()) return;
+      find("authorize").disabled = true;
+      try {
+        const result = await saveLineCookie();
+        if (!result.cancelled) toast(`已授權至 ${result.account}`);
+      } catch (error) { toast(error.message || "身份授權失敗", "error", 6000); }
+      finally { find("authorize").disabled = false; updateControls(); }
     });
     textInput.addEventListener("input", updateControls);
     function releaseImage(item) {
@@ -2271,7 +2352,6 @@
     const close = () => {
       if (state.closed) return;
       state.closed = true;
-      keyInput.value = ""; keyInput.type = "password";
       clearTimeout(state.searchTimer);
       clearTimeout(state.couponTimer);
       state.couponController?.abort();
@@ -3618,7 +3698,8 @@
         icon: "shield-check",
         title: "授權設定中的後台帳號使用目前的 LINE 登入狀態",
         run: saveLineCookie,
-        done: (result) => `已授權至 ${result.account}`,
+        done: (result) => result.cancelled ? null :
+          `已授權至 ${result.account}` + (result.keyExpiresAt ? `（KEY 到期 ${new Date(result.keyExpiresAt).toLocaleDateString("zh-TW")}）` : ""),
       },
       {
         id: "loe-line-directory-button",
