@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.47.1
+// @version      1.47.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -298,7 +298,6 @@
     .loe-customers-account-head .loe-customers-section-title { margin: 0; min-width: 0; overflow-wrap: anywhere; }
     .loe-customers-sync { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; flex-shrink: 0; }
     .loe-customers-sync svg, .loe-advanced-menu svg { width: 16px; height: 16px; flex-shrink: 0; }
-    .loe-send-requirements [data-role="filter-input"] { width: 100%; margin: 8px 0; }
     .loe-customers-list { height: 330px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
     .loe-customer-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
     .loe-customer-row:has(input:checked) { background: ${BLUE_SOFT}; }
@@ -313,8 +312,6 @@
     .loe-send-badge[data-ready="optional"] { color: #64748b; background: #f1f5f9; }
     .loe-excluded-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 130px; overflow: auto; margin: 8px 0; }
     .loe-excluded-list button { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
-    .loe-send-requirements details summary { cursor: pointer; color: ${BLUE}; font-size: 12px; }
-    .loe-send-requirements textarea { min-height: 72px; margin-top: 8px; }
     .loe-send-key-row { display: flex; gap: 6px; }
     .loe-key-dialog { width: min(440px, 92vw); }
     .loe-key-dialog form { display: flex; flex-direction: column; gap: 10px; }
@@ -1690,14 +1687,9 @@
           <div class="loe-send-requirements" role="group" aria-label="發送設定">
             <div class="loe-send-requirement">
               <div class="loe-send-requirement-head"><strong>1. 過濾名單 <small>（選填・不發送）</small></strong><span class="loe-send-badge" data-role="filter-badge">未設定（選填）</span></div>
-              <div class="loe-customers-muted">有不想發送的對象再加入；留空不另行排除客戶。可從客戶列表點「過濾」，或貼上後台提供的名單。</div>
+              <div class="loe-customers-muted">從左側客戶清單點「過濾」，加入不發送的對象。點「取消過濾」或下方姓名旁的 × 即可移除；不選也能傳送。</div>
               <div class="loe-excluded-list" data-role="excluded-list" aria-label="不發送的客戶"></div>
               <button class="loe-mini" type="button" data-role="filter-clear" hidden>清空過濾名單</button>
-              <details data-role="filter-import"><summary>貼上過濾名單</summary>
-                <input class="loe-input" type="password" data-role="filter-input" aria-label="匯入過濾名單" autocomplete="off" spellcheck="false" placeholder="貼上名單，內容將隱藏">
-                <button class="loe-mini" type="button" data-role="filter-add">加入過濾名單</button>
-              </details>
-              <div class="loe-customers-muted" data-role="filter-status" role="status" aria-live="polite"></div>
             </div>
             <div class="loe-send-requirement">
               <div class="loe-send-requirement-head"><strong>2. 發送 KEY</strong><span class="loe-send-badge" data-role="key-badge">尚未授權</span></div>
@@ -1733,14 +1725,13 @@
       } else if (!Array.isArray(ids))
         return "這筆作業缺少原始過濾設定紀錄，請先向後台確認原作業結果，再重新建立作業。";
       if (!job?.jobId && (ids.length > LINE_RECIPIENT_LIMIT || ids.some(id => !/^U[0-9a-f]{32}$/.test(id)))) return "過濾名單格式不符，請重新設定。";
-      if (!job && find("filter-input").value.trim()) return "貼上的名單尚未加入，請按「加入過濾名單」或清除輸入。";
       if (!sendKey()) return "請先點「身份授權」輸入後台發放的發送 KEY。";
       return "";
     };
     const renderExcluded = () => {
       const container = find("excluded-list");
       container.replaceChildren();
-      // 大量匯入時保持畫面可操作；完整名單仍參與過濾。
+      // 大量過濾對象仍保持畫面可操作；完整名單都參與過濾。
       for (const [index, [id, customer]] of [...state.excluded].slice(0, 100).entries()) {
         const button = document.createElement("button");
         button.type = "button"; button.className = "loe-mini";
@@ -1800,7 +1791,6 @@
         const ids = job.payload?.excludedChatIds || job.excludedChatIds;
         state.excluded = new Map((Array.isArray(ids) ? ids : []).map(id => [id, state.excluded.get(id) || { chatId: id }]));
         state.restoredFilterRequestId = job.requestId;
-        find("filter-input").value = "";
         renderExcluded();
       }
       if (locked && job?.jobId && job.excludedCount === 0 && state.excluded.size) {
@@ -1826,7 +1816,6 @@
       const keyReady = !!sendKey();
       find("key-badge").textContent = keyReady ? "已授權" : "尚未授權";
       find("key-badge").dataset.ready = String(keyReady);
-      find("filter-input").disabled = find("filter-add").disabled = locked || allBusy;
       find("filter-clear").hidden = !state.excluded.size;
       find("skip-groups").checked = state.skipGroups;
       find("skip-groups").disabled = locked || allBusy;
@@ -2064,32 +2053,6 @@
       if (!current() || jobView?.locked()) return;
       stopAll(); state.selected.clear(); updateControls();
     });
-    find("filter-input").addEventListener("input", () => { find("filter-status").textContent = ""; updateControls(); });
-    // 密碼欄位隱藏匯入內容；貼上多行名單時先保留分隔，避免換行被 input 移除。
-    find("filter-input").addEventListener("paste", event => {
-      if (!event.clipboardData || find("filter-input").disabled) return;
-      event.preventDefault();
-      const input = find("filter-input");
-      input.setRangeText(event.clipboardData.getData("text").replace(/[\r\n]+/g, ","), input.selectionStart, input.selectionEnd, "end");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    find("filter-add").addEventListener("click", () => {
-      if (!current() || jobView?.locked() || state.allController || state.syncing) return;
-      const raw = find("filter-input").value.trim();
-      if (!raw) { find("filter-status").textContent = "請先貼上要過濾的名單。"; return; }
-      const ids = raw.split(/[\s,，;；]+/).filter(Boolean);
-      if (ids.some(id => !/^U[0-9a-f]{32}$/i.test(id))) {
-        find("filter-status").textContent = "名單格式不符，尚未加入任何資料。請使用後台提供的名單，或直接從客戶列表選擇。"; return;
-      }
-      const normalized = [...new Set(ids.map(id => `U${id.slice(1).toLowerCase()}`))];
-      const combined = new Set([...state.excluded.keys(), ...normalized]);
-      if (combined.size > LINE_RECIPIENT_LIMIT) { find("filter-status").textContent = "過濾名單最多 50,000 位，尚未加入。"; return; }
-      const known = new Map([...state.selected, ...state.rows.map(row => [row.chatId, row])]);
-      for (const id of normalized) if (!state.excluded.has(id)) state.excluded.set(id, known.get(id) || { chatId: id });
-      find("filter-input").value = "";
-      find("filter-status").textContent = `已加入名單，重複對象自動合併。共 ${state.excluded.size.toLocaleString()} 位不發送。`;
-      renderExcluded(); updateControls();
-    });
     find("skip-groups").addEventListener("change", (event) => {
       state.skipGroups = event.target.checked;
       storeSet(SKIP_GROUP_CHATS_KEY, state.skipGroups);
@@ -2097,7 +2060,7 @@
     });
     find("filter-clear").addEventListener("click", () => {
       if (!current() || jobView?.locked() || state.allController || state.syncing) return;
-      state.excluded.clear(); find("filter-status").textContent = ""; renderExcluded(); updateControls();
+      state.excluded.clear(); renderExcluded(); updateControls();
     });
     find("authorize").addEventListener("click", async () => {
       if (!current()) return;
