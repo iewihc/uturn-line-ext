@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.47.0
+// @version      1.47.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -310,6 +310,7 @@
     .loe-send-requirement-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
     .loe-send-badge { font-size: 12px; color: #92400e; background: #fff7ed; border-radius: 20px; padding: 2px 8px; white-space: nowrap; }
     .loe-send-badge[data-ready="true"] { color: #166534; background: #f0fdf4; }
+    .loe-send-badge[data-ready="optional"] { color: #64748b; background: #f1f5f9; }
     .loe-excluded-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 130px; overflow: auto; margin: 8px 0; }
     .loe-excluded-list button { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
     .loe-send-requirements details summary { cursor: pointer; color: ${BLUE}; font-size: 12px; }
@@ -1355,8 +1356,9 @@
       find("recipients").textContent = value?.jobId && Number.isInteger(value.recipientCount) ? `實際收件 ${value.recipientCount.toLocaleString()} 位` +
         (Number.isInteger(value.excludedCount) ? ` · 過濾名單 ${value.excludedCount.toLocaleString()} 位` : "") : "";
       const errorCode = value?.actionErrorCode || value?.errorCode;
-      const missingFilter = value?.status === "waiting_credentials" && (value.excludedCount === 0 || errorCode === "MESSAGE_JOB_FILTER_MISSING");
-      const help = missingFilter ? "此舊作業沒有過濾名單，無法恢復。請先確認已送結果並取消剩餘訊息，再以新規則建立作業。" :
+      const missingFilter = value?.status === "waiting_credentials" && errorCode === "MESSAGE_JOB_FILTER_MISSING";
+      const help = missingFilter ? "後台缺少此作業的過濾設定紀錄，無法恢復。請先確認已送結果並取消剩餘訊息，再重新建立作業。" :
+        errorCode === "EXCLUSION_LIST_REQUIRED" ? "過濾名單已改為選填；目前後台仍要求至少一位，請聯絡管理員更新後再傳送。" :
         errorCode === "SEND_KEY_TOO_MANY_ATTEMPTS" ? "KEY 驗證失敗次數過多，請確認 KEY 正確後稍候一分鐘再試。" :
         errorCode?.startsWith("SEND_KEY_") ? (value.uncertain ? "請點「身份授權」輸入有效的發送 KEY，再重試同一次傳送以確認原作業結果。" :
           ["SEND_KEY_EXPIRED", "SEND_KEY_REVOKED"].includes(errorCode) ? "請向後台申請新的 KEY，點「身份授權」輸入後再傳送或恢復。" :
@@ -1441,7 +1443,7 @@
         const data = await lineBackendRequest("POST", rootPath, value.payload, undefined, { "X-Line-Send-Key": sendAccess.key() });
         if (!data || typeof data.jobId !== "string" || !data.jobId || data.jobId.length > 128 ||
             !Object.hasOwn(LINE_JOB_LABELS, data.status) || !Number.isInteger(data.recipientCount) || data.recipientCount < 1 ||
-            !Number.isInteger(data.excludedCount) || data.excludedCount < 1 || data.excludedCount > LINE_RECIPIENT_LIMIT)
+            !Number.isInteger(data.excludedCount) || data.excludedCount < 0 || data.excludedCount > LINE_RECIPIENT_LIMIT)
           throw lineRequestError("作業回應格式不符，請重試同一次傳送以確認結果", 202, "", true);
         update({ account, groupId, requestId: value.requestId, jobId: data.jobId, statusUrl: data.statusUrl,
           status: data.status, recipientCount: data.recipientCount, messageCount: data.messageCount, reused: data.reused,
@@ -1685,10 +1687,10 @@
           <div class="loe-customers-muted" data-role="card-preview-note" hidden>可左右捲動查看圖片與文字摘要，實際版面以 LINE 顯示為準。</div>
           </div>
           <label class="loe-customers-muted"><input type="checkbox" data-role="skip-groups"> 群組不發送（過濾所有 C 開頭的群組聊天）</label>
-          <div class="loe-send-requirements" role="group" aria-label="發送必填設定">
+          <div class="loe-send-requirements" role="group" aria-label="發送設定">
             <div class="loe-send-requirement">
-              <div class="loe-send-requirement-head"><strong>1. 過濾名單 <small>（不發送）</small></strong><span class="loe-send-badge" data-role="filter-badge">尚未設定</span></div>
-              <div class="loe-customers-muted">至少加入一位不發送的對象。可從客戶列表點「過濾」，或貼上後台提供的名單。</div>
+              <div class="loe-send-requirement-head"><strong>1. 過濾名單 <small>（選填・不發送）</small></strong><span class="loe-send-badge" data-role="filter-badge">未設定（選填）</span></div>
+              <div class="loe-customers-muted">有不想發送的對象再加入；留空不另行排除客戶。可從客戶列表點「過濾」，或貼上後台提供的名單。</div>
               <div class="loe-excluded-list" data-role="excluded-list" aria-label="不發送的客戶"></div>
               <button class="loe-mini" type="button" data-role="filter-clear" hidden>清空過濾名單</button>
               <details data-role="filter-import"><summary>貼上過濾名單</summary>
@@ -1724,12 +1726,12 @@
     const sendGateError = (job) => {
       const ids = job ? (job.payload?.excludedChatIds || job.excludedChatIds) : [...state.excluded.keys()];
       if (job?.jobId) {
-        if (job.excludedCount === 0 || job.actionErrorCode === "MESSAGE_JOB_FILTER_MISSING")
-          return "此舊作業沒有過濾名單，請先確認已送結果並取消剩餘訊息，再重新設定傳送。";
-        if (!Number.isInteger(job.excludedCount) || job.excludedCount < 1 || job.excludedCount > LINE_RECIPIENT_LIMIT)
+        if (job.actionErrorCode === "MESSAGE_JOB_FILTER_MISSING")
+          return "後台缺少此作業的過濾設定紀錄，請先確認已送結果並取消剩餘訊息，再重新建立作業。";
+        if (!Number.isInteger(job.excludedCount) || job.excludedCount < 0 || job.excludedCount > LINE_RECIPIENT_LIMIT)
           return "請先重新整理進度，確認後台已保存過濾名單。";
-      } else if (!Array.isArray(ids) || !ids.length)
-        return job ? "這筆作業沒有過濾名單紀錄，請先向後台確認或取消舊作業，再重新設定傳送。" : "請先設定過濾名單（不發送的對象）。";
+      } else if (!Array.isArray(ids))
+        return "這筆作業缺少原始過濾設定紀錄，請先向後台確認原作業結果，再重新建立作業。";
       if (!job?.jobId && (ids.length > LINE_RECIPIENT_LIMIT || ids.some(id => !/^U[0-9a-f]{32}$/.test(id)))) return "過濾名單格式不符，請重新設定。";
       if (!job && find("filter-input").value.trim()) return "貼上的名單尚未加入，請按「加入過濾名單」或清除輸入。";
       if (!sendKey()) return "請先點「身份授權」輸入後台發放的發送 KEY。";
@@ -1819,8 +1821,8 @@
       const skippedGroups = state.skipGroups ? [...state.selected.keys()].filter(id => isGroupChat(id) && !state.excluded.has(id)).length : 0;
       const filterCount = locked && job?.jobId && Number.isInteger(job.excludedCount) ? job.excludedCount : state.excluded.size;
       const filterReady = filterCount > 0;
-      find("filter-badge").textContent = filterReady ? `已設定 ${filterCount.toLocaleString()} 位` : "尚未設定";
-      find("filter-badge").dataset.ready = String(filterReady);
+      find("filter-badge").textContent = filterReady ? `已設定 ${filterCount.toLocaleString()} 位` : "未設定（選填）";
+      find("filter-badge").dataset.ready = filterReady ? "true" : "optional";
       const keyReady = !!sendKey();
       find("key-badge").textContent = keyReady ? "已授權" : "尚未授權";
       find("key-badge").dataset.ready = String(keyReady);
