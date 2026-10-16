@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.47.2
+// @version      1.48.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -68,6 +68,7 @@
   const MARK_FOLLOWUP_KEY = "loe_dispatch_mark_followup_v1"; // 派單後是否標記待處理
   const CHAT_OVERRIDE_KEY = "loe_chat_overrides_v1"; // 對話層級覆寫（群編＋固定上車地址）
   const SEND_KEY_STORE_PREFIX = "loe_line_send_key_v1::"; // 身份授權通過的發送 KEY（依後台帳號存；傳送／恢復自動帶入）
+  const LINE_HOURLY_LIMIT_KEY = "loe_line_hourly_limit_v1"; // 群發每小時上限（依官方帳號記住）
   const SKIP_GROUP_CHATS_KEY = "loe_line_skip_group_chats_v1"; // 群發「群組不發送」：過濾 chatId C 開頭的群組聊天（預設開）
 
   // 內建 SVG 圖示（Lucide 風格），定義一次、用名稱引用 ic("copy")。
@@ -302,7 +303,8 @@
     .loe-customer-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
     .loe-customer-row:has(input:checked) { background: ${BLUE_SOFT}; }
     .loe-customer-row[data-excluded="true"], .loe-customer-row[data-excluded="true"]:has(input:checked) { background: #fff7ed; }
-    .loe-customer-row[data-excluded="true"] .loe-customer-name::after { content: " · 不發送"; color: #b45309; font-size: 12px; }
+    .loe-customer-row[data-excluded="true"] .loe-customer-name { text-decoration: line-through; color: #94a3b8; }
+    .loe-customer-row[data-excluded="true"] .loe-customer-name::after { content: " · 不發送"; color: #b45309; font-size: 12px; display: inline-block; text-decoration: none; }
     .loe-customer-select { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; }
     .loe-send-requirements { margin: 14px 0; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; }
     .loe-send-requirement + .loe-send-requirement { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
@@ -313,6 +315,7 @@
     .loe-excluded-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 130px; overflow: auto; margin: 8px 0; }
     .loe-excluded-list button { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
     .loe-send-key-row { display: flex; gap: 6px; }
+    .loe-send-requirements .loe-rate-input { width: 76px; margin: 0 4px; display: inline-block; }
     .loe-key-dialog { width: min(440px, 92vw); }
     .loe-key-dialog form { display: flex; flex-direction: column; gap: 10px; }
     .loe-send-key-row input { flex: 1; min-width: 0; }
@@ -359,7 +362,9 @@
     .loe-message-toast details { margin-top: 8px; }
     .loe-message-toast summary { cursor: pointer; color: ${BLUE}; font-size: 12px; }
     .loe-message-results { max-height: 240px; overflow: auto; }
-    .loe-message-result { padding: 8px 0; border-bottom: 1px solid #e2e8f0; white-space: pre-wrap; }
+    .loe-message-result { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid #e2e8f0; }
+    .loe-message-result > span { flex: 1; min-width: 0; white-space: pre-wrap; }
+    .loe-message-result > button { flex-shrink: 0; }
     @media (max-width: 720px) { .loe-customers-layout { grid-template-columns: 1fr; } .loe-customers-compose { border-left: 0; border-top: 1px solid #e2e8f0; } .loe-customers-list { height: 240px; } }
     .loe-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
     .loe-row {
@@ -1229,13 +1234,14 @@
 
   const LINE_JOB_TERMINAL = new Set(["completed", "completed_with_errors", "failed", "needs_review", "cancelled"]);
   const LINE_JOB_LABELS = {
-    queued: "已入隊，等待傳送", running: "傳送中", cancelling: "正在取消", waiting_credentials: "等待更新 Cookie",
+    queued: "已入隊，等待傳送", running: "傳送中", scheduled: "分批傳送中，等下一批", paused: "已暫停",
+    cancelling: "正在取消", waiting_credentials: "等待身份授權",
     completed: "全部傳送成功", completed_with_errors: "傳送完成，部分失敗", failed: "傳送失敗",
     needs_review: "有結果不明的訊息，請人工確認", cancelled: "已取消",
   };
   const LINE_DELIVERY_LABELS = { pending: "待處理", sending: "傳送中", sent: "成功", failed: "失敗", unknown: "結果不明", cancelled: "已取消" };
   const LINE_DELIVERY_ERRORS = {
-    LINE_COOKIE_INVALID: "Cookie 失效", LINE_RATE_LIMITED: "發送頻率受限", LINE_NETWORK_ERROR: "連線失敗",
+    LINE_COOKIE_INVALID: "Cookie 失效", LINE_RATE_LIMITED: "LINE 暫時限制發送，這則未送出", LINE_NETWORK_ERROR: "連線失敗，這則未送出",
     LINE_REJECTED: "LINE 拒絕發送", LINE_RESULT_UNKNOWN: "無法確認是否已送出", WORKER_INTERRUPTED: "發送途中服務重新啟動",
     PRECEDING_MESSAGE_NOT_SENT: "前一則未送出，這則未發送",
     IMAGE_ASSET_UNAVAILABLE: "後端讀不到原圖", LINE_IMAGE_UPLOAD_FAILED: "圖片上傳失敗，這則未發送",
@@ -1244,6 +1250,30 @@
     CARD_TYPE_MESSAGE_NOT_FOUND: "多頁訊息已刪除或不屬於此官方帳號",
   };
   const LINE_INVALID_IMAGE_CODES = new Set(["IMAGE_ASSET_EXPIRED", "IMAGE_ASSET_NOT_FOUND"]);
+  // LINE：官方帳號 1 小時內傳給超過 200 位不同客戶會暫時鎖住一對一聊天（客服也無法回覆），後端最高只開 190 位
+  const LINE_HOURLY_LIMIT_MAX = 190;
+  const LINE_HOURLY_LIMIT_DEFAULT = 180;
+  const LINE_SEND_INTERVAL_SECONDS = 3; // 後端每則間隔（LINE 每分鐘約 20 則），只用於預估時間
+  const LINE_JOB_SENDING = new Set(["queued", "running", "scheduled"]);
+  const LINE_JOB_RESUMABLE = new Set(["paused", "waiting_credentials"]);
+  const lineTimeText = value => {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+  };
+  const lineDurationText = seconds => {
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    if (minutes < 60) return `${minutes} 分鐘`;
+    const hours = Math.round(minutes / 6) / 10;
+    return hours < 24 ? `${hours} 小時` : `${Math.floor(hours / 24)} 天 ${Math.round(hours % 24)} 小時`;
+  };
+  // 分批預估：每小時最多 limit 位，每位 messages 則、每則間隔 3 秒；與後端 estimatedFinishAt 同口徑
+  function lineBatchPlan(recipients, limit, messages = 1) {
+    const perRecipient = messages * LINE_SEND_INTERVAL_SECONDS;
+    const batches = Math.max(1, Math.ceil(recipients / limit));
+    const last = recipients - (batches - 1) * limit;
+    const seconds = (batches - 1) * 3600 + last * perRecipient;
+    return { batches, seconds, finishAt: Date.now() + seconds * 1000 };
+  }
   const LINE_SELECTION_ERROR_TYPES = {
     __proto__: null,
     INVALID_COUPON: "coupon", COUPON_NOT_FOUND: "coupon", COUPON_EXPIRED: "coupon", COUPON_UNAVAILABLE: "coupon",
@@ -1308,14 +1338,17 @@
       <progress data-job="progress" aria-label="傳送處理進度" max="1" value="0" hidden></progress>
       <div data-job="recipients" aria-live="polite" hidden></div>
       <div data-job="counts" aria-live="polite"></div>
+      <div class="loe-customers-muted" data-job="schedule" aria-live="polite" hidden></div>
       <div class="loe-customers-notice" data-job="notice" role="status" aria-live="polite" hidden></div>
       <div class="loe-customers-muted" data-job="send-gate" role="status" aria-live="polite" hidden></div>
       <div class="loe-customers-toolbar">
         <button type="button" class="loe-mini" data-job="retry">重試同一次傳送</button>
         <button type="button" class="loe-mini" data-job="refresh">重新整理進度</button>
         <button type="button" class="loe-mini" data-job="save-cookie">身份授權</button>
+        <button type="button" class="loe-mini" data-job="pause">暫停傳送</button>
         <button type="button" class="loe-mini" data-job="resume">恢復傳送</button>
-        <button type="button" class="loe-mini" data-job="cancel">取消尚未傳送</button>
+        <button type="button" class="loe-mini" data-job="retry-failed">重送失敗客戶</button>
+        <button type="button" class="loe-mini" data-job="cancel">取消整批（尚未傳送的）</button>
       </div>
       <details data-job="details"><summary>查看詳情</summary>
       <div class="loe-customers-muted" data-job="id"></div>
@@ -1329,18 +1362,19 @@
     const find = name => container.querySelector(`[data-job="${name}"]`);
     const refreshSendGate = () => {
       const value = entry.value;
-      const needed = !!value?.payload || value?.status === "waiting_credentials";
+      const needed = !!value?.payload || LINE_JOB_RESUMABLE.has(value?.status) || value?.retryableCount > 0;
       const error = needed ? sendAccess.error(value) : "";
       find("send-gate").textContent = error;
       find("send-gate").hidden = !error;
-      for (const name of ["retry", "resume"]) find(name).disabled = entry.busy || !!pollController || !!error;
+      for (const name of ["retry", "resume", "retry-failed"]) find(name).disabled = entry.busy || !!pollController || !!error;
     };
     const schedule = () => {
       clearTimeout(timer); timer = null;
       const value = entry.value;
       if (active() && value?.jobId && !entry.busy && !pollController &&
-          !LINE_JOB_TERMINAL.has(value.status) && value.status !== "waiting_credentials")
-        timer = setTimeout(() => { timer = null; void refresh(); }, 2500);
+          !LINE_JOB_TERMINAL.has(value.status) && !LINE_JOB_RESUMABLE.has(value.status))
+        // 等下一批／排在別批後面時放慢輪詢
+        timer = setTimeout(() => { timer = null; void refresh(); }, value.status === "scheduled" || value.jobsAhead > 0 ? 30000 : 2500);
     };
     const render = () => {
       if (!active()) return;
@@ -1351,18 +1385,20 @@
       find("id").textContent = value ? `收件人：${(value.recipientCount || value.payload?.chatIds.length || 0).toLocaleString()} 位` : "";
       find("recipients").hidden = !value?.jobId;
       find("recipients").textContent = value?.jobId && Number.isInteger(value.recipientCount) ? `實際收件 ${value.recipientCount.toLocaleString()} 位` +
-        (Number.isInteger(value.excludedCount) ? ` · 過濾名單 ${value.excludedCount.toLocaleString()} 位` : "") : "";
+        (Number.isInteger(value.excludedCount) ? ` · 不發送 ${value.excludedCount.toLocaleString()} 位` : "") : "";
       const errorCode = value?.actionErrorCode || value?.errorCode;
-      const missingFilter = value?.status === "waiting_credentials" && errorCode === "MESSAGE_JOB_FILTER_MISSING";
-      const help = missingFilter ? "後台缺少此作業的過濾設定紀錄，無法恢復。請先確認已送結果並取消剩餘訊息，再重新建立作業。" :
-        errorCode === "EXCLUSION_LIST_REQUIRED" ? "過濾名單已改為選填；目前後台仍要求至少一位，請聯絡管理員更新後再傳送。" :
-        errorCode === "SEND_KEY_TOO_MANY_ATTEMPTS" ? "KEY 驗證失敗次數過多，請確認 KEY 正確後稍候一分鐘再試。" :
+      const help = errorCode === "SEND_KEY_TOO_MANY_ATTEMPTS" ? "KEY 驗證失敗次數過多，請確認 KEY 正確後稍候一分鐘再試。" :
         errorCode?.startsWith("SEND_KEY_") ? (value.uncertain ? "請點「身份授權」輸入有效的發送 KEY，再重試同一次傳送以確認原作業結果。" :
           ["SEND_KEY_EXPIRED", "SEND_KEY_REVOKED"].includes(errorCode) ? "請向後台申請新的 KEY，點「身份授權」輸入後再傳送或恢復。" :
           "請點「身份授權」重新輸入屬於目前後台帳號的 KEY，再傳送或恢復。") :
         errorCode === "MESSAGE_JOB_SUBMIT_TOO_OFTEN" ? "請稍候一分鐘再手動重試；先前結果不明時，仍須沿用原本那次傳送。" :
+        value?.jobsAhead > 0 ? `此官方帳號前面還有 ${value.jobsAhead} 批傳送尚未結束，這批會排隊，等前一批送完或取消後才開始（前一批暫停時也不會插隊）。` :
+        value?.status === "scheduled" && errorCode === "LINE_RATE_LIMITED" ? "LINE 暫時限制發送，被擋的客戶已退回待傳送（不算失敗），時間到會自動接著送。" :
+        value?.status === "scheduled" ? "本小時已送滿上限，時間到會自動接著送，不需要保持視窗開啟。要停下來請按「暫停傳送」或「取消整批」。" :
+        value?.status === "paused" ? "已暫停，尚未傳送的客戶都保留著；按「恢復傳送」會從中斷處接著送，已送出的不會重送。" :
         value?.status === "waiting_credentials" ? "請重新點「身份授權」，再按「恢復傳送」。只會繼續尚未傳送的訊息。" :
         value?.status === "needs_review" ? "請檢查結果不明的客戶，確認對方是否已收到；系統不會自動重送。" :
+        value?.retryableCount > 0 && LINE_JOB_TERMINAL.has(value.status) ? `有 ${value.retryableCount.toLocaleString()} 位確定沒送出，可按「重送失敗客戶」補送（已送出、結果不明、LINE 拒收的不會重送）。` :
         value?.retrySameRequest ? "作業尚未建立。請稍後按「重試同一次傳送」，會沿用原本的內容與收件人。" :
         !value?.jobId && ["LINE_COOKIE_MISSING", "LINE_COOKIE_INVALID"].includes(value?.errorCode) ?
           (value.uncertain ? "請重新點「身份授權」，再重試同一次傳送以確認結果。" : "請重新點「身份授權」，再按「傳送」。") :
@@ -1385,15 +1421,25 @@
         (counts.cancelled ? ` · 已取消 ${counts.cancelled}` : "") +
         (counts.pending + counts.sending ? ` · 待完成 ${counts.pending + counts.sending}` : "") : "";
       if (counts) { find("progress").max = counts.total || 1; find("progress").value = counts.sent + counts.failed + counts.unknown + counts.cancelled; }
+      const scheduleParts = !value?.jobId || !Number.isInteger(value.hourlyLimit) || LINE_JOB_TERMINAL.has(value.status) ? [] : [
+        `每小時上限 ${value.hourlyLimit} 位`,
+        Number.isInteger(value.sentLastHour) ? `此官方帳號過去 1 小時已送 ${value.sentLastHour} 位` : "",
+        value.status === "scheduled" && value.nextRunAt ? `下一批 ${lineTimeText(value.nextRunAt)} 開始` : "",
+        value.estimatedFinishAt ? `預計 ${lineTimeText(value.estimatedFinishAt)} 送完` : "",
+      ].filter(Boolean);
+      find("schedule").textContent = scheduleParts.join(" · ");
+      find("schedule").hidden = !scheduleParts.length;
       const ended = LINE_JOB_TERMINAL.has(value?.status);
       find("retry").hidden = !value?.payload || (!!value.rejected && !value.retrySameRequest);
       find("refresh").hidden = !value?.jobId || (!entry.notice && Number.isInteger(value.excludedCount));
       const keyRejected = !!errorCode?.startsWith("SEND_KEY_") && errorCode !== "SEND_KEY_TOO_MANY_ATTEMPTS";
       find("save-cookie").hidden = !(value?.status === "waiting_credentials" || keyRejected || ["LINE_COOKIE_MISSING", "LINE_COOKIE_INVALID"].includes(value?.errorCode));
-      find("resume").hidden = value?.status !== "waiting_credentials";
+      find("resume").hidden = !LINE_JOB_RESUMABLE.has(value?.status);
+      find("pause").hidden = !LINE_JOB_SENDING.has(value?.status);
+      find("retry-failed").hidden = !(value?.retryableCount > 0) || ["cancelled", "cancelling"].includes(value?.status);
       find("cancel").hidden = !value?.jobId || ended || value.status === "cancelling";
       find("dismiss").hidden = locked();
-      for (const name of ["retry", "save-cookie", "resume", "cancel"]) find(name).disabled = entry.busy || !!pollController;
+      for (const name of ["retry", "save-cookie", "pause", "resume", "retry-failed", "cancel"]) find(name).disabled = entry.busy || !!pollController;
       refreshSendGate();
       find("refresh").disabled = entry.busy || !!pollController;
       find("results").hidden = !value?.jobId;
@@ -1461,23 +1507,30 @@
         update({ ...value, uncertain, rejected: !uncertain, retrySameRequest, errorCode: error.code || "", errorDetail: error.message });
       } finally { entry.busy = false; notify(); if (active() && entry.value?.jobId) void refresh(); }
     }
-    async function action(kind) {
+    // kind：pause／resume／cancel／retry-failed；chatIds 只給 retry-failed（省略＝全部可重送的客戶）
+    async function action(kind, chatIds) {
       const value = entry.value;
       if (!active() || entry.busy || !value?.jobId) return;
-      if (kind === "resume" && value.status !== "waiting_credentials") return;
-      if (kind === "resume" && sendAccess.error(value)) { entry.notice = sendAccess.error(value); notify(); return; }
+      const keyed = kind === "resume" || kind === "retry-failed";
+      if (kind === "resume" && !LINE_JOB_RESUMABLE.has(value.status)) return;
+      if (kind === "pause" && !LINE_JOB_SENDING.has(value.status)) return;
+      if (keyed && sendAccess.error(value)) { entry.notice = sendAccess.error(value); notify(); return; }
       if (kind === "cancel" && (LINE_JOB_TERMINAL.has(value.status) || value.status === "cancelling")) return;
+      if (kind === "cancel" && !confirm("取消整批：尚未傳送的客戶都不會再送（已送出的無法撤回）。確定取消？")) return;
       clearTimeout(timer); timer = null;
       if (pollController) { pollController.abort(); pollController = null; }
       entry.busy = true; entry.notice = ""; notify();
       try {
-        const data = await lineBackendRequest("POST", `${jobPath(value)}/${kind}`, { account }, undefined,
-          kind === "resume" ? { "X-Line-Send-Key": sendAccess.key() } : {});
+        const data = await lineBackendRequest("POST", `${jobPath(value)}/${kind}`, { account, ...(chatIds ? { chatIds } : {}) }, undefined,
+          keyed ? { "X-Line-Send-Key": sendAccess.key() } : {});
+        const job = kind === "retry-failed" ? data?.job : data;
+        if (kind === "retry-failed" && Number.isInteger(data?.requeued)) entry.notice = `已重新排入 ${data.requeued.toLocaleString()} 位，會依每小時上限接著送。`;
         // 恢復端點未承諾回傳完整進度，成功後以 GET 的結果為準。
-        if (kind === "resume" && !data?.counts) {
+        if (!job?.counts) {
           update({ ...value, actionErrorCode: "", actionErrorDetail: "" });
-          entry.notice = "已要求恢復，正在更新進度…";
-        } else update({ ...value, ...validJob(data, value), actionErrorCode: "", actionErrorDetail: "" });
+          entry.notice ||= "已送出要求，正在更新進度…";
+        } else update({ ...value, ...validJob(job, value), actionErrorCode: "", actionErrorDetail: "" });
+        if (kind === "retry-failed") autoResultsJobId = "";
       } catch (error) {
         entry.notice = error.message;
         update({ ...value, actionErrorCode: error.code || "", actionErrorDetail: error.message });
@@ -1504,11 +1557,24 @@
         resultPage = page; resultPages = Math.ceil(p.totalItems / p.pageSize);
         for (const row of data.deliveries) {
           const item = document.createElement("div"); item.className = "loe-message-result";
-          item.textContent = `${row.lineName || "（未提供名稱）"}\n第 ${Number(row.messageIndex) + 1} 則 ${{ image: "圖片", text: "文字", coupon: "優惠券", cardType: "多頁訊息" }[row.messageType] || row.messageType} · ${LINE_DELIVERY_LABELS[row.status] || row.status}` +
+          const label = document.createElement("span");
+          label.textContent = `${row.lineName || "（未提供名稱）"}\n第 ${Number(row.messageIndex) + 1} 則 ${{ image: "圖片", text: "文字", coupon: "優惠券", cardType: "多頁訊息" }[row.messageType] || row.messageType} · ${LINE_DELIVERY_LABELS[row.status] || row.status}` +
             (row.errorCode ? ` · ${Object.hasOwn(LINE_DELIVERY_ERRORS, row.errorCode) ? LINE_DELIVERY_ERRORS[row.errorCode] : "發送失敗"}` : "") +
             (Number.isInteger(row.uploadAttempts) && row.uploadAttempts >= 0 ? ` · 上傳嘗試 ${row.uploadAttempts} 次` : "") +
             (Number.isInteger(row.attempts) && row.attempts >= 0 ? ` · 發送嘗試 ${row.attempts} 次` : "") +
             (typeof row.upstreamCode === "string" && row.upstreamCode ? ` · LINE 回應：${lineDisplayMessage(row.upstreamCode)}` : "");
+          item.appendChild(label);
+          if (row.retryable === true && typeof row.chatId === "string" && !["cancelled", "cancelling"].includes(entry.value?.status)) {
+            const retry = document.createElement("button");
+            retry.type = "button"; retry.className = "loe-mini"; retry.textContent = "重送";
+            retry.setAttribute("aria-label", `重送給 ${row.lineName || "此客戶"}`);
+            retry.addEventListener("click", async () => {
+              retry.disabled = true;
+              await action("retry-failed", [row.chatId]);
+              if (active()) void loadResults(resultPage);
+            });
+            item.appendChild(retry);
+          }
           find("results-list").appendChild(item);
         }
         find("results-status").textContent = p.totalItems ? `共 ${p.totalItems.toLocaleString()} 則` : "沒有這類結果";
@@ -1531,12 +1597,17 @@
     find("refresh").addEventListener("click", () => void refresh());
     find("cancel").addEventListener("click", () => void action("cancel"));
     find("resume").addEventListener("click", () => void action("resume"));
+    find("pause").addEventListener("click", () => void action("pause"));
+    find("retry-failed").addEventListener("click", () => {
+      const count = entry.value?.retryableCount || 0;
+      if (count && confirm(`重送 ${count.toLocaleString()} 位確定沒送出的客戶？已送出、結果不明、LINE 拒收的不會重送。`)) void action("retry-failed");
+    });
     find("save-cookie").addEventListener("click", async () => {
       if (!active() || entry.busy) return;
       entry.busy = true; entry.notice = ""; notify();
       try {
         if ((await saveLineCookie()).cancelled) return;
-        entry.notice = entry.value?.rejected && !entry.value.retrySameRequest ? "已授權，可直接按「傳送」。" : "已授權，請按恢復傳送；若尚未入隊，請重試同一次傳送。";
+        entry.notice = entry.value?.rejected && !entry.value.retrySameRequest ? "已授權，可直接按「傳送」。" : "已授權，請按「恢復傳送」；若尚未入隊，請重試同一次傳送。";
       } catch (error) { entry.notice = error.message; }
       finally { entry.busy = false; notify(); }
     });
@@ -1579,7 +1650,7 @@
         }
         const requestId = crypto.randomUUID();
         const body = { account, requestId, chatIds: [...payload.chatIds], excludedChatIds: [...payload.excludedChatIds],
-          messages: payload.messages.map(message => ({ ...message })) };
+          messages: payload.messages.map(message => ({ ...message })), hourlyLimit: payload.hourlyLimit };
         if (new Blob([JSON.stringify(body)]).size > 8000000) { toast("傳送內容超過可接收的大小"); return; }
         const value = { account, groupId, requestId, payload: body, uncertain: false };
         const accessError = sendAccess.error(value);
@@ -1616,7 +1687,8 @@
       coupons: [], coupon: null, couponController: null, couponTimer: null, couponsLoaded: false,
       cards: [], card: null, cardController: null, cardsLoaded: false, messageType: "text", pendingType: null,
       handledSelectionError: null, excluded: new Map(), restoredFilterRequestId: null, syncing: false,
-      skipGroups: storeGet(SKIP_GROUP_CHATS_KEY, true) !== false };
+      skipGroups: storeGet(SKIP_GROUP_CHATS_KEY, true) !== false,
+      hourlyLimit: Number(storeGet(`${LINE_HOURLY_LIMIT_KEY}::${groupId}`, LINE_HOURLY_LIMIT_DEFAULT)) };
     let jobView = null;
     const dialog = document.createElement("dialog");
     dialog.className = "loe-customers-dialog";
@@ -1632,7 +1704,7 @@
             <button class="loe-mini" type="button" data-role="clear">清除已選</button>
           </div>
           <div class="loe-customers-muted">全選所有人會選取此官方帳號的全部客戶，包含所有分頁，不受搜尋條件影響。</div>
-          <div class="loe-customers-muted">不想發送的客戶，請點右側「過濾」；全選也會保留過濾設定。</div>
+          <div class="loe-customers-muted">勾選＝要傳送。全選後有人不想傳，點那位右側的「不發送」，之後再按全選也不會傳給他。</div>
           <div class="loe-customers-status" role="status" aria-live="polite"></div>
           <div class="loe-customers-list" aria-label="客戶列表"></div>
           <div class="loe-customers-toolbar"><button class="loe-mini" type="button" data-role="prev">上一頁</button><span data-role="pages" class="loe-customers-muted"></span><button class="loe-mini" type="button" data-role="next">下一頁</button></div>
@@ -1683,18 +1755,24 @@
           <div class="loe-card-preview" data-role="card-preview" role="region" aria-label="多頁訊息內容預覽" tabindex="0" hidden></div>
           <div class="loe-customers-muted" data-role="card-preview-note" hidden>可左右捲動查看圖片與文字摘要，實際版面以 LINE 顯示為準。</div>
           </div>
-          <label class="loe-customers-muted"><input type="checkbox" data-role="skip-groups"> 群組不發送（過濾所有 C 開頭的群組聊天）</label>
+          <label class="loe-customers-muted"><input type="checkbox" data-role="skip-groups"> 群組聊天不發送</label>
           <div class="loe-send-requirements" role="group" aria-label="發送設定">
             <div class="loe-send-requirement">
-              <div class="loe-send-requirement-head"><strong>1. 過濾名單 <small>（選填・不發送）</small></strong><span class="loe-send-badge" data-role="filter-badge">未設定（選填）</span></div>
-              <div class="loe-customers-muted">從左側客戶清單點「過濾」，加入不發送的對象。點「取消過濾」或下方姓名旁的 × 即可移除；不選也能傳送。</div>
+              <div class="loe-send-requirement-head"><strong>1. 不發送名單 <small>（選填）</small></strong><span class="loe-send-badge" data-role="filter-badge">沒有（選填）</span></div>
+              <div class="loe-customers-muted">在左側客戶清單點「不發送」加入；點下方姓名旁的 × 或左側「恢復發送」移除。沒有也能傳送。</div>
               <div class="loe-excluded-list" data-role="excluded-list" aria-label="不發送的客戶"></div>
-              <button class="loe-mini" type="button" data-role="filter-clear" hidden>清空過濾名單</button>
+              <button class="loe-mini" type="button" data-role="filter-clear" hidden>清空不發送名單</button>
             </div>
             <div class="loe-send-requirement">
               <div class="loe-send-requirement-head"><strong>2. 發送 KEY</strong><span class="loe-send-badge" data-role="key-badge">尚未授權</span></div>
               <div class="loe-customers-muted">在「身份授權」輸入後台發放的 KEY（有效期一個月），傳送時自動帶入。</div>
               <button class="loe-mini" type="button" data-role="authorize">身份授權</button>
+            </div>
+            <div class="loe-send-requirement">
+              <div class="loe-send-requirement-head"><strong>3. 分批傳送</strong><span class="loe-send-badge" data-role="rate-badge"></span></div>
+              <label class="loe-customers-muted">每小時最多傳給<input class="loe-input loe-rate-input" type="number" data-role="hourly-limit" min="1" max="${LINE_HOURLY_LIMIT_MAX}" step="1" inputmode="numeric" aria-label="每小時最多傳給幾位客戶">位客戶（最高 ${LINE_HOURLY_LIMIT_MAX}）</label>
+              <div class="loe-customers-muted">LINE 規定官方帳號 1 小時內傳給超過 200 位不同客戶，會暫時鎖住一對一聊天，客服也沒辦法回覆。送滿上限後會自動等下一小時接著送，不用開著視窗。同一個官方帳號一次只跑一批，後送的那批會排隊。</div>
+              <div class="loe-send-ready" data-role="rate-plan" aria-live="polite"></div>
             </div>
           </div>
           <div class="loe-send-ready" data-role="send-ready" role="status" aria-live="polite"></div>
@@ -1715,17 +1793,17 @@
     const effectiveChatIds = () => [...state.selected.keys()]
       .filter(id => !state.excluded.has(id) && !(state.skipGroups && isGroupChat(id)));
     const sendKey = () => storedSendKey(account);
+    const hourlyLimitValid = () => Number.isInteger(state.hourlyLimit) && state.hourlyLimit >= 1 && state.hourlyLimit <= LINE_HOURLY_LIMIT_MAX;
     const sendGateError = (job) => {
       const ids = job ? (job.payload?.excludedChatIds || job.excludedChatIds) : [...state.excluded.keys()];
       if (job?.jobId) {
-        if (job.actionErrorCode === "MESSAGE_JOB_FILTER_MISSING")
-          return "後台缺少此作業的過濾設定紀錄，請先確認已送結果並取消剩餘訊息，再重新建立作業。";
         if (!Number.isInteger(job.excludedCount) || job.excludedCount < 0 || job.excludedCount > LINE_RECIPIENT_LIMIT)
-          return "請先重新整理進度，確認後台已保存過濾名單。";
+          return "請先重新整理進度，確認後台已保存不發送名單。";
       } else if (!Array.isArray(ids))
-        return "這筆作業缺少原始過濾設定紀錄，請先向後台確認原作業結果，再重新建立作業。";
-      if (!job?.jobId && (ids.length > LINE_RECIPIENT_LIMIT || ids.some(id => !/^U[0-9a-f]{32}$/.test(id)))) return "過濾名單格式不符，請重新設定。";
+        return "這筆作業缺少原始不發送名單紀錄，請先向後台確認原作業結果，再重新建立作業。";
+      if (!job?.jobId && (ids.length > LINE_RECIPIENT_LIMIT || ids.some(id => !/^U[0-9a-f]{32}$/.test(id)))) return "不發送名單格式不符，請重新設定。";
       if (!sendKey()) return "請先點「身份授權」輸入後台發放的發送 KEY。";
+      if (!job && !hourlyLimitValid()) return `每小時上限請輸入 1～${LINE_HOURLY_LIMIT_MAX} 位。`;
       return "";
     };
     const renderExcluded = () => {
@@ -1737,7 +1815,7 @@
         button.type = "button"; button.className = "loe-mini";
         const name = customer.lineName || `未命名客戶 ${index + 1}`;
         button.textContent = `${name} ×`;
-        button.setAttribute("aria-label", `移除過濾 ${name}`);
+        button.setAttribute("aria-label", `恢復發送給 ${name}`);
         button.addEventListener("click", () => {
           if (!current() || jobView?.locked() || state.allController || state.syncing) return;
           state.excluded.delete(id); renderExcluded(); updateControls();
@@ -1746,7 +1824,7 @@
       }
       if (state.excluded.size > 100) {
         const more = document.createElement("span"); more.className = "loe-customers-muted";
-        more.textContent = `另有 ${(state.excluded.size - 100).toLocaleString()} 位，全部都會過濾。`;
+        more.textContent = `另有 ${(state.excluded.size - 100).toLocaleString()} 位，全部都不會發送。`;
         container.appendChild(more);
       }
     };
@@ -1811,11 +1889,26 @@
       const skippedGroups = state.skipGroups ? [...state.selected.keys()].filter(id => isGroupChat(id) && !state.excluded.has(id)).length : 0;
       const filterCount = locked && job?.jobId && Number.isInteger(job.excludedCount) ? job.excludedCount : state.excluded.size;
       const filterReady = filterCount > 0;
-      find("filter-badge").textContent = filterReady ? `已設定 ${filterCount.toLocaleString()} 位` : "未設定（選填）";
+      find("filter-badge").textContent = filterReady ? `${filterCount.toLocaleString()} 位不發送` : "沒有（選填）";
       find("filter-badge").dataset.ready = filterReady ? "true" : "optional";
       const keyReady = !!sendKey();
       find("key-badge").textContent = keyReady ? "已授權" : "尚未授權";
       find("key-badge").dataset.ready = String(keyReady);
+      const rateInput = find("hourly-limit");
+      const shownLimit = locked && Number.isInteger(job?.hourlyLimit) ? job.hourlyLimit : state.hourlyLimit;
+      if (document.activeElement !== rateInput) rateInput.value = Number.isFinite(shownLimit) ? String(shownLimit) : "";
+      rateInput.disabled = locked || allBusy;
+      const rateReady = locked || hourlyLimitValid();
+      find("rate-badge").textContent = rateReady ? `每小時 ${shownLimit} 位` : "請輸入上限";
+      find("rate-badge").dataset.ready = String(rateReady);
+      if (locked) find("rate-plan").textContent = "目前作業依提交時的每小時上限分批傳送。";
+      else if (!hourlyLimitValid()) find("rate-plan").textContent = `請輸入 1～${LINE_HOURLY_LIMIT_MAX} 的整數。`;
+      else if (!effective.length) find("rate-plan").textContent = "";
+      else {
+        const plan = lineBatchPlan(effective.length, state.hourlyLimit);
+        find("rate-plan").textContent = plan.batches === 1 ? `${effective.length.toLocaleString()} 位一批送完，約 ${lineDurationText(plan.seconds)}。` :
+          `${effective.length.toLocaleString()} 位分 ${plan.batches} 批，約 ${lineDurationText(plan.seconds)}送完（預計 ${lineTimeText(plan.finishAt)}）。`;
+      }
       find("filter-clear").hidden = !state.excluded.size;
       find("skip-groups").checked = state.skipGroups;
       find("skip-groups").disabled = locked || allBusy;
@@ -1835,10 +1928,10 @@
         state.messageType === "coupon" ? lineCouponAvailable(state.coupon) : !!state.card;
       const gateError = sendGateError();
       find("send").disabled = locked || allBusy || !effective.length || !hasContent || !!gateError;
-      find("send-ready").textContent = locked ? "目前作業使用提交時的收件人與過濾名單，編輯暫時鎖定。" :
-        `已選 ${state.selected.size.toLocaleString()} 位 − 過濾 ${filteredCount.toLocaleString()} 位` +
-        (skippedGroups ? `（含群組 ${skippedGroups.toLocaleString()} 個）` : "") + ` = 實際發送 ${effective.length.toLocaleString()} 位。` +
-        (gateError ? ` ${gateError}` : !effective.length ? " 請選擇至少一位未被過濾的客戶。" : !hasContent ? " 請完成訊息內容。" : " 可以傳送。KEY 將交由後台驗證。");
+      find("send-ready").textContent = locked ? "目前這批使用提交時的收件人與不發送名單，傳完或取消後才能送下一批。" :
+        `已勾選 ${state.selected.size.toLocaleString()} 位 − 不發送 ${filteredCount.toLocaleString()} 位` +
+        (skippedGroups ? `（含群組 ${skippedGroups.toLocaleString()} 個）` : "") + ` = 實際傳送 ${effective.length.toLocaleString()} 位。` +
+        (gateError ? ` ${gateError}` : !effective.length ? " 請勾選至少一位要傳送的客戶。" : !hasContent ? " 請完成訊息內容。" : " 可以傳送。KEY 將交由後台驗證。");
       jobView?.refreshSendGate();
       dialog.querySelectorAll('[name="loe-message-type"]').forEach(input => {
         input.checked = input.value === state.messageType; input.disabled = locked;
@@ -1881,7 +1974,7 @@
         const excluded = state.excluded.has(box.value);
         const row = box.closest(".loe-customer-row"); row.dataset.excluded = String(excluded);
         const button = row.querySelector("button");
-        button.textContent = excluded ? "取消過濾" : "過濾";
+        button.textContent = excluded ? "恢復發送" : "不發送";
         button.setAttribute("aria-pressed", String(excluded));
         button.disabled = locked || allBusy;
       });
@@ -1927,11 +2020,11 @@
         info.appendChild(name);
         select.append(check, avatar, info);
         const filter = document.createElement("button"); filter.type = "button"; filter.className = "loe-mini";
-        filter.setAttribute("aria-label", `過濾 ${customer.lineName}`);
+        filter.setAttribute("aria-label", `不發送給 ${customer.lineName}`);
         filter.addEventListener("click", () => {
           if (!current() || jobView?.locked() || state.allController || state.syncing) return;
           if (state.excluded.has(customer.chatId)) state.excluded.delete(customer.chatId);
-          else if (state.excluded.size >= LINE_RECIPIENT_LIMIT) { toast("過濾名單最多 50,000 位"); return; }
+          else if (state.excluded.size >= LINE_RECIPIENT_LIMIT) { toast("不發送名單最多 50,000 位"); return; }
           else state.excluded.set(customer.chatId, customer);
           renderExcluded(); updateControls();
         });
@@ -2053,6 +2146,14 @@
       if (!current() || jobView?.locked()) return;
       stopAll(); state.selected.clear(); updateControls();
     });
+    find("hourly-limit").addEventListener("input", (event) => {
+      if (!current() || jobView?.locked()) return;
+      const value = event.target.value.trim();
+      state.hourlyLimit = /^\d+$/.test(value) ? Number(value) : NaN;
+      if (hourlyLimitValid()) storeSet(`${LINE_HOURLY_LIMIT_KEY}::${groupId}`, state.hourlyLimit);
+      updateControls();
+    });
+    find("hourly-limit").addEventListener("blur", updateControls);
     find("skip-groups").addEventListener("change", (event) => {
       state.skipGroups = event.target.checked;
       storeSet(SKIP_GROUP_CHATS_KEY, state.skipGroups);
@@ -2300,12 +2401,16 @@
       if (!account) { toast("請先在轉發設定填寫後台帳號"); return; }
       const text = textInput.value.trim();
       const chatIds = effectiveChatIds();
-      if (!chatIds.length) { toast("請選擇至少一位未被過濾的客戶"); return; }
+      if (!chatIds.length) { toast("請勾選至少一位要傳送的客戶"); return; }
       if (state.messageType === "text" && !text) { toast("請填寫訊息"); return; }
       if (state.selected.size > LINE_RECIPIENT_LIMIT) { toast("一次最多選取 50,000 位客戶"); return; }
       if (state.files.length > 1) { toast("每次最多一張圖片"); return; }
       if (state.messageType === "text" && text.length > 5000) { toast("文字最多 5,000 字"); return; }
-      const payload = { chatIds, excludedChatIds: [...state.excluded.keys()], messages: [
+      const plan = lineBatchPlan(chatIds.length, state.hourlyLimit);
+      if (plan.batches > 1 && !confirm(`共 ${chatIds.length.toLocaleString()} 位，每小時最多 ${state.hourlyLimit} 位，` +
+          `會分 ${plan.batches} 批、約 ${lineDurationText(plan.seconds)}送完（預計 ${lineTimeText(plan.finishAt)}）。\n\n` +
+          "這段期間此官方帳號只跑這一批，之後送的會排隊。隨時可以「暫停傳送」或「取消整批」。確定傳送？")) return;
+      const payload = { chatIds, hourlyLimit: state.hourlyLimit, excludedChatIds: [...state.excluded.keys()], messages: [
         ...(state.messageType === "text" ? [{ type: "text", text }] : []),
         ...(state.messageType === "image" ? [{ type: "image", mediaId: state.files[0].asset.mediaId }] : []),
         ...(state.messageType === "coupon" ? [{ type: "coupon", couponId: state.coupon.couponId }] : []),
