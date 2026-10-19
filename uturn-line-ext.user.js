@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.48.1
+// @version      1.49.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -568,6 +568,19 @@
       width: 100%; box-sizing: border-box; border: 1px solid rgba(15,23,42,.18);
       border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; margin-bottom: 10px;
     }
+    .loe-prefix-pop .loe-fleet-picker { position: relative; }
+    .loe-prefix-pop .loe-fleet-suggest {
+      position: absolute; left: 0; right: 0; top: calc(100% - 8px); z-index: 1;
+      max-height: 220px; overflow-y: auto; padding: 4px;
+      background: #fff; border: 1px solid rgba(15,23,42,.12); border-radius: 8px;
+      box-shadow: 0 10px 24px rgba(15,23,42,.16);
+    }
+    .loe-prefix-pop .loe-fleet-suggest[hidden] { display: none; }
+    .loe-prefix-pop .loe-fleet-suggest > button {
+      display: block; width: 100%; text-align: left; border: 0; background: none;
+      padding: 7px 8px; border-radius: 6px; font: inherit; font-size: 13px; color: inherit; cursor: pointer;
+    }
+    .loe-prefix-pop .loe-fleet-suggest > button:hover { background: ${BLUE_SOFT}; }
     .loe-prefix-pop input:focus { outline: none; border-color: ${BLUE}; box-shadow: 0 0 0 3px rgba(28,108,243,.12); }
     .loe-prefix-pop .loe-pop-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
@@ -2507,18 +2520,141 @@
       return null;
     }
   }
-  // 確認車隊：交給後端解析使用者輸入的代碼或顯示名稱（不分大小寫），回傳車隊代碼；
-  // 查無（400）回 null，網路錯誤往外丟。只做單一比對，不列出車隊清單。
-  async function resolveFleetCode(text) {
-    try {
-      const data = await httpGetJson(
-        `${API_BASE}/line-ext-config?fleet=${encodeURIComponent(text)}&t=${Date.now()}`,
-      );
-      return (data && data.fleet) || null;
-    } catch (e) {
-      if (e && e.message === "HTTP 400") return null;
-      throw e;
+  // 可選車隊（公開端點 GET /fleets）：只列啟用、非懲罰車隊；同頁共用一次請求，失敗下次重抓
+  let fleetOptionsPromise = null;
+  function loadFleetOptions() {
+    if (!fleetOptionsPromise) {
+      fleetOptionsPromise = httpGetJson(`${API_BASE}/fleets`)
+        .then((list) =>
+          (Array.isArray(list) ? list : [])
+            .filter((f) => f && f.name && f.name !== "*" && f.isActive && !f.isBan)
+            .map((f) => {
+              const displayName = (f.displayName || "").trim() || f.name;
+              return {
+                code: f.name,
+                displayName,
+                label: displayName === f.name ? f.name : `${displayName}（${f.name}）`,
+              };
+            })
+            .sort((a, b) => a.label.localeCompare(b.label, "zh-Hant")),
+        )
+        .catch((e) => {
+          fleetOptionsPromise = null;
+          throw e;
+        });
     }
+    return fleetOptionsPromise;
+  }
+  // 車隊比對鍵：與後端 FleetLabelKey 同口徑（去空白、去 FE0F、轉大寫）
+  function fleetLabelKey(s) {
+    return (s || "").replace(/\s+/g, "").replace(/\uFE0F/g, "").toUpperCase();
+  }
+  // 車隊搜尋選取：輸入滿 2 個字才列出符合的車隊（代碼或顯示名稱包含即中，不一次攤出全部）；
+  // 完全符合的代碼／名稱不受字數限制（如單字代碼 W）。存的是選中的車隊代碼。
+  const FLEET_SEARCH_MIN_CHARS = 2;
+  const FLEET_SEARCH_MAX_RESULTS = 8;
+  function createFleetPicker(current) {
+    const wrap = document.createElement("div");
+    wrap.className = "loe-fleet-picker";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "輸入車隊名稱或代碼（至少 2 個字）";
+    input.setAttribute("aria-label", "車隊");
+    input.autocomplete = "off";
+    input.value = current;
+    const list = document.createElement("div");
+    list.className = "loe-fleet-suggest";
+    list.hidden = true;
+    wrap.appendChild(input);
+    wrap.appendChild(list);
+
+    let options = null; // null＝列表尚未載入或載入失敗
+    let selected = null; // 目前選中的車隊（{code,label,displayName}）
+    let results = [];
+    const matchExact = (text) => {
+      const key = fleetLabelKey(text);
+      return (
+        (key &&
+          (options || []).find(
+            (o) => fleetLabelKey(o.code) === key || fleetLabelKey(o.displayName) === key,
+          )) ||
+        null
+      );
+    };
+    const pick = (opt) => {
+      selected = opt;
+      input.value = opt.label;
+      list.hidden = true;
+    };
+    const renderResults = () => {
+      list.textContent = "";
+      const text = input.value.trim();
+      const key = fleetLabelKey(text);
+      results = [];
+      if (options && key) {
+        const exact = matchExact(text);
+        results =
+          [...text].length < FLEET_SEARCH_MIN_CHARS
+            ? exact
+              ? [exact]
+              : []
+            : options.filter(
+                (o) =>
+                  fleetLabelKey(o.code).includes(key) ||
+                  fleetLabelKey(o.displayName).includes(key),
+              );
+        results = results.slice(0, FLEET_SEARCH_MAX_RESULTS);
+      }
+      results.forEach((o) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.textContent = o.label;
+        // mousedown 先選，避免輸入框失焦把清單收掉吃掉點擊
+        item.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          pick(o);
+        });
+        list.appendChild(item);
+      });
+      list.hidden = results.length === 0;
+    };
+    input.addEventListener("input", () => {
+      selected = matchExact(input.value);
+      renderResults();
+    });
+    input.addEventListener("blur", () => (list.hidden = true));
+    // Enter 有搜尋結果時選第一筆，不觸發面板的儲存
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !list.hidden && results.length) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        pick(results[0]);
+      }
+    });
+
+    loadFleetOptions()
+      .then((loaded) => {
+        options = loaded;
+        const hit = matchExact(input.value);
+        if (hit) pick(hit);
+      })
+      .catch(() => {});
+
+    return {
+      el: wrap,
+      input,
+      // 回傳要存的車隊代碼；error 表示不可儲存
+      resolve() {
+        const text = input.value.trim();
+        if (!text) return { code: "" };
+        if (selected) return { code: selected.code };
+        if (!options)
+          return text === current
+            ? { code: current } // 列表載入失敗：未改動就沿用原設定
+            : { error: "車隊列表載入失敗，請稍後再試" };
+        return { error: "查無此車隊，請輸入至少 2 個字後從清單選擇" };
+      },
+    };
   }
   // 一鍵匯入：向後端拉目前車隊的設定並套用（取代舊的硬編碼 CONFIG）
   async function applyConfig() {
@@ -2584,7 +2720,7 @@
     return (getGlobalWithMigration(FLEET_KEY) || "").trim();
   }
   function setFleet(code) {
-    // 存後端確認過的車隊代碼（設定面板儲存時經 resolveFleetCode 解析），車隊改顯示名稱也不受影響
+    // 存車隊代碼（設定面板下拉選取），車隊改顯示名稱也不受影響
     storeSet(FLEET_KEY, (code || "").trim());
   }
   function getAutoReply() {
@@ -3519,16 +3655,13 @@
     whoInput.placeholder = "例如：dispatcher@uturn.com";
     whoInput.value = getDispatcher();
 
-    // 車隊 — 設定後台帳號後，依此向後端拉該車隊的 Webhook 與官方/店配設定
+    // 車隊 — 搜尋後從清單選取（存代碼，不讓使用者手填打錯）；設定後台帳號後，
+    // 依此向後端拉該車隊的 Webhook 與官方/店配設定
     const fleetHint = document.createElement("div");
     fleetHint.className = "loe-pop-hint";
     fleetHint.style.marginTop = "4px";
-    fleetHint.textContent = "請輸入您的車隊代碼或名稱";
-    const fleetInput = document.createElement("input");
-    fleetInput.type = "text";
-    fleetInput.placeholder = "請輸入您的車隊代碼或名稱";
-    fleetInput.setAttribute("aria-label", "車隊代碼或名稱");
-    fleetInput.value = getFleet();
+    fleetHint.textContent = "請搜尋並選擇您的車隊";
+    const fleetPicker = createFleetPicker(getFleet());
 
     const actions = document.createElement("div");
     actions.className = "loe-pop-actions";
@@ -3545,35 +3678,23 @@
     const saveBtn = document.createElement("button");
     saveBtn.className = "loe-btn-primary";
     saveBtn.textContent = "儲存";
-    saveBtn.addEventListener("click", async () => {
+    saveBtn.addEventListener("click", () => {
       const acct = whoInput.value.trim();
       if (acct && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(acct)) {
         whoInput.focus();
         toast("後台帳號請輸入正確的 Email 格式");
         return;
       }
-      // 車隊先向後端確認，對不到就不存，避免打錯字後同步不到設定卻沒人發現
-      const fleetText = fleetInput.value.trim();
-      let fleetCode = "";
-      if (fleetText) {
-        saveBtn.disabled = true;
-        try {
-          fleetCode = await resolveFleetCode(fleetText);
-        } catch (_) {
-          saveBtn.disabled = false;
-          toast("無法連線確認車隊，請稍後再試");
-          return;
-        }
-        saveBtn.disabled = false;
-        if (!fleetCode) {
-          fleetInput.focus();
-          toast("查無此車隊，請確認車隊代碼或名稱");
-          return;
-        }
+      // 車隊必須從搜尋清單選中（舊設定對不到現有車隊，如車隊已改代碼，也要重選）
+      const fleet = fleetPicker.resolve();
+      if (fleet.error) {
+        fleetPicker.input.focus();
+        toast(fleet.error);
+        return;
       }
       setPrefix(input.value.trim());
       setDispatcher(acct);
-      setFleet(fleetCode);
+      setFleet(fleet.code);
       closePrefixPopover();
       toast(
         "已儲存設定" +
@@ -3592,7 +3713,7 @@
     pop.appendChild(whoHint);
     pop.appendChild(whoInput);
     pop.appendChild(fleetHint);
-    pop.appendChild(fleetInput);
+    pop.appendChild(fleetPicker.el);
     pop.appendChild(actions);
     document.body.appendChild(pop);
     const r = anchor.getBoundingClientRect();
@@ -3606,7 +3727,7 @@
     };
     input.addEventListener("keydown", onKey);
     whoInput.addEventListener("keydown", onKey);
-    fleetInput.addEventListener("keydown", onKey);
+    fleetPicker.input.addEventListener("keydown", onKey);
     pop.addEventListener("click", (e) => e.stopPropagation());
     openPrefixPopover._pop = pop;
   }
