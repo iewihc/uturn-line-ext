@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.48.0
+// @version      1.48.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2507,6 +2507,19 @@
       return null;
     }
   }
+  // 確認車隊：交給後端解析使用者輸入的代碼或顯示名稱（不分大小寫），回傳車隊代碼；
+  // 查無（400）回 null，網路錯誤往外丟。只做單一比對，不列出車隊清單。
+  async function resolveFleetCode(text) {
+    try {
+      const data = await httpGetJson(
+        `${API_BASE}/line-ext-config?fleet=${encodeURIComponent(text)}&t=${Date.now()}`,
+      );
+      return (data && data.fleet) || null;
+    } catch (e) {
+      if (e && e.message === "HTTP 400") return null;
+      throw e;
+    }
+  }
   // 一鍵匯入：向後端拉目前車隊的設定並套用（取代舊的硬編碼 CONFIG）
   async function applyConfig() {
     const fleet = getFleet();
@@ -2570,9 +2583,9 @@
   function getFleet() {
     return (getGlobalWithMigration(FLEET_KEY) || "").trim();
   }
-  function setFleet(name) {
-    // 不分大小寫：後端 /line-ext-config 解析車隊時已 ToUpper，這裡原樣保存即可（hello / HELLO 皆可）
-    storeSet(FLEET_KEY, (name || "").trim());
+  function setFleet(code) {
+    // 存後端確認過的車隊代碼（設定面板儲存時經 resolveFleetCode 解析），車隊改顯示名稱也不受影響
+    storeSet(FLEET_KEY, (code || "").trim());
   }
   function getAutoReply() {
     return storeGet(AUTOREPLY_KEY, false) === true;
@@ -3532,16 +3545,35 @@
     const saveBtn = document.createElement("button");
     saveBtn.className = "loe-btn-primary";
     saveBtn.textContent = "儲存";
-    saveBtn.addEventListener("click", () => {
+    saveBtn.addEventListener("click", async () => {
       const acct = whoInput.value.trim();
       if (acct && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(acct)) {
         whoInput.focus();
         toast("後台帳號請輸入正確的 Email 格式");
         return;
       }
+      // 車隊先向後端確認，對不到就不存，避免打錯字後同步不到設定卻沒人發現
+      const fleetText = fleetInput.value.trim();
+      let fleetCode = "";
+      if (fleetText) {
+        saveBtn.disabled = true;
+        try {
+          fleetCode = await resolveFleetCode(fleetText);
+        } catch (_) {
+          saveBtn.disabled = false;
+          toast("無法連線確認車隊，請稍後再試");
+          return;
+        }
+        saveBtn.disabled = false;
+        if (!fleetCode) {
+          fleetInput.focus();
+          toast("查無此車隊，請確認車隊代碼或名稱");
+          return;
+        }
+      }
       setPrefix(input.value.trim());
       setDispatcher(acct);
-      setFleet(fleetInput.value.trim());
+      setFleet(fleetCode);
       closePrefixPopover();
       toast(
         "已儲存設定" +
