@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.49.0
+// @version      1.49.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -863,7 +863,7 @@
 
   /* ---------------------------------------------------------------------- *\
    * 目前官方帳號的名稱、chatId、頭像網址：逐頁讀到沒有 next。
-   * 每次載入／切換官方帳號讀一次；同帳號切換對話不重抓。
+   * 只在使用者點「同步客戶」時讀取；不在載入或切換官方帳號時預先抓（結果只有同步會用）。
    * ---------------------------------------------------------------------- */
   let lineChatDirectoryRun = null;
 
@@ -900,11 +900,9 @@
     }
   }
 
-  async function loadLineChatDirectory(force = false) {
+  async function loadLineChatDirectory() {
     if (location.hostname !== "chat.line.biz" || window.top !== window.self) return;
     const botId = getOaId();
-    if (!force && lineChatDirectoryRun && lineChatDirectoryRun.botId === botId)
-      return;
     if (lineChatDirectoryRun) lineChatDirectoryRun.controller.abort();
     lineChatDirectoryRun = null;
     if (!/^U[0-9a-f]{32}$/i.test(botId)) return;
@@ -952,11 +950,6 @@
       if (!isCurrent()) return;
       run.error = run.timedOut ? "讀取逾時" : String(error.message || error);
     }
-  }
-
-  function initLineChatDirectory() {
-    if (location.hostname !== "chat.line.biz" || window.top !== window.self) return;
-    void loadLineChatDirectory();
   }
 
   /* ---------------------------------------------------------------------- *\
@@ -1205,7 +1198,7 @@
   async function syncLineCustomers() {
     const groupId = getOaId();
     // 只有完整讀完 LINE 所有分頁，才允許整份取代後端清單。
-    const rows = await loadLineChatDirectory(true);
+    const rows = await loadLineChatDirectory();
     if (!Array.isArray(rows)) throw new Error("LINE 名單未讀取完整，未上傳後端" + (lineChatDirectoryRun?.error ? `：${lineChatDirectoryRun.error}` : ""));
     if (getOaId() !== groupId) throw new Error("官方帳號已變更，未上傳名單");
     if (new Blob([JSON.stringify(rows)]).size > 8000000)
@@ -4898,7 +4891,6 @@
    * ---------------------------------------------------------------------- */
   let lastOaId = getOaId();
   let lastChatId = getChatId();
-  initLineChatDirectory();
   enhanceChatBodies();
   enhanceQuickReplyToolbars();
   enhancePrefixChip();
@@ -4941,7 +4933,6 @@
       if (oa !== lastOaId) {
         closeLineCustomers();
         lastOaId = oa;
-        void loadLineChatDirectory();
         renderPrefixChip();
         closePrefixPopover();
         closeDispatchPopover();
