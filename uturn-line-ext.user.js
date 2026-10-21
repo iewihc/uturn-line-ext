@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.49.2
+// @version      1.49.3
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2602,11 +2602,9 @@
         const item = document.createElement("button");
         item.type = "button";
         item.textContent = o.label;
-        // mousedown 先選，避免輸入框失焦把清單收掉吃掉點擊
-        item.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          pick(o);
-        });
+        // mousedown 只擋失焦（輸入框 blur 會收清單）；click 才選，事件落在面板內不會觸發點外面關閉
+        item.addEventListener("mousedown", (e) => e.preventDefault());
+        item.addEventListener("click", () => pick(o));
         list.appendChild(item);
       });
       list.hidden = results.length === 0;
