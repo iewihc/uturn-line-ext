@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.49.1
+// @version      1.49.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2538,9 +2538,9 @@
     }
     return fleetOptionsPromise;
   }
-  // 車隊比對鍵：與後端 FleetLabelKey 同口徑（去空白、去 FE0F、轉大寫）
+  // 車隊比對鍵：與後端 FleetLabelKey 同口徑（去空白、去 emoji 變體符號 FE0E/FE0F、轉大寫）
   function fleetLabelKey(s) {
-    return (s || "").replace(/\s+/g, "").replace(/\uFE0F/g, "").toUpperCase();
+    return (s || "").replace(/\s+/g, "").replace(/[\uFE0E\uFE0F]/g, "").toUpperCase();
   }
   // 車隊搜尋選取：輸入滿 2 個字才列出符合的車隊（代碼或顯示名稱包含即中，不一次攤出全部）；
   // 完全符合的代碼／名稱不受字數限制（如單字代碼 W）。存的是選中的車隊代碼。
