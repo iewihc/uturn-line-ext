@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.49.3
+// @version      1.49.4
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2651,7 +2651,7 @@
   async function applyConfig() {
     const fleet = getFleet();
     if (!fleet) {
-      toast("請先在設定面板填寫車隊（如 HELLO）");
+      toast("請先在設定面板選擇車隊");
       return { gidCount: 0, chatCount: 0 };
     }
     const data = await fetchFleetConfig(fleet);
@@ -3759,7 +3759,7 @@
       e.stopPropagation();
       const fleet = getFleet();
       if (!fleet) {
-        toast("請先在設定面板填寫車隊（如 HELLO）");
+        toast("請先在設定面板選擇車隊");
         return;
       }
       try {
@@ -3767,9 +3767,9 @@
           `${API_BASE}/line-ext-config?fleet=${encodeURIComponent(fleet)}&t=${Date.now()}`,
         );
         const r = applyFleetConfig(data);
-        // toast 帶出車隊名：車隊填錯（拉到別隊設定）時一眼可見
+        // toast 帶出車隊名稱（後端一併回傳）：車隊選錯（拉到別隊設定）時一眼可見
         toast(
-          `已同步 ${fleet}：${r.gidCount} 個帳號群編、${r.chatCount} 筆店配覆寫`,
+          `已同步 ${data.fleetName || fleet}：${r.gidCount} 個帳號群編、${r.chatCount} 筆店配覆寫`,
         );
       } catch (err) {
         // 失敗原因直接呈現（HTTP 4xx/5xx、timeout、network）
@@ -4577,7 +4577,7 @@
   async function importFleetQuickReplies() {
     const fleet = getFleet();
     if (!fleet) {
-      toast("請先在設定面板填寫車隊（如 HELLO）");
+      toast("請先在設定面板選擇車隊");
       return null;
     }
     const data = await httpGetJson(
@@ -4610,7 +4610,7 @@
       return;
     }
     if (wantFleet && !fleet) {
-      toast("請先在設定面板填寫車隊（如 HELLO）");
+      toast("請先在設定面板選擇車隊");
       return;
     }
     try {
