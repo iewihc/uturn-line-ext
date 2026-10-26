@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.49.4
+// @version      1.50.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -70,6 +70,7 @@
   const SEND_KEY_STORE_PREFIX = "loe_line_send_key_v1::"; // 身份授權通過的發送 KEY（依後台帳號存；傳送／恢復自動帶入）
   const LINE_HOURLY_LIMIT_KEY = "loe_line_hourly_limit_v1"; // 群發每小時上限（依官方帳號記住）
   const SKIP_GROUP_CHATS_KEY = "loe_line_skip_group_chats_v1"; // 群發「群組不發送」：過濾 chatId C 開頭的群組聊天（預設開）
+  const OA_BOT_NAMES_KEY = "loe_oa_bot_names_v1"; // 官方帳號名稱快取 { botId: 名稱 }（後台「開官方聊天室」依名稱找 botId）
 
   // 內建 SVG 圖示（Lucide 風格），定義一次、用名稱引用 ic("copy")。
   // 不依賴任何外部 CDN，避免因連不到外站而整個腳本無法載入。
@@ -867,7 +868,8 @@
    * ---------------------------------------------------------------------- */
   let lineChatDirectoryRun = null;
 
-  async function fetchLineDirectoryPage(url, run) {
+  // chat.line.biz 內部 API（同源帶登入 Cookie），15 秒逾時會中止整個 run。
+  async function fetchLineJson(url, run) {
     const timer = setTimeout(() => {
       run.timedOut = true;
       run.controller.abort();
@@ -889,15 +891,29 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       if (!(response.headers.get("Content-Type") || "").includes("application/json"))
         throw new Error("回應不是 JSON，請確認 LINE 登入狀態");
-      const page = await response.json();
-      if (!page || !Array.isArray(page.list))
-        throw new Error("回應缺少清單，無法確認是否讀取完整");
-      if (page.next != null && typeof page.next !== "string")
-        throw new Error("下一頁游標格式不符，無法繼續讀取");
-      return page;
+      return await response.json();
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async function fetchLineDirectoryPage(url, run) {
+    const page = await fetchLineJson(url, run);
+    if (!page || !Array.isArray(page.list))
+      throw new Error("回應缺少清單，無法確認是否讀取完整");
+    if (page.next != null && typeof page.next !== "string")
+      throw new Error("下一頁游標格式不符，無法繼續讀取");
+    return page;
+  }
+
+  // 對話清單一頁 25 位，最近有對話的在前（置頂優先）。
+  function lineChatsPageUrl(botId, next) {
+    const url = new URL(`/api/v2/bots/${botId}/chats`, location.origin);
+    url.searchParams.set("folderType", "ALL");
+    url.searchParams.set("limit", "25");
+    url.searchParams.set("prioritizePinnedChat", "true");
+    if (next) url.searchParams.set("next", next);
+    return url;
   }
 
   async function loadLineChatDirectory() {
@@ -917,12 +933,7 @@
     try {
       do {
         if (!isCurrent()) return;
-        const url = new URL(`/api/v2/bots/${botId}/chats`, location.origin);
-        url.searchParams.set("folderType", "ALL");
-        url.searchParams.set("limit", "25");
-        url.searchParams.set("prioritizePinnedChat", "true");
-        if (next) url.searchParams.set("next", next);
-        const page = await fetchLineDirectoryPage(url, run);
+        const page = await fetchLineDirectoryPage(lineChatsPageUrl(botId, next), run);
         if (!isCurrent()) return;
         for (const chat of page.list) {
           if (!chat || typeof chat.chatId !== "string" || !chat.chatId)
@@ -1195,16 +1206,35 @@
     return result;
   }
 
-  async function syncLineCustomers() {
+  // 同步客戶不受群發作業或後台帳號限制，有懶惰蟲就能同步；只防同一分頁重複執行：
+  // 進階選單與群發視窗同時按時共用同一次同步（讀 LINE 名單會中斷前一次讀取）。
+  let lineCustomerSync = null;
+  function syncLineCustomers() {
     const groupId = getOaId();
+    if (lineCustomerSync?.groupId === groupId) return lineCustomerSync.promise;
+    const promise = runLineCustomerSync(groupId).finally(() => {
+      if (lineCustomerSync?.promise === promise) lineCustomerSync = null;
+    });
+    lineCustomerSync = { groupId, promise };
+    return promise;
+  }
+
+  async function runLineCustomerSync(groupId) {
     // 只有完整讀完 LINE 所有分頁，才允許整份取代後端清單。
     const rows = await loadLineChatDirectory();
     if (!Array.isArray(rows)) throw new Error("LINE 名單未讀取完整，未上傳後端" + (lineChatDirectoryRun?.error ? `：${lineChatDirectoryRun.error}` : ""));
     if (getOaId() !== groupId) throw new Error("官方帳號已變更，未上傳名單");
     if (new Blob([JSON.stringify(rows)]).size > 8000000)
       throw new Error("完整名單超過 8 MB，未上傳；需要後端提供分批匯入功能");
+    // 誰同步的：帶後台帳號（沒設就不帶）；官方帳號名稱讓後端對到 AI 官方帳號、自動記下官方後台編號
+    // （之後後台「開官方聊天室」就能直接開）。body 格式不變，舊版照常可用。
+    const syncedBy = getDispatcher();
+    const oaName = getOaName();
+    const headers = {};
+    if (syncedBy) headers["X-Synced-By"] = encodeURIComponent(syncedBy);
+    if (oaName) headers["X-Oa-Name"] = encodeURIComponent(oaName);
     const result = await lineBackendRequest("POST",
-      `/line-oa/${encodeURIComponent(groupId)}/customers`, rows);
+      `/line-oa/${encodeURIComponent(groupId)}/customers`, rows, undefined, headers);
     if (!result || result.groupId !== groupId || !Number.isInteger(result.count) ||
         result.count < 0 || typeof result.replaced !== "boolean" ||
         (rows.length > 0 && (!result.replaced || result.count !== rows.length)) ||
@@ -1793,7 +1823,9 @@
     const status = dialog.querySelector(".loe-customers-status");
     const list = dialog.querySelector(".loe-customers-list");
     find("account-name").textContent = getOaName() || "目前官方帳號";
-    const current = () => !state.closed && getOaId() === groupId && getDispatcher() === account;
+    // 同步客戶只需在同一官方帳號；其餘操作（勾選、傳送）另需同一後台帳號
+    const onOa = () => !state.closed && getOaId() === groupId;
+    const current = () => onOa() && getDispatcher() === account;
     // LINE chatId：U＝個人、C＝群組聊天、R＝多人聊天室；「群組不發送」開啟時剔除 C 開頭
     const isGroupChat = id => id.startsWith("C");
     const effectiveChatIds = () => [...state.selected.keys()]
@@ -1926,7 +1958,8 @@
       find("all").disabled = locked || state.syncing || (!allBusy && state.loading);
       find("all").textContent = state.allController ? "取消全選讀取" : "全選所有人";
       find("clear").disabled = locked || state.syncing || (!state.selected.size && !allBusy);
-      find("reload").disabled = locked || allBusy || state.loading;
+      // 同步客戶不受群發作業鎖定，只防重複同步
+      find("reload").disabled = state.syncing;
       find("sync-label").textContent = state.syncing ? "同步中…" : "同步客戶";
       searchInput.disabled = dialog.querySelector('.loe-customers-search button').disabled = state.syncing;
       const hasContent = state.messageType === "text" ? !!textInput.value.trim() :
@@ -2130,21 +2163,22 @@
     find("prev").addEventListener("click", () => void loadPage(state.page - 1));
     find("next").addEventListener("click", () => void loadPage(state.page + 1));
     find("reload").addEventListener("click", async () => {
-      if (!current() || jobView?.locked() || state.syncing || state.allController || state.loading) return;
-      state.syncing = true; clearTimeout(state.searchTimer);
+      // 作業進行中也可同步：只刷新左側可選清單，作業的收件人固定在提交時的快照、不受影響
+      if (!onOa() || state.syncing) return;
+      state.syncing = true; clearTimeout(state.searchTimer); stopAll();
       setStatus("正在同步 LINE 客戶清單…"); updateControls();
       try {
         const result = await syncLineCustomers();
-        if (!current()) return;
+        if (!onOa()) return;
         state.search = searchInput.value.trim();
         const refreshed = await loadPage(1);
-        if (current() && refreshed) setStatus(result.replaced ? `已同步 ${result.count.toLocaleString()} 位客戶` :
+        if (onOa() && refreshed) setStatus(result.replaced ? `已同步 ${result.count.toLocaleString()} 位客戶` :
           `LINE 清單為空，保留原本 ${result.count.toLocaleString()} 位客戶`);
       } catch (error) {
-        if (current()) setStatus(error.message || "同步失敗，請稍後重試", true);
+        if (onOa()) setStatus(error.message || "同步失敗，請稍後重試", true);
       } finally {
         state.syncing = false;
-        if (current()) updateControls();
+        if (onOa()) updateControls();
       }
     });
     find("all").addEventListener("click", () => void selectAll());
@@ -4750,6 +4784,269 @@
   }
 
   /* ---------------------------------------------------------------------- *
+   * 後台「開官方聊天室」→ 自動打開乘客對話
+   *   後台開啟 https://chat.line.biz/{botId}?uturnOpen={payload}（不知道 botId 時為 https://chat.line.biz/?uturnOpen=…）
+   *   payload＝base64url(UTF-8 JSON)：{ v: 1, oa: 官方帳號名稱, n: 乘客 LINE 名稱, at?: 乘客最後訊息時間(ms) }
+   *   1) botId：網址上的為準；沒有就依官方帳號名稱查（本機快取 → LINE 官方帳號清單）
+   *   2) 依乘客名稱翻對話清單找 chatId 並開啟；找不到就填入左側搜尋
+   *   ※ 後台已知道 chatId 時直接開 /{botId}/chat/{chatId}，不經這裡。
+   * ---------------------------------------------------------------------- */
+  const LINE_BOT_ID_RE = /^U[0-9a-f]{32}$/i;
+  const UTURN_OPEN_PAGE_LIMIT = 200; // 最多翻 200 頁（5,000 位）
+  const UTURN_OPEN_EXTRA_PAGES = 2; // 找到第一位後再多看 2 頁，抓近似時間的同名者
+  const UTURN_OPEN_NOTICE_KEY = "loe_uturn_open_notice_v1"; // 換頁後才顯示的提示（sessionStorage）
+  let lastUturnOpenPayload = null; // 冪等：同一 payload 只處理一次
+  let uturnOpenRun = null; // 自己的 run，不動同步客戶用的 lineChatDirectoryRun
+  let learnedOaBotName = "";
+  let chatKeysLogged = false;
+
+  function cleanupUturnOpenParam() {
+    try {
+      const u = new URL(location.href);
+      if (!u.searchParams.has("uturnOpen")) return;
+      u.searchParams.delete("uturnOpen");
+      history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+    } catch (_) {}
+  }
+  // 解不開或欄位不符回 null（直接忽略）
+  function decodeUturnOpenPayload(raw) {
+    try {
+      if (raw.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(raw)) return null;
+      const b64 = raw.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (raw.length % 4)) % 4);
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const data = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+      const n = typeof data?.n === "string" ? data.n.trim() : "";
+      if (data?.v !== 1 || !n) return null;
+      return {
+        oa: typeof data.oa === "string" ? data.oa.trim() : "",
+        n,
+        at: Number.isFinite(data.at) && data.at > 0 ? data.at : null,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // 官方帳號名稱比對：與車隊同口徑（去空白、變體符號、大小寫）；退一步再忽略 emoji
+  //（標頭的 emoji 可能是圖片，讀到的名稱會少掉 emoji）
+  const oaLooseKey = (s) => fleetLabelKey(s).replace(/[\p{Extended_Pictographic}‍]/gu, "");
+  function readOaBotNames() {
+    const v = storeGet(OA_BOT_NAMES_KEY, null);
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  }
+  function rememberOaBotNames(entries) {
+    const map = readOaBotNames();
+    let changed = false;
+    for (const [botId, name] of entries) {
+      if (LINE_BOT_ID_RE.test(botId) && name && map[botId] !== name) { map[botId] = name; changed = true; }
+    }
+    if (changed) storeSet(OA_BOT_NAMES_KEY, map);
+  }
+  // 在官方帳號頁順手記下「botId → 名稱」（維護迴圈呼叫，同一組只寫一次）
+  function learnOaBotName() {
+    if (location.hostname !== "chat.line.biz") return;
+    const botId = getOaId();
+    if (!LINE_BOT_ID_RE.test(botId)) return;
+    const name = getOaName();
+    if (!name || learnedOaBotName === botId + name) return;
+    learnedOaBotName = botId + name;
+    rememberOaBotNames([[botId, name]]);
+  }
+  // { botId: 名稱 } 中找名稱相符且唯一的 botId；沒有或不唯一回空字串
+  function findBotIdByName(map, oa) {
+    const pairs = Object.entries(map);
+    for (const key of [fleetLabelKey, oaLooseKey]) {
+      const want = key(oa);
+      if (!want) continue;
+      const ids = pairs.filter(([, name]) => key(name) === want).map(([botId]) => botId);
+      if (ids.length) return ids.length === 1 ? ids[0] : "";
+    }
+    return "";
+  }
+  // LINE 內部官方帳號清單（格式未公開，盡力解析；看不懂就當查不到）
+  async function fetchLineBotNames(run) {
+    const found = [];
+    const cursors = new Set();
+    let next = "";
+    for (let page = 0; page < 10; page++) {
+      const url = new URL("/api/v1/bots", location.origin);
+      url.searchParams.set("noFilter", "true");
+      url.searchParams.set("limit", "1000");
+      if (next) url.searchParams.set("next", next);
+      const data = await fetchLineJson(url, run);
+      const list = Array.isArray(data) ? data : [data?.list, data?.bots, data?.items].find(Array.isArray) || [];
+      for (const item of list) {
+        const botId = [item?.botId, item?.mid, item?.id, item?.bot?.botId]
+          .find((v) => typeof v === "string" && LINE_BOT_ID_RE.test(v));
+        const name = [item?.name, item?.displayName, item?.botName, item?.profile?.name, item?.bot?.name]
+          .find((v) => typeof v === "string" && v.trim());
+        if (botId && name) found.push([botId, name.trim()]);
+      }
+      next = typeof data?.next === "string" ? data.next : "";
+      if (!next || cursors.has(next)) break;
+      cursors.add(next);
+    }
+    return found;
+  }
+  async function resolveUturnOpenBotId(oa, run) {
+    const here = getOaId();
+    const map = readOaBotNames();
+    const cached = oa ? findBotIdByName(map, oa) : "";
+    if (LINE_BOT_ID_RE.test(here)) {
+      // 網址上的 botId 為準；只有快取明確記得「這裡是別的官方帳號」且名稱對到另一個時才改用
+      //（從根網址進來時 LINE 可能先跳到上次用的官方帳號）
+      return cached && cached !== here && map[here] ? cached : here;
+    }
+    if (!oa) return "";
+    if (cached) return cached;
+    // 官方帳號清單另開 run：清單逾時不影響後續翻對話；整個 run 被取代時一併中止
+    const listRun = { controller: new AbortController() };
+    run.controller.signal.addEventListener("abort", () => listRun.controller.abort(), { once: true });
+    let listed = [];
+    try { listed = await fetchLineBotNames(listRun); } catch (_) {}
+    rememberOaBotNames(listed);
+    return findBotIdByName(Object.fromEntries(listed), oa);
+  }
+
+  // 對話的時間欄位尚未確認：依常見欄位找毫秒、秒或 ISO 時間
+  function chatTimestamp(chat) {
+    for (const v of [chat.lastEventAt, chat.latestEventAt, chat.lastMessageAt, chat.updatedAt,
+        chat.lastMessage?.createdAt, chat.latestMessage?.createdAt, chat.lastMessage?.timestamp, chat.timestamp]) {
+      const t = typeof v === "number" ? v : typeof v === "string" ? (/^\d+$/.test(v) ? Number(v) : Date.parse(v)) : NaN;
+      if (Number.isFinite(t) && t > 0) return t < 1e12 ? t * 1000 : t;
+    }
+    return null;
+  }
+  // 依乘客名稱翻對話清單；找到第一位後再多看幾頁就停。被取代時回 null。
+  async function findChatsByName(botId, name, run, onProgress) {
+    const want = fleetLabelKey(name);
+    if (!want) return [];
+    const matches = new Map();
+    const cursors = new Set();
+    let next = "", seen = 0, firstMatchPage = -1;
+    for (let page = 0; page < UTURN_OPEN_PAGE_LIMIT; page++) {
+      const data = await fetchLineDirectoryPage(lineChatsPageUrl(botId, next), run);
+      if (uturnOpenRun !== run) return null;
+      for (const chat of data.list) {
+        if (!chat || typeof chat.chatId !== "string" || !chat.chatId) continue;
+        if (!chatKeysLogged) {
+          // 只記欄位名稱（不含內容），日後調整時間欄位用
+          chatKeysLogged = true;
+          console.debug("[uturn] LINE 對話欄位", Object.fromEntries(Object.entries(chat)
+            .map(([k, v]) => [k, v && typeof v === "object" ? Object.keys(v) : typeof v])));
+        }
+        seen++;
+        const profile = chat.profile || {};
+        if (fleetLabelKey(profile.name || profile.nickname) === want && !matches.has(chat.chatId))
+          matches.set(chat.chatId, { chatId: chat.chatId, at: chatTimestamp(chat) });
+      }
+      onProgress(seen);
+      if (matches.size && firstMatchPage < 0) firstMatchPage = page;
+      if (firstMatchPage >= 0 && page - firstMatchPage >= UTURN_OPEN_EXTRA_PAGES) break;
+      next = data.next || "";
+      if (!next || cursors.has(next)) break;
+      cursors.add(next);
+    }
+    return [...matches.values()];
+  }
+
+  // 可改文字的常駐 toast（翻頁進度用）
+  function progressToast(message) {
+    const t = document.createElement("div");
+    t.className = "loe-toast show";
+    t.textContent = message;
+    document.body.appendChild(t);
+    return { set: (text) => { t.textContent = text; }, done: () => t.remove() };
+  }
+  // 盡力把名字填進左側對話清單的搜尋框（清單可能晚點才出現，最多等 10 秒）
+  function fillChatListSearch(text, deadline = Date.now() + 10000) {
+    try {
+      const visible = (el) => !el.disabled && el.getClientRects().length && !el.closest('[class*="loe-"], .sub-header');
+      const input = [document.querySelector("input.chatlist-search"),
+        ...document.querySelectorAll('input[type="search"], input[placeholder*="搜尋"], input[placeholder*="search" i]')]
+        .find((el) => el && visible(el) && el.getBoundingClientRect().left < window.innerWidth / 2);
+      if (!input) {
+        if (Date.now() < deadline) setTimeout(() => fillChatListSearch(text, deadline), 500);
+        return;
+      }
+      // 走原生 setter，框架（Vue/React）才會收到 input 事件後的新值
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, text);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.focus();
+    } catch (_) {}
+  }
+  function showUturnOpenNotice(notice) {
+    if (!notice || typeof notice.message !== "string") return;
+    toast(notice.message, notice.kind || "", 6000);
+    if (typeof notice.search === "string" && notice.search) fillChatListSearch(notice.search);
+  }
+  // location.assign 會整頁重載，提示先放 sessionStorage，載入後再顯示
+  function finishUturnOpen(path, notice, stay) {
+    if (stay) return showUturnOpenNotice(notice);
+    try {
+      if (notice) sessionStorage.setItem(UTURN_OPEN_NOTICE_KEY, JSON.stringify(notice));
+    } catch (_) {}
+    location.assign(path);
+  }
+  function resumeUturnOpenNotice() {
+    let notice = null;
+    try {
+      notice = JSON.parse(sessionStorage.getItem(UTURN_OPEN_NOTICE_KEY) || "null");
+      sessionStorage.removeItem(UTURN_OPEN_NOTICE_KEY);
+    } catch (_) {}
+    showUturnOpenNotice(notice);
+  }
+
+  async function openChatFromUturn({ oa, n, at }) {
+    if (uturnOpenRun) uturnOpenRun.controller.abort();
+    const run = (uturnOpenRun = { controller: new AbortController() });
+    const progress = progressToast(`正在找「${n}」…`);
+    try {
+      const botId = await resolveUturnOpenBotId(oa, run);
+      if (uturnOpenRun !== run) return;
+      if (!botId) {
+        toast(`找不到官方帳號「${oa}」，請請管理員到「客戶端OA設定」填寫官方後台網址`, "err", 8000);
+        return;
+      }
+      const matches = await findChatsByName(botId, n, run,
+        (seen) => progress.set(`正在找「${n}」…（已看 ${seen.toLocaleString()} 位）`));
+      if (!matches || uturnOpenRun !== run) return;
+      if (!matches.length) {
+        finishUturnOpen(`/${botId}`, { message: `沒找到「${n}」，請在左側搜尋`, kind: "warn", search: n },
+          getOaId() === botId);
+        return;
+      }
+      // 同名多位：有 at 就挑對話時間最接近的；沒有時間欄位就取第一位（最近有對話）
+      const timed = at ? matches.filter((m) => m.at) : [];
+      const pick = timed.length
+        ? timed.reduce((a, b) => (Math.abs(b.at - at) < Math.abs(a.at - at) ? b : a))
+        : matches[0];
+      const path = `/${botId}/chat/${encodeURIComponent(pick.chatId)}`;
+      finishUturnOpen(path, matches.length > 1
+        ? { message: `有 ${matches.length} 位同名「${n}」，已開啟最近有對話的那位`, kind: "warn" } : null,
+        location.pathname === path);
+    } catch (error) {
+      if (uturnOpenRun === run)
+        toast(run.timedOut ? `找「${n}」逾時，請在左側搜尋` : `找「${n}」失敗：${error.message || error}`, "err", 6000);
+    } finally {
+      progress.done();
+      if (uturnOpenRun === run) uturnOpenRun = null;
+    }
+  }
+  function checkUturnOpen() {
+    if (location.hostname !== "chat.line.biz" || window.top !== window.self) return;
+    let raw = null;
+    try { raw = new URL(location.href).searchParams.get("uturnOpen"); } catch (_) {}
+    if (raw === null) return;
+    cleanupUturnOpenParam();
+    if (raw === lastUturnOpenPayload) return;
+    lastUturnOpenPayload = raw; // 先標記再處理，避免 observer 重入重複觸發
+    const payload = decodeUturnOpenPayload(raw);
+    if (payload) openChatFromUturn(payload).catch(() => {});
+  }
+
+  /* ---------------------------------------------------------------------- *
    * 「貼底」捲動穩定器
    *   不論是什麼造成捲動位移，統一用聊天 App 標準做法處理：
    *   1) 用「真實 scroll 事件的 target」找出真正在捲的容器（不用猜選擇器）。
@@ -4896,6 +5193,9 @@
   addDispatchButton();
   ensureQuickBar();
   checkSendToken();
+  resumeUturnOpenNotice();
+  checkUturnOpen();
+  learnOaBotName();
   // 已設定後台帳號 → 拉雲端設定（快速回覆 + 該車隊 Webhook）覆蓋本地快取
   syncRemoteConfig();
   // 進頁面給 3 秒強制貼底窗，接住陸續載入的訊息（獨立心跳會持續拉底）
@@ -4922,6 +5222,8 @@
       addDispatchButton();
       ensureQuickBar();
       checkSendToken();
+      checkUturnOpen();
+      learnOaBotName();
       const oa = getOaId();
       const chat = getChatId();
       const apiContextChanged = oa !== lastOaId || chat !== lastChatId;

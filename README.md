@@ -2,6 +2,10 @@
 
 優惠券及多頁訊息已依後端完成版契約接上：同源讀清單、提交數字 ID、失效後重新選擇、授權恢復，以及保留原 requestId 重試。**依後端提供的進度，程式與單元測試已完成，但尚未部署及對真實 LINE 驗收。** 本次前端以模擬後端驗證，沒有部署後端或實發群發。原生格式與 Python 參考見[優惠券規格](docs/line-coupon-backend-spec.md)及[多頁訊息規格](docs/line-card-type-backend-spec.md)。
 
+版本 **1.50.0**：
+- 「同步客戶」不再被群發作業或後台帳號鎖住，只要裝了懶惰蟲、在官方帳號頁就能同步；同一分頁只防重複執行（進階選單與群發視窗同時按會共用同一次同步）。群發作業進行中同步只刷新左側可選清單，作業收件人仍是提交時的快照。上傳名單時多帶 `X-Synced-By`（後台帳號，`encodeURIComponent`；沒設後台帳號就不帶）與 `X-Oa-Name`（官方帳號名稱，`encodeURIComponent`）：後端依名稱對到客戶端OA設定的 AI 官方帳號，自動記下官方後台編號，同步過的客人在後台按「開官方聊天室」就直接開他的聊天室；不在懶惰蟲配置的 AI 官方帳號也能同步。body 格式不變。
+- 後台「開官方聊天室」：開啟 `https://chat.line.biz/{botId}?uturnOpen={payload}`（不知道 botId 時為 `https://chat.line.biz/?uturnOpen={payload}`），`payload` 為 UTF-8 JSON `{"v":1,"oa":"官方帳號名稱","n":"乘客 LINE 名稱","at":乘客最後訊息時間(ms，選填)}` 的 base64url（無 padding）。腳本讀到後先清掉網址參數（同一 payload 只處理一次），botId 以網址為準，沒有就依官方帳號名稱查（本機記住的「botId → 名稱」，在官方帳號頁時自動記；再查 LINE 官方帳號清單），查不到提示請管理員到「客戶端OA設定」填寫官方後台網址。接著翻對話清單（最近有對話的在前，找到第一位後再看 2 頁、最多 200 頁）比對乘客名稱：一位直接開啟；同名多位時依 `at` 挑對話時間最接近的（沒有時間欄位就開最近的）並提示；找不到則提示並把名字填進左側搜尋。對話時間欄位尚未確認，第一次翻頁會以 `console.debug` 印出對話物件的欄位名稱（不含內容）供調整。
+
 版本 **1.49.4**：「同步群編」成功提示改顯示車隊名稱（後端 `GET /line-ext-config` 一併回 `fleetName`；後端未更新前退回顯示代碼），未選車隊的提示不再舉代碼為例。
 
 版本 **1.49.3**：轉發設定的車隊搜尋清單改為 mousedown 只擋輸入框失焦、click 才選取，點選結果不會再被「點面板外關閉」吃掉。
@@ -39,14 +43,14 @@ Tampermonkey userscript：`uturn-line-ext.user.js`。版本 **1.48.0**：群發�
 | 按鈕 | 行為 | 後端端點 |
 | --- | --- | --- |
 | 身份授權 | 手動擷取必要 Cookie，更新設定中後台帳號的 extCookie | `PUT /line-ext-cookie?account={account}` |
-| 同步客戶 | 完整讀完目前官方帳號所有分頁，再上傳名稱、chatId、頭像網址 | `POST /line-oa/{groupId}/customers` |
+| 同步客戶 | 完整讀完目前官方帳號所有分頁，再上傳名稱、chatId、頭像網址（header `X-Synced-By`＝後台帳號、`X-Oa-Name`＝官方帳號名稱，皆選填） | `POST /line-oa/{groupId}/customers` |
 | 群發訊息 | 搜尋、單選、多選、全選所有人、直接傳送、toast 進度通知 | `GET /line-oa/{groupId}/customers` |
 
 基底：`https://right.mr-chi-tech.com`。`account` 來自轉發設定的「UTurn 後台帳號」；`groupId` 是目前 LINE 官方帳號網址中的第一個 U ID，須與配置中的官方帳號 GroupId 一致。
 
 Cookie 僅由手動點「身份授權」擷取，不在載入或切換對話時讀取，不寫入 GM 設定或 localStorage、不列印至 Console。必要欄位為 `ses`、`__Host-chat-ses`、`XSRF-TOKEN`；缺少時不覆寫後端。Tampermonkey 須設定 Advanced → Security → Allow scripts to access cookies: All。
 
-名單只在點「同步客戶」時才向 LINE 讀取，載入或切換官方帳號不預先抓取；不輸出 Console。視窗內的同名按鈕放在客戶列表上方，會完整讀取 LINE、同步後端，再刷新列表；進行中禁止重複同步與傳送，保留草稿、勾選及過濾設定。分頁失敗、官方帳號切換、完整名單超過 8,000,000 bytes 時不傳部分名單。空清單依後端規則保留舊資料；同步或刷新失敗會在畫面提示，不要求使用者查看 Console。
+名單只在點「同步客戶」時才向 LINE 讀取，載入或切換官方帳號不預先抓取；不輸出 Console。視窗內的同名按鈕放在客戶列表上方，會完整讀取 LINE、同步後端，再刷新列表；不受群發作業或後台帳號限制，只禁止重複同步，同步中暫停勾選與傳送，保留草稿、勾選及過濾設定。分頁失敗、官方帳號切換、完整名單超過 8,000,000 bytes 時不傳部分名單。空清單依後端規則保留舊資料；同步或刷新失敗會在畫面提示，不要求使用者查看 Console。
 
 ## 客戶選取與傳送
 
