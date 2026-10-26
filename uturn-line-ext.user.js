@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.50.0
+// @version      1.51.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -93,6 +93,8 @@
     "shield-check": '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"></path><path d="m9 12 2 2 4-4"></path>',
     refresh: '<path d="M20 7v5h-5M4 17v-5h5"></path><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"></path>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path>',
+    "file-text":
+      '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>',
   };
   const ic = (name) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -916,6 +918,29 @@
     return url;
   }
 
+  // 逐頁讀完官方帳號的所有對話（原始物件，依 chatId 去重）；isCurrent() 變 false 時回 null。
+  async function readAllLineChats(botId, run, isCurrent, onProgress) {
+    const chats = new Map();
+    const cursors = new Set();
+    let next = "";
+    do {
+      if (!isCurrent()) return null;
+      const page = await fetchLineDirectoryPage(lineChatsPageUrl(botId, next), run);
+      if (!isCurrent()) return null;
+      for (const chat of page.list) {
+        if (!chat || typeof chat.chatId !== "string" || !chat.chatId)
+          throw new Error("對話資料缺少 chatId，無法確認是否讀取完整");
+        chats.set(chat.chatId, chat);
+      }
+      onProgress?.(chats.size);
+      next = page.next || "";
+      if (next && cursors.has(next))
+        throw new Error("下一頁游標重複，停止讀取以避免無限循環");
+      if (next) cursors.add(next);
+    } while (next);
+    return [...chats.values()];
+  }
+
   async function loadLineChatDirectory() {
     if (location.hostname !== "chat.line.biz" || window.top !== window.self) return;
     const botId = getOaId();
@@ -927,35 +952,21 @@
     lineChatDirectoryRun = run;
     const isCurrent = () =>
       lineChatDirectoryRun === run && getOaId() === botId;
-    const rows = new Map();
-    const cursors = new Set();
-    let next = "";
     try {
-      do {
-        if (!isCurrent()) return;
-        const page = await fetchLineDirectoryPage(lineChatsPageUrl(botId, next), run);
-        if (!isCurrent()) return;
-        for (const chat of page.list) {
-          if (!chat || typeof chat.chatId !== "string" || !chat.chatId)
-            throw new Error("對話資料缺少 chatId，無法確認是否讀取完整");
-          const profile = chat.profile || {};
-          rows.set(chat.chatId, {
-            lineName: profile.name || profile.nickname || "（未提供名稱）",
-            chatId: chat.chatId,
-            // 與 LINE 前端 ProfileIcon 使用相同的頭像預覽網址。
-            avatarUrl:
-              profile.iconHash && profile.iconHash !== "biz-app"
-                ? `https://profile.line-scdn.net/${encodeURIComponent(profile.iconHash)}/preview`
-                : "",
-          });
-        }
-        next = page.next || "";
-        if (next && cursors.has(next))
-          throw new Error("下一頁游標重複，停止讀取以避免無限循環");
-        if (next) cursors.add(next);
-      } while (next);
-      if (!isCurrent()) return;
-      run.rows = Array.from(rows.values());
+      const chats = await readAllLineChats(botId, run, isCurrent);
+      if (!chats || !isCurrent()) return;
+      run.rows = chats.map((chat) => {
+        const profile = chat.profile || {};
+        return {
+          lineName: profile.name || profile.nickname || "（未提供名稱）",
+          chatId: chat.chatId,
+          // 與 LINE 前端 ProfileIcon 使用相同的頭像預覽網址。
+          avatarUrl:
+            profile.iconHash && profile.iconHash !== "biz-app"
+              ? `https://profile.line-scdn.net/${encodeURIComponent(profile.iconHash)}/preview`
+              : "",
+        };
+      });
       return run.rows;
     } catch (error) {
       if (!isCurrent()) return;
@@ -1206,6 +1217,17 @@
     return result;
   }
 
+  // 誰同步的：帶後台帳號（沒設就不帶）；官方帳號名稱讓後端對到 AI 官方帳號、自動記下官方後台編號
+  // （之後後台「開官方聊天室」就能直接開）。同步客戶與同步記事本共用。
+  function lineSyncHeaders() {
+    const syncedBy = getDispatcher();
+    const oaName = getOaName();
+    const headers = {};
+    if (syncedBy) headers["X-Synced-By"] = encodeURIComponent(syncedBy);
+    if (oaName) headers["X-Oa-Name"] = encodeURIComponent(oaName);
+    return headers;
+  }
+
   // 同步客戶不受群發作業或後台帳號限制，有懶惰蟲就能同步；只防同一分頁重複執行：
   // 進階選單與群發視窗同時按時共用同一次同步（讀 LINE 名單會中斷前一次讀取）。
   let lineCustomerSync = null;
@@ -1226,21 +1248,183 @@
     if (getOaId() !== groupId) throw new Error("官方帳號已變更，未上傳名單");
     if (new Blob([JSON.stringify(rows)]).size > 8000000)
       throw new Error("完整名單超過 8 MB，未上傳；需要後端提供分批匯入功能");
-    // 誰同步的：帶後台帳號（沒設就不帶）；官方帳號名稱讓後端對到 AI 官方帳號、自動記下官方後台編號
-    // （之後後台「開官方聊天室」就能直接開）。body 格式不變，舊版照常可用。
-    const syncedBy = getDispatcher();
-    const oaName = getOaName();
-    const headers = {};
-    if (syncedBy) headers["X-Synced-By"] = encodeURIComponent(syncedBy);
-    if (oaName) headers["X-Oa-Name"] = encodeURIComponent(oaName);
     const result = await lineBackendRequest("POST",
-      `/line-oa/${encodeURIComponent(groupId)}/customers`, rows, undefined, headers);
+      `/line-oa/${encodeURIComponent(groupId)}/customers`, rows, undefined, lineSyncHeaders());
     if (!result || result.groupId !== groupId || !Number.isInteger(result.count) ||
         result.count < 0 || typeof result.replaced !== "boolean" ||
         (rows.length > 0 && (!result.replaced || result.count !== rows.length)) ||
         (rows.length === 0 && result.replaced))
       throw new Error("後端回傳的名單結果不符，請重新讀取名單確認");
     return result;
+  }
+
+  /* ---------------------------------------------------------------------- *\
+   * 同步客人記事本：讀完目前官方帳號所有對話的 LINE 記事本，全部讀完才整份上傳後端
+   *（後端整份取代：沒送的對話＝沒有記事本，所以任何一步失敗都不上傳部分結果）。
+   * 記事本 API 未公開：依序試候選網址，第一個成功的整次沿用。
+   * ---------------------------------------------------------------------- */
+  const LINE_NOTE_URLS = [
+    (botId, chatId) => new URL(`/api/v1/bots/${botId}/chats/${encodeURIComponent(chatId)}/notes`, location.origin),
+    (botId, chatId) => new URL(`/api/v2/bots/${botId}/chats/${encodeURIComponent(chatId)}/notes`, location.origin),
+    (botId, chatId) => new URL(`/api/v1/bots/${botId}/chats/${encodeURIComponent(chatId)}/notes?limit=100`, location.origin),
+  ];
+  const LINE_NOTE_PAGE_LIMIT = 20; // 每位客人最多翻 20 頁記事本
+  const LINE_NOTE_CONCURRENCY = 4;
+  const lineNoteDebugLogged = { chat: false, note: false };
+
+  // 毫秒、秒（< 1e12）、數字字串或 ISO 字串 → 毫秒；看不懂回 0
+  function toEpochMs(v) {
+    const t = typeof v === "number" ? v : typeof v === "string" ? (/^\d+$/.test(v) ? Number(v) : Date.parse(v)) : NaN;
+    return Number.isFinite(t) && t > 0 ? Math.round(t < 1e12 ? t * 1000 : t) : 0;
+  }
+  const firstText = (values) => values.find((v) => typeof v === "string" && v.trim())?.trim() || "";
+  // 只記欄位名稱與型別（不含內容），日後調整欄位用
+  const debugKeys = (obj) => Object.fromEntries(Object.entries(obj || {})
+    .map(([k, v]) => [k, v && typeof v === "object" ? Object.keys(v) : typeof v]));
+
+  // 對話物件有明確的記事本旗標／數量（hasNote(s)、note(s)Count）且為 false／0 才略過；看不出來就照讀。
+  // 只認這幾個欄位名稱：記事本是整份取代，誤判略過會把後台的記事刪掉。
+  const LINE_NOTE_FLAG_RE = /^(has_?notes?|notes?_?count|number_?of_?notes)$/i;
+  function lineChatHasNoNotes(chat) {
+    const key = Object.keys(chat).find((k) => LINE_NOTE_FLAG_RE.test(k) && ["boolean", "number"].includes(typeof chat[k]));
+    return key ? !chat[key] : false;
+  }
+
+  function parseLineNote(note) {
+    if (!note || typeof note !== "object") return null;
+    if (!lineNoteDebugLogged.note) {
+      lineNoteDebugLogged.note = true;
+      console.debug("[uturn] LINE 記事本欄位", debugKeys(note));
+    }
+    const text = firstText([note.text, note.content, note.body, note.note]);
+    if (!text) return null;
+    return {
+      text,
+      authorName: firstText([note.createdBy?.name, note.author?.name, note.operator?.name,
+        note.creator?.name, note.updatedBy?.name]),
+      createdAt: [note.createdAt, note.created, note.createdTime, note.updatedAt].map(toEpochMs).find(Boolean) || 0,
+    };
+  }
+
+  // 讀一位客人的全部記事本；回應看不懂、游標重複或超過頁數上限都丟錯（不接受只讀一部分）
+  async function fetchLineChatNotes(makeUrl, botId, chatId, run) {
+    const notes = [];
+    const cursors = new Set();
+    let cursorKey = "", cursor = "";
+    for (let page = 0; page < LINE_NOTE_PAGE_LIMIT; page++) {
+      const url = makeUrl(botId, chatId);
+      if (cursor) url.searchParams.set(cursorKey, cursor);
+      const data = await fetchLineJson(url, run);
+      const list = Array.isArray(data) ? data : [data?.list, data?.notes, data?.items].find(Array.isArray);
+      if (!list) throw new Error("記事本回應缺少清單");
+      for (const note of list) {
+        const parsed = parseLineNote(note);
+        if (parsed) notes.push(parsed);
+      }
+      // 回應用哪個欄位給游標，下一頁就用對應的參數名
+      [cursorKey, cursor] = typeof data?.next === "string" && data.next ? ["next", data.next]
+        : typeof data?.nextCursor === "string" && data.nextCursor ? ["cursor", data.nextCursor] : ["", ""];
+      if (!cursor) return notes;
+      if (cursors.has(cursor)) throw new Error("記事本下一頁游標重複，未上傳");
+      cursors.add(cursor);
+    }
+    throw new Error(`有客人的記事本超過 ${LINE_NOTE_PAGE_LIMIT} 頁，未上傳`);
+  }
+
+  // 依序試候選網址，回傳 { makeUrl, notes }；全部失敗就停（不猜）
+  async function probeLineNoteUrl(botId, chatId, run) {
+    const failures = [];
+    for (const [index, makeUrl] of LINE_NOTE_URLS.entries()) {
+      try {
+        return { makeUrl, notes: await fetchLineChatNotes(makeUrl, botId, chatId, run) };
+      } catch (error) {
+        if (run.controller.signal.aborted) throw error;
+        failures.push(`候選 ${index + 1}：${error.message || error}`);
+      }
+    }
+    console.debug("[uturn] LINE 記事本端點都讀不到", failures);
+    throw new Error("讀不到 LINE 記事本（LINE 介面可能不同），請截圖 F12 Network 裡打開記事本時的請求給工程師");
+  }
+
+  // 同一分頁只跑一次（與同步客戶同樣不需後台帳號）
+  let lineNoteSync = null;
+  function syncLineNotes() {
+    const groupId = getOaId();
+    if (lineNoteSync?.groupId === groupId) return lineNoteSync.promise;
+    const promise = runLineNoteSync(groupId).finally(() => {
+      if (lineNoteSync?.promise === promise) lineNoteSync = null;
+    });
+    lineNoteSync = { groupId, promise };
+    return promise;
+  }
+
+  async function runLineNoteSync(botId) {
+    if (!LINE_BOT_ID_RE.test(botId)) throw new Error("請先選擇 LINE 官方帳號");
+    // 自己的 run，不動同步客戶用的 lineChatDirectoryRun
+    const run = { controller: new AbortController() };
+    const isCurrent = () => getOaId() === botId;
+    const ensureCurrent = () => {
+      if (isCurrent()) return;
+      run.controller.abort();
+      throw new Error("官方帳號已變更，未上傳");
+    };
+    const progress = progressToast("讀取客人名單中…");
+    try {
+      const chats = await readAllLineChats(botId, run, isCurrent,
+        (n) => progress.set(`讀取客人名單中…（已讀 ${n.toLocaleString()} 位）`));
+      ensureCurrent();
+      if (chats.length && !lineNoteDebugLogged.chat) {
+        lineNoteDebugLogged.chat = true;
+        console.debug("[uturn] 記事本：對話欄位", debugKeys(chats[0]), "profile 欄位", debugKeys(chats[0].profile));
+      }
+      const targets = chats.filter((chat) => !lineChatHasNoNotes(chat));
+      const notesByChat = new Map();
+      let makeUrl = null;
+      const readChat = async (chat) => {
+        if (makeUrl) notesByChat.set(chat.chatId, await fetchLineChatNotes(makeUrl, botId, chat.chatId, run));
+        else {
+          const probed = await probeLineNoteUrl(botId, chat.chatId, run);
+          makeUrl = probed.makeUrl;
+          notesByChat.set(chat.chatId, probed.notes);
+        }
+        progress.set(`讀取記事本中…（${notesByChat.size.toLocaleString()} / ${targets.length.toLocaleString()} 位）`);
+      };
+      progress.set(`讀取記事本中…（0 / ${targets.length.toLocaleString()} 位）`);
+      // 第一位單獨讀，先找出可用的記事本網址
+      if (targets.length) await readChat(targets[0]);
+      for (let i = 1; i < targets.length; i += LINE_NOTE_CONCURRENCY) {
+        ensureCurrent();
+        await Promise.all(targets.slice(i, i + LINE_NOTE_CONCURRENCY).map(readChat));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      ensureCurrent();
+
+      const payload = targets.filter((chat) => notesByChat.get(chat.chatId).length).map((chat) => {
+        const profile = chat.profile || {};
+        return {
+          chatId: chat.chatId,
+          lineName: firstText([profile.name]), // LINE 原本的名稱
+          nickname: firstText([profile.nickname, chat.nickname]), // 客服改的暱稱（沒有就空字串）
+          notes: notesByChat.get(chat.chatId),
+        };
+      });
+      if (new Blob([JSON.stringify(payload)]).size > 8000000)
+        throw new Error("完整記事本超過 8 MB，未上傳；需要後端提供分批匯入功能");
+      progress.set("上傳記事本中…");
+      const result = await lineBackendRequest("POST",
+        `/line-oa/${encodeURIComponent(botId)}/customer-notes`, payload, undefined, lineSyncHeaders());
+      if (!result || result.groupId !== botId || !Number.isInteger(result.chats) || result.chats < 0 ||
+          !Number.isInteger(result.notes) || result.notes < 0)
+        throw new Error("後端回傳的記事本結果不符，請重新同步確認");
+      return result;
+    } catch (error) {
+      if (!isCurrent()) throw new Error("官方帳號已變更，未上傳");
+      if (run.timedOut) throw new Error("讀取 LINE 逾時，未上傳記事本");
+      throw error;
+    } finally {
+      run.controller.abort(); // 失敗時停掉其他還在讀的請求
+      progress.done();
+    }
   }
 
   async function fetchSavedLineCustomers(groupId, pageNum, pageSize, search, signal) {
@@ -3960,6 +4144,14 @@
           : `LINE 清單為空，後端保留原本 ${result.count} 位客戶`,
       },
       {
+        id: "loe-line-notes-button",
+        label: "同步客人記事本",
+        icon: "file-text",
+        title: "讀完 LINE 全部對話的記事本，整份更新目前官方帳號的後端客人記事本",
+        run: syncLineNotes,
+        done: (result) => `已同步記事本：${result.chats} 位客人、${result.notes} 則`,
+      },
+      {
         id: "loe-line-customers-button",
         label: "群發訊息",
         icon: "send",
@@ -4912,8 +5104,8 @@
   function chatTimestamp(chat) {
     for (const v of [chat.lastEventAt, chat.latestEventAt, chat.lastMessageAt, chat.updatedAt,
         chat.lastMessage?.createdAt, chat.latestMessage?.createdAt, chat.lastMessage?.timestamp, chat.timestamp]) {
-      const t = typeof v === "number" ? v : typeof v === "string" ? (/^\d+$/.test(v) ? Number(v) : Date.parse(v)) : NaN;
-      if (Number.isFinite(t) && t > 0) return t < 1e12 ? t * 1000 : t;
+      const t = toEpochMs(v);
+      if (t) return t;
     }
     return null;
   }
