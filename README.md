@@ -2,6 +2,15 @@
 
 優惠券及多頁訊息已依後端完成版契約接上：同源讀清單、提交數字 ID、失效後重新選擇、授權恢復，以及保留原 requestId 重試。**依後端提供的進度，程式與單元測試已完成，但尚未部署及對真實 LINE 驗收。** 本次前端以模擬後端驗證，沒有部署後端或實發群發。原生格式與 Python 參考見[優惠券規格](docs/line-coupon-backend-spec.md)及[多頁訊息規格](docs/line-card-type-backend-spec.md)。
 
+版本 **1.52.0**：「同步客戶」與「同步客人記事本」合併為進階功能的「同步客戶與記事本」（群發視窗的同名按鈕也是同一條流程），並改為分批上傳，**需要後端新增同步工作端點，契約見下方「後端需同步：同步工作（syncs）」**；舊的 `POST /line-oa/{groupId}/customers` 與 `POST /line-oa/{groupId}/customer-notes` 前端不再呼叫。2026-10-26 在 chat.line.biz 對約 44,000 位客人的官方帳號實測的依據：
+- 對話清單 `GET /api/v2/bots/{botId}/chats` 每頁最多 25 位（`limit` 超過回 400 `exceeded_limit`），游標分頁只能一頁接一頁翻，約 2 頁／秒，4.4 萬位約 16 分鐘，無法平行。
+- 記事本是 LINE 介面本身用的 `GET /api/v1/bots/{botId}/chats/{chatId}/notes?limit=20&withTotal=true`，回 `{ list: [{ noteId, body, createdAt, updatedAt, userBizId }], total }`；25 個同時打約 0.2 秒、沒有 429，可以平行。內容取 `body`；`total` 與讀到的筆數不符視為沒讀完。
+- 記事本只有作者的 `userBizId`，名字用 `GET /api/v1/bots/{botId}/owners`（`{ list: [{ bizId, name }] }`）換，查不到就空字串。
+- 對話物件 `profile.name` 是客人 LINE 原名、`profile.nickname` 是客服改的暱稱；沒有「有無記事本」欄位，所以每位都要讀（抽樣約 17% 有記事本）。
+- 整份名單約 12.7 MB，單一請求上傳不可行（原 8 MB 上限直接失敗，而且失敗提示被「同步中切換對話」吃掉，這兩點都已處理）。
+
+流程：先 `POST /line-oa/{groupId}/syncs` 建同步工作拿 `syncId`，讀一次成員清單；翻到一頁對話就把那 25 位的記事本交給 12 路工作池平行讀；每湊滿 500 位就 `PUT …/syncs/{syncId}/chunks/{index}` 上傳一個 chunk（客戶列＋有記事本的客人）；名單翻完、記事本讀完、chunk 都傳完才 `POST …/commit` 帶總數，由後端對過筆數整份換掉舊資料。任何一步失敗（LINE 讀取失敗／逾時、官方帳號切換、後端回應不符）就 `DELETE …/syncs/{syncId}`，後端資料維持原樣。LINE 429／5xx 與後端暫時性錯誤各退避重試 3 次（同 index 的 chunk 重送＝覆蓋）。常駐 toast 顯示「名單已讀／記事本已讀／已上傳」與已花分鐘數；完成提示只要仍在同一官方帳號就會顯示。空清單不 commit、不更動後端。
+
 版本 **1.51.0**：「進階功能」新增「同步客人記事本」（不需後台帳號，只要在官方帳號頁、同一分頁不重複執行）。先讀完目前官方帳號的所有對話（`GET /api/v2/bots/{botId}/chats`，自己的讀取流程，不影響「同步客戶」），再逐位讀 LINE 記事本（同時 4 位，每位最多 20 頁），全部讀完才 `POST /line-oa/{groupId}/customer-notes` 整份上傳：body 為 `[{chatId, lineName, nickname, notes:[{text, authorName, createdAt}]}]`，只放至少有一則非空記事本的客人（`lineName`＝LINE 原本名稱 `profile.name`，`nickname`＝客服改的暱稱 `profile.nickname`，沒有就空字串；`createdAt` 毫秒，不知道為 0），header 與同步客戶相同（`X-Synced-By`、`X-Oa-Name`），超過 8,000,000 bytes 不上傳。後端整份取代（沒送的客人＝沒有記事本），所以任何一位讀取失敗、逾時或官方帳號切換都整次不上傳。記事本 API 未公開：第一位客人依序試 `/api/v1/bots/{botId}/chats/{chatId}/notes`、`/api/v2/…/notes`、`/api/v1/…/notes?limit=100`，第一個回 2xx 且有清單（陣列或 `list`／`notes`／`items`，`next`／`nextCursor` 游標）的整次沿用；都不行就提示截圖 F12 Network 給工程師。對話物件若有名稱含 `note` 的布林／數字欄位且為 false／0 就略過該客人。對話、profile 與第一則記事本的欄位名稱（不含內容）會以 `console.debug` 印出供調整。
 
 版本 **1.50.0**：
@@ -38,15 +47,32 @@ Tampermonkey userscript：`uturn-line-ext.user.js`。版本 **1.48.0**：群發�
 
 後端已提供圖片功能，現行契約見 [OpenAPI](docs/line-messages.openapi.json)。[圖片規格與 Python 範例](docs/line-image-only-spec.md)保留 LINE 兩段式請求與後端 Python 參考；前端只使用後端的 mediaId。
 
+## 後端需同步：同步工作（syncs）
+
+前端 1.52.0 起改用以下端點同步客戶與記事本，請後端實作後再部署前端。所有請求都帶 `X-Synced-By`（後台帳號，`encodeURIComponent`，沒設就不帶）與 `X-Oa-Name`（官方帳號名稱，`encodeURIComponent`），語意同原本的 `POST /customers`；以建立工作那次為準即可。
+
+| 端點 | 用途 | 請求 body | 成功回應 |
+| --- | --- | --- | --- |
+| `POST /line-oa/{groupId}/syncs` | 建立同步工作（暫存區） | `{}` | `201 { groupId, syncId }` |
+| `PUT /line-oa/{groupId}/syncs/{syncId}/chunks/{index}` | 上傳第 `index`（從 0 起）批，最多 500 位 | `{ customers: [{ lineName, chatId, avatarUrl }], notes: [{ chatId, lineName, nickname, notes: [{ text, authorName, createdAt }] }] }` | `200 { syncId, index, customers: <customers 長度>, notes: <notes 長度> }` |
+| `POST /line-oa/{groupId}/syncs/{syncId}/commit` | 全部傳完，整份取代 | `{ chunks, customers, chatsWithNotes, notes }`（chunk 數、客戶總數、有記事本的客人數、記事總則數） | `200 { groupId, replaced: true, customers, chatsWithNotes, notes }`（數字＝實際寫入） |
+| `DELETE /line-oa/{groupId}/syncs/{syncId}` | 撤銷未 commit 的工作 | — | `204` |
+
+規則：
+- `customers` 列格式同原本 `POST /customers` 的陣列元素；`notes` 列格式同原本 `POST /customer-notes` 的陣列元素（`createdAt` 毫秒，不知道為 0；`authorName` 可能空字串），只放至少有一則記事本的客人。一位客人只會出現在一個 chunk。
+- chunk 寫進 `syncId` 的暫存區，**同一個 `index` 重送就覆蓋**（前端網路不穩會重送），不可累加。
+- commit 時先核對暫存區：chunk 數、客戶總數、有記事本的客人數、記事總則數四個數字都要和 body 一致，不一致回 `409 { code: "SYNC_COUNT_MISMATCH", detail }` 且不更動正式資料；一致才在同一交易內用暫存區整份取代該官方帳號的客戶清單與記事本（沒出現的客人＝刪除、沒出現的記事本＝刪除），並沿用原本依 `X-Oa-Name` 記下官方後台編號的行為。
+- commit 成功後的 `DELETE` 回 `404` 或 `409` 即可，不得動到已 commit 的資料；未 commit 的工作建議 2 小時後自動清掉。同一官方帳號可同時存在多個未 commit 的工作（不同客服各按一次），後 commit 的覆蓋先的。
+- 同步中前端不會呼叫舊的 `POST /customers`、`POST /customer-notes`；`GET /line-oa/{groupId}/customers` 分頁讀取不變。
+
 ## 進階功能
 
-工具列顯示有齒輪圖示的「進階功能」，點開後有以下四個附圖示的選單項目。可點外面或按 Esc 關閉，也可用方向鍵選取。
+工具列顯示有齒輪圖示的「進階功能」，點開後有以下三個附圖示的選單項目。可點外面或按 Esc 關閉，也可用方向鍵選取。
 
 | 按鈕 | 行為 | 後端端點 |
 | --- | --- | --- |
 | 身份授權 | 手動擷取必要 Cookie，更新設定中後台帳號的 extCookie | `PUT /line-ext-cookie?account={account}` |
-| 同步客戶 | 完整讀完目前官方帳號所有分頁，再上傳名稱、chatId、頭像網址（header `X-Synced-By`＝後台帳號、`X-Oa-Name`＝官方帳號名稱，皆選填） | `POST /line-oa/{groupId}/customers` |
-| 同步客人記事本 | 讀完目前官方帳號所有對話的 LINE 記事本後整份上傳（後端整份取代，失敗不傳部分結果；header 同同步客戶） | `POST /line-oa/{groupId}/customer-notes` |
+| 同步客戶與記事本 | 翻完目前官方帳號所有對話並平行讀每位客人的 LINE 記事本，每 500 位上傳一個 chunk 到同步工作，全部完成才 commit 整份取代（失敗就撤銷，後端資料維持原樣；header `X-Synced-By`＝後台帳號、`X-Oa-Name`＝官方帳號名稱，皆選填） | `POST /line-oa/{groupId}/syncs`、`PUT …/syncs/{syncId}/chunks/{index}`、`POST …/syncs/{syncId}/commit`、`DELETE …/syncs/{syncId}` |
 | 群發訊息 | 搜尋、單選、多選、全選所有人、直接傳送、toast 進度通知 | `GET /line-oa/{groupId}/customers` |
 
 基底：`https://right.mr-chi-tech.com`。`account` 來自轉發設定的「UTurn 後台帳號」；`groupId` 是目前 LINE 官方帳號網址中的第一個 U ID，須與配置中的官方帳號 GroupId 一致。
