@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.52.0
+// @version      1.52.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -1283,7 +1283,8 @@
   function lineCustomerRow(chat) {
     const profile = chat.profile || {};
     return {
-      lineName: profile.name || profile.nickname || "（未提供名稱）",
+      lineName: profile.name || profile.nickname || "（未提供名稱）", // LINE 原名（沒有才用暱稱）
+      nickname: firstText([profile.nickname, chat.nickname]), // 客服改的暱稱（沒有就空字串）
       chatId: chat.chatId,
       // 與 LINE 前端 ProfileIcon 使用相同的頭像預覽網址。
       avatarUrl: profile.iconHash && profile.iconHash !== "biz-app"
@@ -1306,11 +1307,36 @@
       : "LINE 清單為空，未更動後端資料";
   }
 
+  // 各官方帳號最後同步時間（後端名單的 updatedAt；同步成功即更新），顯示在同步按鈕後面
+  const lineLastSyncAt = new Map();
+  function lineLastSyncLabel(groupId) {
+    const at = lineLastSyncAt.get(groupId);
+    if (at === undefined) return "";
+    if (!at) return "（尚未同步）";
+    const d = new Date(at), pad = (n) => String(n).padStart(2, "0");
+    return `（最後同步 ${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}）`;
+  }
+  function rememberLineLastSync(groupId, updatedAt) {
+    const ms = updatedAt ? Date.parse(updatedAt) : 0;
+    lineLastSyncAt.set(groupId, Number.isFinite(ms) ? ms : 0);
+  }
+  // 向後端讀最後同步時間（只取 1 筆名單）；讀不到就不顯示
+  async function refreshLineLastSync(groupId) {
+    if (!LINE_BOT_ID_RE.test(groupId)) return;
+    try {
+      const data = await lineBackendRequest("GET", `/line-oa/${encodeURIComponent(groupId)}/customers?pageNum=1&pageSize=1`);
+      if (data?.groupId === groupId) rememberLineLastSync(groupId, data.updatedAt);
+    } catch (_) {}
+  }
+
   let lineSync = null;
   function syncLineData() {
     const groupId = getOaId();
     if (lineSync?.groupId === groupId) return lineSync.promise;
-    const promise = runLineSync(groupId).finally(() => {
+    const promise = runLineSync(groupId).then((result) => {
+      if (result?.replaced) lineLastSyncAt.set(groupId, Date.now());
+      return result;
+    }).finally(() => {
       if (lineSync?.promise === promise) lineSync = null;
     });
     lineSync = { groupId, promise };
@@ -1485,6 +1511,7 @@
       return { chatId: row.chatId, lineName: String(row.lineName || "（未提供名稱）"),
         avatarUrl: typeof row.avatarUrl === "string" ? row.avatarUrl : "" };
     });
+    rememberLineLastSync(groupId, data.updatedAt);
     return { ...data, customers };
   }
 
@@ -2180,7 +2207,7 @@
       find("clear").disabled = locked || state.syncing || (!state.selected.size && !allBusy);
       // 同步客戶不受群發作業鎖定，只防重複同步
       find("reload").disabled = state.syncing;
-      find("sync-label").textContent = state.syncing ? "同步中…" : "同步客戶與記事本";
+      find("sync-label").textContent = state.syncing ? "同步中…" : "同步客戶與記事本" + lineLastSyncLabel(getOaId());
       searchInput.disabled = dialog.querySelector('.loe-customers-search button').disabled = state.syncing;
       const hasContent = state.messageType === "text" ? !!textInput.value.trim() :
         state.messageType === "image" ? !!state.files.length && imageReady() :
@@ -4120,6 +4147,9 @@
       menu.hidden = false;
       anchor.setAttribute("aria-expanded", "true");
       lineAdvancedMenu.groupId = getOaId(); lineAdvancedMenu.account = getDispatcher();
+      const syncGroup = lineAdvancedMenu.groupId;
+      lineAdvancedMenu.refreshSyncLabel?.();
+      refreshLineLastSync(syncGroup).then(() => { if (getOaId() === syncGroup) lineAdvancedMenu?.refreshSyncLabel?.(); });
       const rect = anchor.getBoundingClientRect();
       menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8))}px`;
       menu.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - menu.offsetHeight - 8))}px`;
@@ -4196,6 +4226,10 @@
       button.insertAdjacentHTML("beforeend", ic(action.icon));
       const label = document.createElement("span"); label.textContent = action.label;
       button.appendChild(label);
+      // 同步按鈕後面顯示最後同步時間
+      const idleLabel = () => action.id === "loe-line-sync-button" ? action.label + lineLastSyncLabel(getOaId()) : action.label;
+      if (action.id === "loe-line-sync-button")
+        lineAdvancedMenu.refreshSyncLabel = () => { if (!button.disabled) label.textContent = idleLabel(); };
       button.addEventListener("click", async (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -4220,7 +4254,7 @@
             toast(error.message || "操作失敗，請稍後重試", "error", 6000);
         } finally {
           button.disabled = false;
-          label.textContent = action.label;
+          label.textContent = idleLabel();
         }
       });
       menu.appendChild(button);

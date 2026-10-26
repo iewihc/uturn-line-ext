@@ -2,6 +2,8 @@
 
 優惠券及多頁訊息已依後端完成版契約接上：同源讀清單、提交數字 ID、失效後重新選擇、授權恢復，以及保留原 requestId 重試。**依後端提供的進度，程式與單元測試已完成，但尚未部署及對真實 LINE 驗收。** 本次前端以模擬後端驗證，沒有部署後端或實發群發。原生格式與 Python 參考見[優惠券規格](docs/line-coupon-backend-spec.md)及[多頁訊息規格](docs/line-card-type-backend-spec.md)。
 
+版本 **1.52.1**（只動同步）：客戶列多帶 `nickname`（客服在官方後台改的暱稱；`lineName` 仍是 LINE 原名，沒有原名才用暱稱），後端兩種都存、後台都會顯示。「進階功能 → 同步客戶與記事本」與群發視窗的同步按鈕後面顯示最後同步時間（例：「同步客戶與記事本（最後同步 10/26 17:12）」，沒同步過顯示「尚未同步」）：打開選單時以 `GET /line-oa/{groupId}/customers?pageNum=1&pageSize=1` 讀後端的 `updatedAt`，同步成功即更新。後端同步工作端點已上線（right-backend da40f3f0）。
+
 版本 **1.52.0**：「同步客戶」與「同步客人記事本」合併為進階功能的「同步客戶與記事本」（群發視窗的同名按鈕也是同一條流程），並改為分批上傳，**需要後端新增同步工作端點，契約見下方「後端需同步：同步工作（syncs）」**；舊的 `POST /line-oa/{groupId}/customers` 與 `POST /line-oa/{groupId}/customer-notes` 前端不再呼叫。2026-10-26 在 chat.line.biz 對約 44,000 位客人的官方帳號實測的依據：
 - 對話清單 `GET /api/v2/bots/{botId}/chats` 每頁最多 25 位（`limit` 超過回 400 `exceeded_limit`），游標分頁只能一頁接一頁翻，約 2 頁／秒，4.4 萬位約 16 分鐘，無法平行。
 - 記事本是 LINE 介面本身用的 `GET /api/v1/bots/{botId}/chats/{chatId}/notes?limit=20&withTotal=true`，回 `{ list: [{ noteId, body, createdAt, updatedAt, userBizId }], total }`；25 個同時打約 0.2 秒、沒有 429，可以平行。內容取 `body`；`total` 與讀到的筆數不符視為沒讀完。
@@ -54,7 +56,7 @@ Tampermonkey userscript：`uturn-line-ext.user.js`。版本 **1.48.0**：群發�
 | 端點 | 用途 | 請求 body | 成功回應 |
 | --- | --- | --- | --- |
 | `POST /line-oa/{groupId}/syncs` | 建立同步工作（暫存區） | `{}` | `201 { groupId, syncId }` |
-| `PUT /line-oa/{groupId}/syncs/{syncId}/chunks/{index}` | 上傳第 `index`（從 0 起）批，最多 500 位 | `{ customers: [{ lineName, chatId, avatarUrl }], notes: [{ chatId, lineName, nickname, notes: [{ text, authorName, createdAt }] }] }` | `200 { syncId, index, customers: <customers 長度>, notes: <notes 長度> }` |
+| `PUT /line-oa/{groupId}/syncs/{syncId}/chunks/{index}` | 上傳第 `index`（從 0 起）批，最多 500 位 | `{ customers: [{ lineName, nickname, chatId, avatarUrl }], notes: [{ chatId, lineName, nickname, notes: [{ text, authorName, createdAt }] }] }` | `200 { syncId, index, customers: <customers 長度>, notes: <notes 長度> }` |
 | `POST /line-oa/{groupId}/syncs/{syncId}/commit` | 全部傳完，整份取代 | `{ chunks, customers, chatsWithNotes, notes }`（chunk 數、客戶總數、有記事本的客人數、記事總則數） | `200 { groupId, replaced: true, customers, chatsWithNotes, notes }`（數字＝實際寫入） |
 | `DELETE /line-oa/{groupId}/syncs/{syncId}` | 撤銷未 commit 的工作 | — | `204` |
 
