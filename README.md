@@ -2,6 +2,8 @@
 
 優惠券及多頁訊息已依後端完成版契約接上：同源讀清單、提交數字 ID、失效後重新選擇、授權恢復，以及保留原 requestId 重試。**依後端提供的進度，程式與單元測試已完成，但尚未部署及對真實 LINE 驗收。** 本次前端以模擬後端驗證，沒有部署後端或實發群發。原生格式與 Python 參考見[優惠券規格](docs/line-coupon-backend-spec.md)及[多頁訊息規格](docs/line-card-type-backend-spec.md)。
 
+版本 **1.53.0**：聊天室頂端「待處理」左邊新增 **[AI處理][轉人工]** 切換，只在 AI 客服開著的官方帳號出現（後端依客群設定「官方後台網址」＋line-dai 的 AI 啟用／自動回覆判斷，後台關掉 AI 最多 1 分鐘後換對話就不再出現；沒填的 AI 官方帳號要先在後台填，或做一次「同步客戶與記事本」自動補）。切成「轉人工」＝AI 不再回這位客人（同調度中心轉人工，客人閒置 60 分鐘後 AI 自動接回）；切回「AI處理」＝交回 AI。官方帳號後台的聊天室 ID 與 AI 記的 LINE userId 是兩套 ID，LINE 沒提供對應：換對話時先 `POST /line-oa/{groupId}/chats/{chatId}/client-ai/resolve`（body `{}`）問後端有沒有記下對應；沒有才以 LINE 後台 API 依聊天室 ID 讀客人原名＋大頭貼（先試 `GET /api/v1/bots/{botId}/chats/{chatId}`，不行就翻最近 4 頁對話清單；**不讀畫面標題**，避免切換瞬間讀到上一位客人），再 resolve 一次帶 `{name, avatarUrl}`，後端比對大頭貼（沒有大頭貼才用唯一同名）並記下。回 `{aiAccount, matched, handoffActive}`：`aiAccount=false` 不顯示且本次不再查這個官方帳號；`matched=false` 顯示灰色「未對到 AI」。切換 `PUT …/client-ai/handoff` body `{handoff: true|false}`（帶 `Idempotency-Key`）。回到分頁時重讀狀態。需後端 right-backend 598592fc 以上。
+
 版本 **1.52.1**（只動同步）：客戶列多帶 `nickname`（客服在官方後台改的暱稱；`lineName` 仍是 LINE 原名，沒有原名才用暱稱），後端兩種都存、後台都會顯示。「進階功能 → 同步客戶與記事本」與群發視窗的同步按鈕後面顯示最後同步時間（例：「同步客戶與記事本（最後同步 10/26 17:12）」，沒同步過顯示「尚未同步」）：打開選單時以 `GET /line-oa/{groupId}/customers?pageNum=1&pageSize=1` 讀後端的 `updatedAt`，同步成功即更新。後端同步工作端點已上線（right-backend da40f3f0）。
 
 版本 **1.52.0**：「同步客戶」與「同步客人記事本」合併為進階功能的「同步客戶與記事本」（群發視窗的同名按鈕也是同一條流程），並改為分批上傳，**需要後端新增同步工作端點，契約見下方「後端需同步：同步工作（syncs）」**；舊的 `POST /line-oa/{groupId}/customers` 與 `POST /line-oa/{groupId}/customer-notes` 前端不再呼叫。2026-10-26 在 chat.line.biz 對約 44,000 位客人的官方帳號實測的依據：

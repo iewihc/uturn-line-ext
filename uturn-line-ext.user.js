@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.52.1
+// @version      1.53.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -670,6 +670,23 @@
     .${DISPATCH_POP_CLASS} .loe-check { align-items: center; }
     .loe-tpl-select { flex: 1; min-width: 0; border: 1px solid rgba(15,23,42,.18); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12px; background: #fff; color: #1f2937; cursor: pointer; }
     .loe-tpl-select:focus { outline: none; border-color: ${BLUE}; }
+
+    /* AI 客服切換（聊天室頂端「待處理」左邊）：[AI處理][轉人工] 分段按鈕 */
+    .loe-ai-toggle {
+      display: inline-flex; align-items: center; vertical-align: middle;
+      margin-right: 6px; border: 1px solid #c7d2fe; border-radius: 6px; overflow: hidden;
+      font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap;
+    }
+    .loe-ai-toggle button {
+      height: 28px; padding: 0 10px; border: 0; background: #fff; color: #64748b;
+      font: inherit; cursor: pointer;
+    }
+    .loe-ai-toggle button + button { border-left: 1px solid #c7d2fe; }
+    .loe-ai-toggle button:hover:not(:disabled):not(.on) { background: #eef2ff; color: #4338ca; }
+    .loe-ai-toggle button.on { background: #6366f1; color: #fff; cursor: default; }
+    .loe-ai-toggle button.on.human { background: #f97316; }
+    .loe-ai-toggle button:disabled { opacity: .6; cursor: progress; }
+    .loe-ai-toggle .loe-ai-note { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; color: #94a3b8; font-weight: 600; cursor: help; }
   `;
   document.head.appendChild(style);
 
@@ -4709,6 +4726,171 @@
   }
 
   /* ---------------------------------------------------------------------- *
+   * AI 客服切換：聊天室頂端「待處理」左邊 [AI處理][轉人工]
+   *   只在 AI 客服開著的官方帳號出現（後端依客群設定「官方後台網址」＋line-dai AI 開關判斷）。
+   *   官方帳號後台的聊天室 ID 跟 AI 記的 LINE userId 是兩套 ID：先問後端有沒有記下對應，
+   *   沒有才用 LINE 後台 API 依聊天室 ID 讀客人原名＋大頭貼交給後端比對並記下
+   *   （不讀畫面標題：切換對話的瞬間標題可能還是上一位客人）。
+   *   轉人工＝AI 不再回這位客人（同調度中心轉人工，客人閒置逾時 AI 會自動接回）。
+   * ---------------------------------------------------------------------- */
+  const AI_TOGGLE_CLASS = "loe-ai-toggle";
+  const AI_PROFILE_PAGE_LIMIT = 4; // 單一聊天室端點不可用時，最多翻最近 4 頁（100 位）找這個聊天室
+  const aiProfiles = new Map(); // "bot/chat" → { name, avatarUrl } 或 null（找不到）
+  const aiBots = new Map(); // bot → true（有 AI）／false（沒有 AI，不再查）
+  let aiSingleChatApi = true; // LINE 單一聊天室端點可用；失敗一次就改翻對話清單
+  let aiState = null; // { bot, chat, status: loading|ready|unmatched|error, handoff, busy }
+  let aiRun = 0;
+
+  const aiChatPath = (bot, chat) =>
+    `/line-oa/${encodeURIComponent(bot)}/chats/${encodeURIComponent(chat)}/client-ai`;
+
+  function aiProfileOf(chat) {
+    const p = (chat && chat.profile) || {};
+    return {
+      name: typeof p.name === "string" ? p.name : "",
+      avatarUrl: p.iconHash && p.iconHash !== "biz-app"
+        ? `https://profile.line-scdn.net/${encodeURIComponent(p.iconHash)}/preview` : "",
+    };
+  }
+
+  // 依聊天室 ID 讀客人資料（原名＋大頭貼）：先試單一聊天室端點，不行就翻最近的對話清單
+  async function fetchAiProfile(bot, chat) {
+    const key = bot + "/" + chat;
+    if (aiProfiles.has(key)) return aiProfiles.get(key);
+    let found = null;
+    if (aiSingleChatApi) {
+      try {
+        const data = await fetchLineJson(new URL(`/api/v1/bots/${bot}/chats/${encodeURIComponent(chat)}`, location.origin),
+          { controller: new AbortController() });
+        if (data && data.profile && (!data.chatId || data.chatId === chat)) found = data;
+        else aiSingleChatApi = false;
+      } catch (_) {
+        aiSingleChatApi = false;
+      }
+    }
+    for (let page = 0, next = ""; !found && page < AI_PROFILE_PAGE_LIMIT; page++) {
+      const data = await fetchLineDirectoryPage(lineChatsPageUrl(bot, next), { controller: new AbortController() });
+      found = data.list.find((c) => c && c.chatId === chat) || null;
+      next = data.next;
+      if (!next) break;
+    }
+    const profile = found ? aiProfileOf(found) : null;
+    aiProfiles.set(key, profile);
+    return profile;
+  }
+
+  function setAiStatus(bot, chat, status) {
+    aiBots.set(bot, !!status.aiAccount);
+    aiState = status.aiAccount
+      ? { bot, chat, status: status.matched ? "ready" : "unmatched", handoff: !!status.handoffActive, busy: false }
+      : null;
+  }
+
+  // 換對話／回到分頁時重讀：已記下對應只要一次後端查詢，沒有才讀 LINE 客人資料再比對
+  async function refreshAiToggle() {
+    const bot = getOaId(), chat = getChatId(), run = ++aiRun;
+    if (!/^U[0-9a-f]{32}$/i.test(bot) || !chat || aiBots.get(bot) === false) {
+      aiState = null;
+      renderAiToggle();
+      return;
+    }
+    aiState = { bot, chat, status: "loading", handoff: false, busy: false };
+    renderAiToggle();
+    try {
+      let status = await lineBackendRequest("POST", aiChatPath(bot, chat) + "/resolve", {});
+      if (run !== aiRun) return;
+      if (status && status.aiAccount && !status.matched) {
+        const profile = await fetchAiProfile(bot, chat).catch(() => null);
+        if (run !== aiRun) return;
+        if (profile) status = await lineBackendRequest("POST", aiChatPath(bot, chat) + "/resolve", profile);
+        if (run !== aiRun) return;
+      }
+      setAiStatus(bot, chat, status || {});
+    } catch (_) {
+      if (run !== aiRun) return;
+      aiState = aiBots.get(bot) ? { bot, chat, status: "error", handoff: false, busy: false } : null;
+    }
+    renderAiToggle();
+  }
+
+  async function switchAiHandoff(handoff) {
+    const s = aiState;
+    if (!s || s.status !== "ready" || s.busy || s.handoff === handoff) return;
+    s.busy = true;
+    renderAiToggle();
+    try {
+      const status = await lineBackendRequest("PUT", aiChatPath(s.bot, s.chat) + "/handoff", { handoff }, undefined,
+        { "Idempotency-Key": crypto.randomUUID() });
+      s.handoff = !!(status && status.handoffActive);
+      toast(s.handoff ? "已轉人工：AI 不再回這位客人" : "已交回 AI 處理", "ok");
+    } catch (e) {
+      toast("AI 切換失敗：" + (e && e.message ? e.message : "請稍後再試"), "err", 4000);
+    } finally {
+      s.busy = false;
+      if (aiState === s) renderAiToggle();
+    }
+  }
+
+  // 放在「待處理」左邊；LINE 重繪標題列時重新放回。已就位且狀態沒變就不掃 DOM（維護迴圈每幀都會呼叫）
+  function renderAiToggle() {
+    let box = document.querySelector(`.${AI_TOGGLE_CLASS}`);
+    const s = aiState && aiState.chat === getChatId() &&
+      (aiState.status !== "loading" || aiBots.get(aiState.bot)) ? aiState : null;
+    if (!s) {
+      if (box) box.remove();
+      return;
+    }
+    const sig = [s.chat, s.status, s.handoff, s.busy].join("|");
+    if (box && box.isConnected && box.dataset.sig === sig && box.nextElementSibling &&
+        box.nextElementSibling.isConnected) return;
+    const anchor = findFollowUpBtn();
+    if (!anchor) {
+      if (box) box.remove();
+      return;
+    }
+    if (!box || box.nextElementSibling !== anchor) {
+      if (box) box.remove();
+      box = document.createElement("span");
+      box.className = AI_TOGGLE_CLASS;
+      box.setAttribute("role", "group");
+      box.setAttribute("aria-label", "AI 客服");
+      box.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-handoff]");
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        switchAiHandoff(btn.dataset.handoff === "1");
+      });
+      anchor.insertAdjacentElement("beforebegin", box);
+    }
+    box.dataset.sig = sig;
+    box.textContent = "";
+    if (s.status === "ready") {
+      [["0", "AI處理", "AI 自動回覆這位客人"],
+       ["1", "轉人工", "轉人工：AI 不再回這位客人（客人閒置 60 分鐘後 AI 會自動接回）"]].forEach(([value, label, title]) => {
+        const btn = document.createElement("button");
+        const on = (value === "1") === s.handoff;
+        btn.type = "button";
+        btn.dataset.handoff = value;
+        btn.textContent = label;
+        btn.title = title;
+        btn.className = on ? (value === "1" ? "on human" : "on") : "";
+        btn.setAttribute("aria-pressed", String(on));
+        btn.disabled = s.busy;
+        box.appendChild(btn);
+      });
+      return;
+    }
+    const note = document.createElement("span");
+    note.className = "loe-ai-note";
+    note.textContent = s.status === "loading" ? "AI 讀取中…" : s.status === "unmatched" ? "未對到 AI" : "AI 狀態讀取失敗";
+    note.title = s.status === "unmatched"
+      ? "找不到這位客人的 AI 對話（客人沒跟 AI 對話過，或同名又沒有大頭貼），無法切換"
+      : s.status === "error" ? "連不到後端，換個對話再回來會重試" : "";
+    box.appendChild(note);
+  }
+
+  /* ---------------------------------------------------------------------- *
    * 後台一鍵分享 → 自動送出
    *   後台按「分享」會開啟  https://chat.line.biz/{gid}/chat/{chatId}?send={token}
    *   本腳本偵測到 ?send={token} 後：
@@ -5383,7 +5565,9 @@
   }, 250);
   setInterval(() => refreshLedgerBalance(), 1000);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) stickToBottomIfPinned();
+    if (document.hidden) return;
+    stickToBottomIfPinned();
+    refreshAiToggle(); // 回到分頁：AI 狀態可能已在調度中心切換或逾時自動交回
   });
   // 只有「使用者主動操作」（滾輪/觸控/拖曳/鍵盤）造成的捲動才允許解除貼底。
   // LINE 載入舊訊息、瀏覽器 scroll anchoring 也會觸發 scroll 事件；
@@ -5448,6 +5632,7 @@
   resumeUturnOpenNotice();
   checkUturnOpen();
   learnOaBotName();
+  refreshAiToggle();
   // 已設定後台帳號 → 拉雲端設定（快速回覆 + 該車隊 Webhook）覆蓋本地快取
   syncRemoteConfig();
   // 進頁面給 3 秒強制貼底窗，接住陸續載入的訊息（獨立心跳會持續拉底）
@@ -5482,6 +5667,8 @@
       if (lineAdvancedMenu && !lineAdvancedMenu.menu.hidden &&
           (lineAdvancedMenu.groupId !== oa || lineAdvancedMenu.account !== getDispatcher())) closeLineAdvancedMenu();
       if (lineCustomerDialog && lineCustomerDialog.account !== getDispatcher()) closeLineCustomers();
+      if (apiContextChanged) refreshAiToggle();
+      else renderAiToggle();
       if (oa !== lastOaId) {
         closeLineCustomers();
         lastOaId = oa;
