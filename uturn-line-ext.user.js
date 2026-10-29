@@ -5220,9 +5220,9 @@
   /* ---------------------------------------------------------------------- *
    * 後台「開官方聊天室」→ 自動打開乘客對話
    *   後台開啟 https://chat.line.biz/{botId}?uturnOpen={payload}（不知道 botId 時為 https://chat.line.biz/?uturnOpen=…）
-   *   payload＝base64url(UTF-8 JSON)：{ v: 1, oa: 官方帳號名稱, n: 乘客 LINE 名稱, at?: 乘客最後訊息時間(ms) }
+   *   payload＝base64url(UTF-8 JSON)：{ v: 1, oa: 官方帳號名稱, n: 乘客 LINE 名稱, k?: 大頭貼比對鍵, at?: 乘客最後訊息時間(ms) }
    *   1) botId：網址上的為準；沒有就依官方帳號名稱查（本機快取 → LINE 官方帳號清單）
-   *   2) 依乘客名稱翻對話清單找 chatId 並開啟；找不到就填入左側搜尋
+   *   2) 翻對話清單找 chatId 並開啟：大頭貼比對鍵相同就是他（名稱被改過也一樣）；否則依乘客名稱；找不到就填入左側搜尋
    *   ※ 後台已知道 chatId 時直接開 /{botId}/chat/{chatId}，不經這裡。
    * ---------------------------------------------------------------------- */
   const LINE_BOT_ID_RE = /^U[0-9a-f]{32}$/i;
@@ -5250,10 +5250,12 @@
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       const data = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
       const n = typeof data?.n === "string" ? data.n.trim() : "";
-      if (data?.v !== 1 || !n) return null;
+      const k = typeof data?.k === "string" ? data.k.trim() : "";
+      if (data?.v !== 1 || (!n && !k)) return null;
       return {
         oa: typeof data.oa === "string" ? data.oa.trim() : "",
         n,
+        k,
         at: Number.isFinite(data.at) && data.at > 0 ? data.at : null,
       };
     } catch (_) {
@@ -5351,10 +5353,17 @@
     }
     return null;
   }
-  // 依乘客名稱翻對話清單；找到第一位後再多看幾頁就停。被取代時回 null。
-  async function findChatsByName(botId, name, run, onProgress) {
+  // 大頭貼比對鍵（與後端 lineAvatarKey 一致）：0h 開頭去掉第 7–10 字與最後 13 字（每次網址都會變的簽章），0m 開頭整段
+  function lineAvatarKey(iconHash) {
+    const t = typeof iconHash === "string" ? iconHash : "";
+    if (t.startsWith("0m")) return t;
+    if (!t.startsWith("0h") || t.length <= 40) return "";
+    return t.slice(0, 6) + t.slice(10, t.length - 13);
+  }
+  // 翻對話清單找乘客：大頭貼比對鍵相同就是他（立刻停）；否則依名稱，找到第一位後再多看幾頁就停。被取代時回 null。
+  async function findUturnOpenChats(botId, { n: name, k: avatarKey }, run, onProgress) {
     const want = fleetLabelKey(name);
-    if (!want) return [];
+    if (!want && !avatarKey) return [];
     const matches = new Map();
     const cursors = new Set();
     let next = "", seen = 0, firstMatchPage = -1;
@@ -5371,7 +5380,11 @@
         }
         seen++;
         const profile = chat.profile || {};
-        if (fleetLabelKey(profile.name || profile.nickname) === want && !matches.has(chat.chatId))
+        if (avatarKey && lineAvatarKey(profile.iconHash) === avatarKey) {
+          onProgress(seen);
+          return [{ chatId: chat.chatId, at: chatTimestamp(chat) }];
+        }
+        if (want && fleetLabelKey(profile.name || profile.nickname) === want && !matches.has(chat.chatId))
           matches.set(chat.chatId, { chatId: chat.chatId, at: chatTimestamp(chat) });
       }
       onProgress(seen);
@@ -5432,10 +5445,12 @@
     showUturnOpenNotice(notice);
   }
 
-  async function openChatFromUturn({ oa, n, at }) {
+  async function openChatFromUturn(payload) {
+    const { oa, n, at } = payload;
+    const who = n || "這位客人"; // 沒有名稱時只靠大頭貼找
     if (uturnOpenRun) uturnOpenRun.controller.abort();
     const run = (uturnOpenRun = { controller: new AbortController() });
-    const progress = progressToast(`正在找「${n}」…`);
+    const progress = progressToast(`正在找「${who}」…`);
     try {
       const botId = await resolveUturnOpenBotId(oa, run);
       if (uturnOpenRun !== run) return;
@@ -5443,11 +5458,11 @@
         toast(`找不到官方帳號「${oa}」，請請管理員到「客戶端OA設定」填寫官方後台網址`, "err", 8000);
         return;
       }
-      const matches = await findChatsByName(botId, n, run,
-        (seen) => progress.set(`正在找「${n}」…（已看 ${seen.toLocaleString()} 位）`));
+      const matches = await findUturnOpenChats(botId, payload, run,
+        (seen) => progress.set(`正在找「${who}」…（已看 ${seen.toLocaleString()} 位）`));
       if (!matches || uturnOpenRun !== run) return;
       if (!matches.length) {
-        finishUturnOpen(`/${botId}`, { message: `沒找到「${n}」，請在左側搜尋`, kind: "warn", search: n },
+        finishUturnOpen(`/${botId}`, { message: `沒找到「${who}」，請在左側搜尋`, kind: "warn", search: n },
           getOaId() === botId);
         return;
       }
@@ -5462,7 +5477,7 @@
         location.pathname === path);
     } catch (error) {
       if (uturnOpenRun === run)
-        toast(run.timedOut ? `找「${n}」逾時，請在左側搜尋` : `找「${n}」失敗：${error.message || error}`, "err", 6000);
+        toast(run.timedOut ? `找「${who}」逾時，請在左側搜尋` : `找「${who}」失敗：${error.message || error}`, "err", 6000);
     } finally {
       progress.done();
       if (uturnOpenRun === run) uturnOpenRun = null;
