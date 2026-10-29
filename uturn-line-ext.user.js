@@ -4748,12 +4748,13 @@
     const p = (chat && chat.profile) || {};
     return {
       name: typeof p.name === "string" ? p.name : "",
+      nickname: typeof p.nickname === "string" ? p.nickname : "", // 客服改的暱稱（後端一併記下，調度中心可用暱稱搜尋）
       avatarUrl: p.iconHash && p.iconHash !== "biz-app"
         ? `https://profile.line-scdn.net/${encodeURIComponent(p.iconHash)}/preview` : "",
     };
   }
 
-  // 依聊天室 ID 讀客人資料（原名＋大頭貼）：先試單一聊天室端點，不行就翻最近的對話清單
+  // 依聊天室 ID 讀客人資料（原名＋暱稱＋大頭貼）：先試單一聊天室端點，不行就翻最近的對話清單
   async function fetchAiProfile(bot, chat) {
     const key = bot + "/" + chat;
     if (aiProfiles.has(key)) return aiProfiles.get(key);
@@ -5360,7 +5361,7 @@
     if (!t.startsWith("0h") || t.length <= 40) return "";
     return t.slice(0, 6) + t.slice(10, t.length - 13);
   }
-  // 翻對話清單找乘客：大頭貼比對鍵相同就是他（立刻停）；否則依名稱，找到第一位後再多看幾頁就停。被取代時回 null。
+  // 翻對話清單找乘客：大頭貼比對鍵相同就是他（立刻停）；否則依名稱（LINE 原名或客服改的暱稱），找到第一位後再多看幾頁就停。被取代時回 null。
   async function findUturnOpenChats(botId, { n: name, k: avatarKey }, run, onProgress) {
     const want = fleetLabelKey(name);
     if (!want && !avatarKey) return [];
@@ -5384,7 +5385,7 @@
           onProgress(seen);
           return [{ chatId: chat.chatId, at: chatTimestamp(chat) }];
         }
-        if (want && fleetLabelKey(profile.name || profile.nickname) === want && !matches.has(chat.chatId))
+        if (want && (fleetLabelKey(profile.name) === want || fleetLabelKey(profile.nickname) === want) && !matches.has(chat.chatId))
           matches.set(chat.chatId, { chatId: chat.chatId, at: chatTimestamp(chat) });
       }
       onProgress(seen);
