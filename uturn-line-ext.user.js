@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.53.0
+// @version      1.53.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -4780,8 +4780,10 @@
     return profile;
   }
 
-  function setAiStatus(bot, chat, status) {
-    aiBots.set(bot, !!status.aiAccount);
+  // sure＝這次有帶官方帳號名稱：後端已能自動記下官方後台網址，回「沒 AI」才是真的沒有，本分頁不再查；
+  // 頁首名稱還沒出現時回的「沒 AI」不記，下次換對話再問
+  function setAiStatus(bot, chat, status, sure = true) {
+    if (status.aiAccount || sure) aiBots.set(bot, !!status.aiAccount);
     aiState = status.aiAccount
       ? { bot, chat, status: status.matched ? "ready" : "unmatched", handoff: !!status.handoffActive, busy: false }
       : null;
@@ -4797,16 +4799,20 @@
     }
     aiState = { bot, chat, status: "loading", handoff: false, busy: false };
     renderAiToggle();
+    // 帶官方帳號名稱：官方後台網址還沒填時，後端依名稱自動記下（同「同步客戶與記事本」）
+    const oaName = getOaName();
+    const resolve = (body) => lineBackendRequest("POST", aiChatPath(bot, chat) + "/resolve", body, undefined,
+      oaName ? { "X-Oa-Name": encodeURIComponent(oaName) } : {});
     try {
-      let status = await lineBackendRequest("POST", aiChatPath(bot, chat) + "/resolve", {});
+      let status = await resolve({});
       if (run !== aiRun) return;
       if (status && status.aiAccount && !status.matched) {
         const profile = await fetchAiProfile(bot, chat).catch(() => null);
         if (run !== aiRun) return;
-        if (profile) status = await lineBackendRequest("POST", aiChatPath(bot, chat) + "/resolve", profile);
+        if (profile) status = await resolve(profile);
         if (run !== aiRun) return;
       }
-      setAiStatus(bot, chat, status || {});
+      setAiStatus(bot, chat, status || {}, !!oaName);
     } catch (_) {
       if (run !== aiRun) return;
       aiState = aiBots.get(bot) ? { bot, chat, status: "error", handoff: false, busy: false } : null;
