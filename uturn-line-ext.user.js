@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.53.1
+// @version      1.53.2
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -2997,11 +2997,25 @@
   function setWebhook(url) {
     storeSet(WEBHOOK_KEY, (url || "").trim());
   }
+  // 後台帳號常把 gmail 打成 gamil、gmial、gmail.con…：網域像 Gmail 的一律更正成 gmail.com
+  const GMAIL_TYPO_DOMAIN =
+    /^(gmail|gamil|gmial|gmali|gmai|gmaill|gnail|gmal|gmil|gmaul|gemail|gimail|gamail|gmaik|gmsil|gmqil)\.?(com|co|cm|con|om|comm|cim|vom|xom|cpm|ocm|c)?$/i;
+  function fixEmailTypo(email) {
+    const value = (email || "").trim();
+    const at = value.lastIndexOf("@");
+    if (at <= 0) return value;
+    const domain = value.slice(at + 1);
+    return GMAIL_TYPO_DOMAIN.test(domain) ? value.slice(0, at) + "@gmail.com" : value;
+  }
+  // 舊設定已存成打錯的網域：讀的時候順手更正並存回，不用使用者重設
   function getDispatcher() {
-    return (getGlobalWithMigration(DISPATCHER_KEY) || "").trim();
+    const saved = (getGlobalWithMigration(DISPATCHER_KEY) || "").trim();
+    const fixed = fixEmailTypo(saved);
+    if (fixed !== saved) storeSet(DISPATCHER_KEY, fixed);
+    return fixed;
   }
   function setDispatcher(name) {
-    storeSet(DISPATCHER_KEY, (name || "").trim());
+    storeSet(DISPATCHER_KEY, fixEmailTypo(name));
   }
   // 車隊（全域共用）：決定要向後端拉哪個車隊的懶惰蟲設定（webhook + 官方/店配）
   function getFleet() {
@@ -3966,8 +3980,21 @@
     const saveBtn = document.createElement("button");
     saveBtn.className = "loe-btn-primary";
     saveBtn.textContent = "儲存";
+    // 離開欄位就先更正，使用者看得到改成什麼
+    whoInput.addEventListener("blur", () => {
+      const fixed = fixEmailTypo(whoInput.value);
+      if (fixed !== whoInput.value.trim()) {
+        whoInput.value = fixed;
+        toast("已幫你把 Email 更正為 " + fixed);
+      }
+    });
     saveBtn.addEventListener("click", () => {
-      const acct = whoInput.value.trim();
+      const typed = whoInput.value.trim();
+      const acct = fixEmailTypo(typed);
+      if (acct !== typed) {
+        whoInput.value = acct;
+        toast("已幫你把 Email 更正為 " + acct);
+      }
       if (acct && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(acct)) {
         whoInput.focus();
         toast("後台帳號請輸入正確的 Email 格式");
