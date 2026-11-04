@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.53.2
+// @version      1.54.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -93,8 +93,6 @@
     "shield-check": '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"></path><path d="m9 12 2 2 4-4"></path>',
     refresh: '<path d="M20 7v5h-5M4 17v-5h5"></path><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"></path>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path>',
-    "file-text":
-      '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>',
   };
   const ic = (name) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -2986,20 +2984,6 @@
       },
     };
   }
-  // 一鍵匯入：向後端拉目前車隊的設定並套用（取代舊的硬編碼 CONFIG）
-  async function applyConfig() {
-    const fleet = getFleet();
-    if (!fleet) {
-      toast("請先在設定面板選擇車隊");
-      return { gidCount: 0, chatCount: 0 };
-    }
-    const data = await fetchFleetConfig(fleet);
-    if (!data) {
-      toast("讀取雲端設定失敗，請稍後再試");
-      return { gidCount: 0, chatCount: 0 };
-    }
-    return applyFleetConfig(data);
-  }
   // 取值：先讀此帳號專屬的 key；若沒有、但有舊的全域設定，搬移過來(一次性)
   function getScoped(base) {
     const k = scopedKey(base);
@@ -3895,8 +3879,8 @@
     fwd.type = "button";
     fwd.className = FORWARD_BUTTON_CLASS;
     fwd.innerHTML = FORWARD_ICON;
-    fwd.setAttribute("aria-label", "轉發到派單");
-    fwd.setAttribute("data-loe-tip", "轉發");
+    fwd.setAttribute("aria-label", "帶入派單");
+    fwd.setAttribute("data-loe-tip", "派單");
     fwd.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -3909,18 +3893,24 @@
   /* ---------------------------------------------------------------------- *
    * Per-message copy button + address linkify
    * ---------------------------------------------------------------------- */
-  function addCopyButton(chatBody) {
-    // 已處理過就先返回：observer 對同一則訊息會重複觸發，這裡是熱路徑
-    if (chatBody.querySelector(`.${BUTTON_CLASS}`)) return;
-    const bubble = chatBody.querySelector(".chat-item");
-    if (!bubble) return;
+  function addCopyButton(chatBody, bubble) {
+    // 熱路徑：enhanceChatBodies 只會送還沒掛 BUBBLE_CLASS / loe-nocopy 的泡泡進來；
+    // 這裡每個分支都要把泡泡標記掉，之後的掃描才不會再碰它。
+    if (!chatBody || !bubble) return;
+    if (chatBody.querySelector(`.${BUTTON_CLASS}`)) {
+      bubble.classList.add("loe-nocopy"); // 同一則已有按鈕（多個 .chat-item 時只掛第一個）
+      return;
+    }
     const textNode =
       chatBody.querySelector("[data-copy-target].chat-item-text") ||
       chatBody.querySelector(".chat-item-text");
     // 位置訊息（LINE location）：沒有 .chat-item-text，地址在 .chat-item-loc .small
     const locNode = textNode ? null : bubble.querySelector(".chat-item-loc .small");
     const srcNode = textNode || locNode;
-    if (!srcNode) return;
+    if (!srcNode) {
+      bubble.classList.add("loe-nocopy"); // 圖片／貼圖等無文字訊息：標記後不再重掃
+      return;
+    }
     addForwardButton(bubble, srcNode);
     bubble.classList.add(BUBBLE_CLASS);
     if (textNode) textNode.classList.add(TEXT_PAD_CLASS); // 預留右側空間，固定顯示的按鈕不會蓋到文字
@@ -3944,7 +3934,12 @@
     bubble.appendChild(button);
   }
   function enhanceChatBodies(root = document) {
-    root.querySelectorAll(".chat-body").forEach(addCopyButton);
+    // 熱路徑：LINE 每次改 DOM 都會跑到這裡。只選「還沒處理過」的泡泡
+    //（處理完掛 BUBBLE_CLASS、無文字掛 loe-nocopy），幾百則舊訊息不再每幀逐一 querySelector。
+    // 標記掛在 .chat-item 而非 .chat-body：LINE 就地換掉泡泡內容時新泡泡沒有標記，會被重新處理。
+    root
+      .querySelectorAll(`.chat-body .chat-item:not(.${BUBBLE_CLASS}):not(.loe-nocopy)`)
+      .forEach((bubble) => addCopyButton(bubble.closest(".chat-body"), bubble));
   }
 
   /* ---------------------------------------------------------------------- *
@@ -4411,7 +4406,12 @@
       (el.getAttribute("data-original-title") || "")
     );
   }
+  let followUpBtnCache = null;
   function findFollowUpBtn() {
+    // 找這顆按鈕要掃全頁 a.btn/button.btn 並讀 textContent，是最貴的查詢；
+    // 成對找到的結果只要還在 DOM 上就直接沿用。
+    if (followUpBtnCache && followUpBtnCache.isConnected) return followUpBtnCache;
+    followUpBtnCache = null;
     const hintText = followUpHintText;
     const isFollowUpEl = (el) =>
       !!el.querySelector(".la-chats") ||
@@ -4438,8 +4438,8 @@
           (sib) => sib !== el && isDoneEl(sib),
         ),
     );
-    if (paired) return paired;
-    // 沒找到成對的（LINE 又改版？）：退回舊法，只在聊天室頂端區域用文字找
+    if (paired) return (followUpBtnCache = paired);
+    // 沒找到成對的（LINE 又改版？）：退回舊法，只在聊天室頂端區域用文字找（不快取，等成對的出現）
     return (
       [
         ...document.querySelectorAll(
@@ -4889,7 +4889,7 @@
     renderAiToggle();
   }
 
-  async function switchAiHandoff(handoff) {
+  async function switchAiHandoff(handoff, auto = false) {
     const s = aiState;
     if (!s || s.status !== "ready" || s.busy || s.handoff === handoff) return;
     s.busy = true;
@@ -4898,7 +4898,8 @@
       const status = await lineBackendRequest("PUT", aiChatPath(s.bot, s.chat) + "/handoff", { handoff }, undefined,
         { "Idempotency-Key": crypto.randomUUID() });
       s.handoff = !!(status && status.handoffActive);
-      toast(s.handoff ? "已轉人工：AI 不再回這位客人" : "已交回 AI 處理", "ok");
+      toast(auto && s.handoff ? "你已回覆客人，已自動轉人工：AI 不再回這位客人"
+        : s.handoff ? "已轉人工：AI 不再回這位客人" : "已交回 AI 處理", "ok");
     } catch (e) {
       toast("AI 切換失敗：" + (e && e.message ? e.message : "請稍後再試"), "err", 4000);
     } finally {
@@ -4908,6 +4909,42 @@
   }
 
   // 放在「待處理」左邊；LINE 重繪標題列時重新放回。已就位且狀態沒變就不掃 DOM（維護迴圈每幀都會呼叫）
+  // 「AI處理」中的對話只要客服送出訊息（自己按傳送／Enter，或懶惰蟲的快捷回覆、派單自動回覆、
+  // 後台派單送出）就自動切「轉人工」：客服已經接手，AI 不該再搶著回。沒有 AI 的對話不理會。
+  // 判定「真的送出」：送出手勢（點傳送鈕或在輸入框按 Enter）前輸入框有字、之後輸入框被清空。
+  // 這樣 Enter 設成換行、Ctrl+Enter 才送出的環境也不會誤判。
+  function editorInput() {
+    const host = getEditorHost();
+    return (
+      (host && host.shadowRoot && host.shadowRoot.querySelector("textarea")) ||
+      document.querySelector('textarea[part="input"]') ||
+      document.querySelector("textarea.input")
+    );
+  }
+  function editorText() {
+    const el = editorInput();
+    return el ? el.value.trim() : "";
+  }
+  function handoffOnSendGesture() {
+    const s = aiState;
+    if (!s || s.status !== "ready" || s.handoff || s.busy || s.chat !== getChatId()) return;
+    if (!editorText()) return;
+    setTimeout(() => {
+      if (aiState === s && !s.handoff && !s.busy && !editorText()) switchAiHandoff(true, true);
+    }, 300);
+  }
+  document.addEventListener("click", (e) => {
+    const t = e.target;
+    if (t && t.nodeType === 1 && t.closest(".send-group.btn-group") && t.closest("button, input.btn"))
+      handoffOnSendGesture();
+  }, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    const host = getEditorHost(), el = editorInput(), t = e.target;
+    // shadow DOM 內的 keydown 到 document 時 target 已改成 host；一般 textarea 退回路徑直接比對
+    if (t === host || t === el || (host && host.contains(t))) handoffOnSendGesture();
+  }, true);
+
   function renderAiToggle() {
     let box = document.querySelector(`.${AI_TOGGLE_CLASS}`);
     const s = aiState && aiState.chat === getChatId() &&
@@ -5286,7 +5323,7 @@
   }
   function checkSendToken() {
     if (location.hostname !== "chat.line.biz") return;
-    if (sendInFlight) return;
+    if (sendInFlight || !location.search) return; // 每幀都會跑：沒有 query 就不解析 URL
     const token = getSendToken();
     if (!token || token === lastConsumedToken) return;
     lastConsumedToken = token; // 先標記再處理，避免 observer 重入重複觸發
@@ -5561,6 +5598,7 @@
   }
   function checkUturnOpen() {
     if (location.hostname !== "chat.line.biz" || window.top !== window.self) return;
+    if (!location.search) return; // 每幀都會跑：沒有 query 就不解析 URL
     let raw = null;
     try { raw = new URL(location.href).searchParams.get("uturnOpen"); } catch (_) {}
     if (raw === null) return;
@@ -5646,15 +5684,22 @@
     if (force) pinnedToBottom = true; // 載入期結束前維持貼底狀態
   }
   // 獨立心跳：不依賴 MutationObserver/rAF 鏈路（圖片後載、背景分頁回前景、
-  // LINE 內部重排等都接得住）。250ms 一次成本可忽略。
+  // LINE 內部重排等都接得住）。全腳本只留這一個常駐計時器。
+  let heartbeatPath = location.pathname;
+  let heartbeatTick = 0;
   setInterval(() => {
     // SPA 的 pushState / replaceState 不一定更新 DOM，也不會觸發 popstate。
     // 只在操作對象改變時排入維護，確保舊視窗與 KEY 一併清除。
-    if (getOaId() !== lastOaId || getChatId() !== lastChatId ||
-        (lineCustomerDialog && lineCustomerDialog.account !== getDispatcher())) scheduleMaintenance();
+    // 先比對 pathname 字串，沒變就不拆解 URL（OA/chat id 都只由 pathname 推得）。
+    const path = location.pathname;
+    if (path !== heartbeatPath) {
+      heartbeatPath = path;
+      if (getOaId() !== lastOaId || getChatId() !== lastChatId) scheduleMaintenance();
+    }
+    if (lineCustomerDialog && lineCustomerDialog.account !== getDispatcher()) scheduleMaintenance();
     stickToBottomIfPinned();
+    if (++heartbeatTick % 4 === 0) refreshLedgerBalance(); // 每秒一次（原獨立計時器併入）
   }, 250);
-  setInterval(() => refreshLedgerBalance(), 1000);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) return;
     stickToBottomIfPinned();
@@ -5724,8 +5769,10 @@
   checkUturnOpen();
   learnOaBotName();
   refreshAiToggle();
-  // 已設定後台帳號 → 拉雲端設定（快速回覆 + 該車隊 Webhook）覆蓋本地快取
-  syncRemoteConfig();
+  // 已設定後台帳號 → 拉雲端設定（快速回覆 + 該車隊 Webhook）覆蓋本地快取。
+  // 延到瀏覽器空閒（最多 1 秒）再發：讓 LINE 首屏先畫完，三支請求回來改 DOM 也不會擠在載入期。
+  if (typeof requestIdleCallback === "function") requestIdleCallback(syncRemoteConfig, { timeout: 1000 });
+  else setTimeout(syncRemoteConfig, 0);
   // 進頁面給 3 秒強制貼底窗，接住陸續載入的訊息（獨立心跳會持續拉底）
   forceStickUntil = performance.now() + 3000;
   window.addEventListener("popstate", checkSendToken);
@@ -5738,6 +5785,7 @@
 
   // 全域維護工作（建立按鈕/前綴/氣泡列/圖示）以 rAF 去抖動，每幀最多執行一次，避免忙迴圈卡住主執行緒。
   let maintQueued = false;
+  let observer = null; // 在下方建立；維護迴圈結束時要用它丟掉自己造成的紀錄
   function scheduleMaintenance() {
     if (maintQueued) return;
     maintQueued = true;
@@ -5786,6 +5834,9 @@
       // 換對話只讓進行中的 Cookie 擷取失效，不自動讀取。
       if (apiContextChanged) ++lineApiDebugRun;
       stickToBottomIfPinned();
+      // 這一輪自己加的按鈕/class 也會產生 mutation 紀錄；rAF callback 是同步跑完的，
+      // 此刻佇列裡只有我們自己造成的紀錄，直接丟掉，免得再觸發一輪空轉。
+      if (observer) observer.takeRecords();
     });
   }
 
@@ -5793,10 +5844,11 @@
 
   // 所有增強工作（含 stickToBottomIfPinned）都在 rAF 維護迴圈裡做，
   // callback 本身不讀 layout、不掃 DOM——LINE 大量載入訊息時才不會 layout thrashing。
-  const observer = new MutationObserver(scheduleMaintenance);
+  // 只看節點增減：維護工作沒有任何一項依賴純文字變動（AI 狀態記在 aiState、
+  // 貼底由心跳補），不監看 characterData 可省掉時間戳／未讀數每次更新的整輪維護。
+  observer = new MutationObserver(scheduleMaintenance);
   observer.observe(document.body, {
     childList: true,
-    characterData: true,
     subtree: true,
   });
 })();
