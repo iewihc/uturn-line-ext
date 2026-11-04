@@ -881,31 +881,67 @@
     } catch (_) { return; }
   }
 
+  // LINE API 限流（2026-10-26 實測兩次）：每分鐘恰好 1,000 個請求，第 1,001 個起回 429，下一分鐘恢復。
+  // run.limiter 有設時：每個請求先排隊取額度（全域限速），碰到 429 就整體暫停到下一分鐘再重送同一請求，
+  // 429 永遠不算失敗。客服同時操作 LINE 介面也吃同一份額度，所以額度要留餘裕。
+  const LINE_RATE_PER_MINUTE = 900;
+  const sleepUntil = (at, signal) => new Promise((resolve) => {
+    const timer = setTimeout(resolve, Math.max(0, at - Date.now()));
+    signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+  });
+  function makeLineRateLimiter(perMinute = LINE_RATE_PER_MINUTE) {
+    const interval = 60000 / perMinute;
+    let nextSlot = 0, pausedUntil = 0;
+    return {
+      get pausedUntil() { return pausedUntil; },
+      async acquire(signal) {
+        for (;;) {
+          const at = Math.max(Date.now(), nextSlot, pausedUntil);
+          nextSlot = at + interval;
+          await sleepUntil(at, signal);
+          if (signal?.aborted || Date.now() >= pausedUntil) return; // 等待中又被延後就再排一次
+        }
+      },
+      // 暫停到下一個整分再多 2 秒（LINE 的分鐘窗口以伺服器時鐘為準，留一點誤差）
+      pauseUntilNextMinute() {
+        const now = Date.now();
+        pausedUntil = Math.max(pausedUntil, now - (now % 60000) + 62000);
+      },
+    };
+  }
+
   async function fetchLineJson(url, run) {
-    const timer = setTimeout(() => {
-      run.timedOut = true;
-      run.controller.abort();
-    }, 15000);
-    try {
-      const response = await fetch(url.href, {
-        method: "GET",
-        credentials: "same-origin",
-        cache: "no-store",
-        redirect: "error",
-        headers: {
-          Accept: "application/json",
-          "x-oa-chat-client-version": "20240513144702",
-        },
-        signal: run.controller.signal,
-      });
-      if (response.status === 401 || response.status === 403)
-        throw new Error("登入已失效或沒有此官方帳號的讀取權限");
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      if (!(response.headers.get("Content-Type") || "").includes("application/json"))
-        throw new Error("回應不是 JSON，請確認 LINE 登入狀態");
-      return await response.json();
-    } finally {
-      clearTimeout(timer);
+    for (;;) {
+      if (run.limiter) await run.limiter.acquire(run.controller.signal);
+      const timer = setTimeout(() => {
+        run.timedOut = true;
+        run.controller.abort();
+      }, 15000);
+      try {
+        const response = await fetch(url.href, {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+          redirect: "error",
+          headers: {
+            Accept: "application/json",
+            "x-oa-chat-client-version": "20240513144702",
+          },
+          signal: run.controller.signal,
+        });
+        if (response.status === 401 || response.status === 403)
+          throw new Error("登入已失效或沒有此官方帳號的讀取權限");
+        if (response.status === 429 && run.limiter && !run.controller.signal.aborted) {
+          run.limiter.pauseUntilNextMinute();
+          continue;
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!(response.headers.get("Content-Type") || "").includes("application/json"))
+          throw new Error("回應不是 JSON，請確認 LINE 登入狀態");
+        return await response.json();
+      } finally {
+        clearTimeout(timer);
+      }
     }
   }
 
@@ -1191,6 +1227,8 @@
    * - 記事本 GET /api/v1/bots/{botId}/chats/{chatId}/notes?limit=20&withTotal=true
    *   → { list: [{ noteId, body, createdAt, updatedAt, userBizId }], total }，
    *   25 個同時打約 0.2 秒、沒有 429，可以平行讀。
+   * - LINE API 每分鐘 1,000 個請求的限流（見 makeLineRateLimiter），所以全域限速每分鐘 900 個，
+   *   4.4 萬位約 50 分鐘；名單翻頁（每秒 2 頁）與記事本共用同一份額度。
    * - 記事本只有作者的 userBizId，名字在 GET /api/v1/bots/{botId}/owners → { list: [{ bizId, name }] }。
    * - 對話物件 profile.name 是客人 LINE 原名、profile.nickname 是客服改的暱稱；沒有「有無記事本」欄位。
    * - 整份名單約 12.7 MB，單一請求上傳不可行。
@@ -1202,7 +1240,7 @@
   const LINE_SYNC_CHUNK = 500; // 每 chunk 幾位客人
   const LINE_NOTE_CONCURRENCY = 12; // 同時讀幾位客人的記事本
   const LINE_NOTE_PAGE_LIMIT = 20; // 每位客人最多翻 20 頁記事本
-  const LINE_NOTE_RETRIES = 3; // LINE 429／5xx 退避重試次數
+  const LINE_NOTE_RETRIES = 3; // LINE 5xx 退避重試次數（429 由限速器處理，不算失敗）
   const LINE_CHUNK_RETRIES = 3; // chunk 上傳（同 index 重送＝覆蓋，可重試）退避次數
   const LINE_NOTE_URLS = [
     (botId, chatId) => new URL(`/api/v1/bots/${botId}/chats/${encodeURIComponent(chatId)}/notes?limit=20&withTotal=true`, location.origin),
@@ -1235,7 +1273,7 @@
       }
     }
   }
-  const lineHttpRetryable = (error) => /^HTTP (429|5\d\d)$/.test(error?.message || "");
+  const lineHttpRetryable = (error) => /^HTTP 5\d\d$/.test(error?.message || "");
   const backendRetryable = (error) => error?.name !== "AbortError" &&
     (error?.uncertain === true || error?.status === 429 || error?.status >= 500);
 
@@ -1363,7 +1401,7 @@
   async function runLineSync(botId) {
     if (!LINE_BOT_ID_RE.test(botId)) throw new Error("請先選擇 LINE 官方帳號");
     const base = `/line-oa/${encodeURIComponent(botId)}/syncs`;
-    const run = { controller: new AbortController() };
+    const run = { controller: new AbortController(), limiter: makeLineRateLimiter() };
     const { signal } = run.controller;
     const isCurrent = () => getOaId() === botId;
     const fail = (message) => { run.controller.abort(); throw new Error(message); };
@@ -1376,10 +1414,13 @@
     const progress = progressToast("同步客戶與記事本：建立後端同步工作…");
     const report = () => {
       const minutes = Math.floor((Date.now() - startedAt) / 60000);
+      const pausedFor = Math.ceil((run.limiter.pausedUntil - Date.now()) / 1000);
       progress.set(`同步中…名單已讀 ${stats.read.toLocaleString()} 位${stats.readingDone ? "（讀完）" : ""}、` +
         `記事本已讀 ${stats.notesRead.toLocaleString()} 位、已上傳 ${stats.uploaded.toLocaleString()} 位` +
-        `（LINE 每頁 25 位，已 ${minutes} 分鐘）`);
+        `（LINE 每分鐘最多 ${LINE_RATE_PER_MINUTE} 位，已 ${minutes} 分鐘` +
+        (pausedFor > 0 ? `，LINE 限流中，等 ${pausedFor} 秒再續讀` : "") + "）");
     };
+    const ticker = setInterval(report, 1000); // 限流暫停時沒有事件也要更新倒數
 
     let syncId = "";
     try {
@@ -1499,6 +1540,7 @@
       if (!isCurrent()) throw new Error("官方帳號已變更，未更動後端資料");
       throw error;
     } finally {
+      clearInterval(ticker);
       run.controller.abort(); // 停掉還在跑的讀取
       // 沒 commit 的同步工作撤銷掉，後端資料維持原樣（盡力而為，不等結果）
       if (syncId) lineBackendRequest("DELETE", `${base}/${encodeURIComponent(syncId)}`).catch(() => {});
