@@ -1,6 +1,24 @@
 # uturn-line-ext
 
+版本 **1.65.0**：改為 Vite 打包。原本 9,200 行的單一檔案拆成 `src/` 下 52 個 ES module（見下方「開發與打包」），`uturn-line-ext.user.js` 改為 `npm run build` 的產物，並以 terser 壓縮＋改名（混淆）。功能與行為不變：每段程式只是搬到對應模組，跨模組才改成 `import`／`export`；原本散在各處、載入時就掛上的事件與計時器改集中在各模組的 `init*()`，由 `uturnMain()` 依原順序呼叫；原本在載入期直接寫入別段變數的三處（收件匣選對話時設定 `pageContext`、換對話時重設貼底狀態、換對話讓 Cookie 擷取失效）改為呼叫對應模組的函式（`setPageContext`、`resetScrollerForChat`／`forceStickFor`、`invalidateLineApiCapture`）。`@updateURL` 不變，使用者端照常自動更新。整理重複：`httpGetJson`／`httpSendJson` 合併成 `core/backend.js` 一個 `gmJsonRequest`；開頁與每輪維護共用 `enhanceChatPage()`；複製／轉發鈕的 CSS 共用一條規則；快速回覆管理視窗的列由 `replyRowInfo()` 產生；派單視窗四個布林勾選由 `boolSetting()` 產生（對外函式名不變）。加 ESLint（`npm run lint`：未使用變數、未定義名稱）——全檔掃過沒有未使用的函式或變數，只拿掉兩個多餘的 import；每個模組檔頭一行用途說明。派單視窗的「系統自動通知」勾選由最上方移到「派單後自動回覆客人」正上方。收件匣左欄「官方帳號」標題右邊加「收起」（‹）：往左收成一條直條，監聽與通知照常，點直條展開；記在 `loe_inbox_rail_collapsed_v1`，預設展開。
+
+版本 **1.64.4**：條款的「禁止提供的內容」「違反前條保密或使用授權義務」加上黃底深紅粗體；完整移除「群發操作與結果確認」，後續條款重新編號，合計八條。條款版本更新為 `2026-11-05.5`。
+
+版本 **1.64.3**：刪除條款中急迫風險時先暫停權限、再通知的句子。條款版本更新為 `2026-11-05.4`。
+
+版本 **1.64.2**：條款開頭改為「本服務由懶惰蟲提供」。條款版本更新為 `2026-11-05.3`，已同意舊版者下次開啟須重新同意。
+
+版本 **1.64.1**：條款中的「新臺幣十萬元違約金」改為黃底深紅粗體，移除身份授權 Cookie 說明及未上線功能範圍段落，並於 LINE 平台風險段落補上「也沒有賠償義務」。條款版本更新為 `2026-11-05.2`，已同意舊版者下次開啟收件匣時須重新同意。
+
+版本 **1.64.0**：首次開啟「UTurn 收件匣」先顯示完整九條使用條款，勾選「我同意」並按「繼續使用」後才進入原本的身份授權／收件匣流程。未同意前不讀取官方帳號、對話或訂單，也不啟動連線；Esc、點背景均不能略過。以本機儲存依 UTurn 後台帳號記錄條款版本與同意時間，同帳號重開不重複詢問；更換帳號、清除紀錄或條款版本更新後須重新同意。條款版本獨立於腳本版本，一般更新不會重複要求同意。紀錄僅存於本機，未上傳後端。
+
 優惠券及多頁訊息已依後端完成版契約接上：同源讀清單、提交數字 ID、失效後重新選擇、授權恢復，以及保留原 requestId 重試。**依後端提供的進度，程式與單元測試已完成，但尚未部署及對真實 LINE 驗收。** 本次前端以模擬後端驗證，沒有部署後端或實發群發。原生格式與 Python 參考見[優惠券規格](docs/line-coupon-backend-spec.md)及[多頁訊息規格](docs/line-card-type-backend-spec.md)。
+
+版本 **1.63.0**：收件匣改名「UTurn 收件匣」，而且**沒有身份授權不得進入**：官方帳號清單讀完後先蓋上授權閘門（顯示要授權的後台帳號；沒設後台帳號就提示先到 LINE 聊天室的轉發設定填），按「身份授權」通過才開始連線、讀對話、抓訂單狀態，標頭其他按鈕也在授權後才出現。收件匣的司機對話多一顆停靠／浮動切換（記在 `loe_inbox_dchat_dock_v1`，預設停靠）：停靠＝對話右邊再開第四欄「官方帳號｜官方訊息｜對話｜司機對話」一次看到；浮動＝蓋在對話右側。司機對話面板（收件匣浮動、訂單看板抽屜、LINE 聊天室浮動面板三種）都可以抓標題列拖曳移動，拖過會多一顆「回原位」（雙擊標題列也行），關閉即復位。對話標頭下方的訂單列改顯示派單原文（`oriTextDisplay`／`oriText`，例如 `F9/虎尾高中`），滑過才看解析出的地址；右上角 ^ 可收起成「狀態＋單號」一行，記在 `loe_inbox_orders_collapsed_v1`。「在官方視窗開啟」移到輸入框下方右側，旁邊新增「待處理」「處理完畢」兩顆（同 LINE 聊天室頂端的對話狀態：`PUT`／`DELETE /api/v1/bots/{bot}/chats/{chat}/followUp`、`…/done`，亮綠＝目前狀態，再按一次取消）。「官方訊息」（原「待回覆」）的篩選列（我負責旁邊）加「重新整理」，把已開帳號的預約／未派／承接／抵達／執行數量整份重抓（不等 20 秒輪詢；後端看板快取 5 秒）。訂單看板的「全部／自己」本來就記在 `loe_board_mine_v1`，下次開啟沿用。
+
+版本 **1.61.0**：收件匣輸入框下方加上 LINE 聊天室同樣的三顆：「貼圖、表情貼」「檔案」「選擇內容」。貼圖面板讀該官方帳號擁有的貼圖（`GET /api/v1/bots/{bot}/stickers/owned`，依 `next` 翻頁）與表情貼（`GET …/emojis/owned`），貼圖點了直接 `POST …/messages/send {type:"sticker",packageId,stickerId,sendId}`；表情貼插進輸入框寫成 `[表情貼N]`，送出時照 LINE 自家前端的寫法轉成 `{type:"textV2",text:"…{emoji_0}…",substitution}`（文字裡的 `{` `}` 逃脫成 `{{` `}}`），泡泡與收到的訊息一樣把 `emojis[]` 位置換成表情貼圖。檔案（圖片／影片／語音／其他，上限同 LINE 網頁版：圖片 20MB、其他 100MB；也可直接貼上）走 LINE 網頁版同一條路：`POST /api/v1/bots/{bot}/messages/{chat}/uploadFile`（multipart）拿 `contentMessageToken` 再 `POST …/messages/bulkSendFiles {items:[{sendId,contentMessageToken}]}`，上傳中圖片先顯示本機預覽。「選擇內容」視窗三個頁籤：預設訊息（`GET /api/v2/bots/{bot}/savedReplies`，帶入輸入框並換掉 `{Nickname}`／`{AccountName}`、記一次 `…/use`）、多頁訊息（`GET …/cardTypeMessages` → `{type:"cardType",cardTypeMessageId}`）、優惠券（`GET …/coupons` → `{type:"coupon",couponId}`）。所有送出共用同一段「樂觀泡泡 → 打 API → 認領 SSE」流程，SSE 的 `messageSent` 以 `sendId` 認領自己的泡泡（沒有 sendId 才退回比文字）。
+
+版本 **1.55.0**：多開收件匣。LINE 聊天室標題列新增「收件匣」入口，新分頁開 `https://chat.line.biz/?uturnInbox=1`；腳本改為 `@run-at document-start`（一般頁面等 DOMContentLoaded 才跑主程式，行為同原本的 document-idle），收件匣頁在 document-start 就 `window.stop()` 接管整頁，LINE 的 SPA 不啟動。左欄列出所有有權限的官方帳號（`GET /api/v1/bots`，含 LINE 回報的未讀數），每個開關＝一條 SSE（`POST /api/v1/bots/{bot}/streamingApiToken` → `{streamingApiBaseUrl}/api/{version}/sse`），只監聽打開的帳號，狀態存本機（`loe_inbox_enabled_bots_v1`）；斷線退避重連、`fail/too_many_sse_connections` 顯示「連線數已滿」一分鐘後再試。中欄列啟用帳號的對話（每帳號初掃 2 頁），篩選未讀／全部／未指派／我負責，可依客人名、訊息內容或官方帳號名搜尋；SSE `chat` 事件 `message` 進來即時更新、同一位客人合併計數，右上通知卡片（顯示官方帳號、客人、內容，可「在收件匣回覆」或「開官方視窗」）、Web Audio 提示音（可關，存 `loe_inbox_sound_v1`）、分頁在背景時桌面通知。右欄讀 `GET /api/v3/bots/{bot}/chats/{chat}/messages` 顯示對話，沿用快速回覆氣泡列，Enter 送出 `POST …/messages/send {type:"text",text,sendId}`（帶 `X-XSRF-TOKEN`，403 自動換 token），送出成功即 `PUT …/markAsRead`；「標為已讀」、「在官方視窗開啟」（新分頁開 `/{bot}/chat/{chat}`）。所有 LINE 請求走既有的每分鐘 900 次限速器。 收件匣選中對話時以 `pageContext` 取代網址／標題列來源（`getOaId`／`getChatId`／`getCustomerName`／`getOaName`），所以每則文字訊息旁的「複製」「派單」、對話標題列的「派單」與「AI處理／轉人工」切換都直接沿用 LINE 聊天室的同一套程式；派單後的自動回覆改走收件匣送出、標記待處理改打 `PUT …/followUp`。待回覆清單與對話標題顯示客人頭像（`profile.iconHash` 的 preview 圖，載不到退回名字首字）。 清單每列標上派單預設群編（該對話有店配覆寫就用覆寫的群編，否則用該官方帳號的前綴），對話標題列有該帳號的預設群編 chip（點擊開前綴小視窗修改，存的是同一份 `loe_prefix_v1::{botId}`，與 LINE 聊天室共用）。有 AI 客服的官方帳號在左欄標「AI」（啟用後拿最近一位客人 `client-ai/resolve` 一次得知 `aiAccount`），清單每列顯示 AI處理／轉人工（逐一 resolve，沒對到的再以 LINE 客人資料比對一次，同時最多 2 個），對話標題列的 AI處理／轉人工切換與 LINE 聊天室同一套程式。介面文字不出現「SSE」。
 
 版本 **1.54.0**：(1) **AI處理中的對話一送出訊息就自動轉人工**：客服自己按傳送／Enter，或懶惰蟲代送（快捷回覆、派單自動回覆、後台派單 `?send=`）都算，判定方式是送出手勢前輸入框有字、300ms 後被清空（Enter 設成換行的環境不會誤判），成功後提示「你已回覆客人，已自動轉人工」；沒有 AI 或已是轉人工的對話不理會。(2) 訊息泡泡的「轉發」提示改為「派單」（功能不變：帶入派單視窗的上車地址）。(3) 效能：聊天室維護迴圈只掃還沒處理過的泡泡（處理完的 `.chat-item` 掛 `loe-copy-bubble`、無文字的掛 `loe-nocopy`），不再每次 DOM 變動就對整頁訊息逐一查詢；MutationObserver 不再監看純文字變動（時間戳、未讀數更新不觸發整輪維護），維護跑完用 `takeRecords()` 丟掉自己造成的紀錄；250ms 心跳先比對 pathname 字串才拆 URL，餘額查詢併入同一個計時器；「待處理」按鈕成對找到後快取到它離開 DOM；雲端設定改在瀏覽器空閒時（最多延後 1 秒）拉。功能與行為不變。
 
@@ -327,12 +345,29 @@ python3 scripts/line_chat_send.py --url "https://chat.line.biz/{botId}/chat/{cha
 
 Python 圖片程式依本次瀏覽器請求實作，模擬測試驗證兩步順序、token 傳遞、上傳失敗不發送、逾時不重試。**原始實發驗證來自瀏覽器，沒有另用 Python 再發一次。** 本次前端依後端提供的新契約接上圖片功能，以模擬後端驗證，未透過正式群發服務實際發送。
 
+## 開發與打包
+
+原始碼在 `src/`（ES module，依功能分檔；入口 `src/main.js`），以 Vite + vite-plugin-monkey 打包成單一 Tampermonkey 腳本。根目錄的 `uturn-line-ext.user.js` 是打包產物（`@updateURL` 指的就是它），**改 `src/` 後要 `npm run build` 再 commit 產物**，使用者端才會自動更新；不要直接改產物。
+
+```sh
+npm install
+npm run dev     # 開發：開一次網址裝「代理腳本」到 Tampermonkey，之後改 src/ 存檔、重新整理 LINE 頁面即生效（不混淆）
+npm run build   # 發版：dist/ → 複製成根目錄 uturn-line-ext.user.js（terser 壓縮＋改名）
+npm run lint    # ESLint：未使用的變數／函式、未定義的名稱（含 GM_* 全域）
+```
+
+- 版本只改 `package.json` 的 `version`，打包時寫進標頭 `@version`，程式內一律用 `GM_info.script.version`。
+- `==UserScript==` 標頭（`@match`／`@grant`／`@connect`／`@run-at document-start`…）在 `vite.config.mjs` 的 `userscript` 設定，不在原始碼裡。
+- 產物以 terser 壓縮並改名（變數／函式名改成單字母、移除註解），標頭與介面文字維持原樣；要讀得懂的版本請看 `src/` 或 `npm run dev`。
+- `npm run dev` 的代理腳本是從本機 dev server 以 ES module 動態載入，比 document-start 晚一點才執行；收件匣頁（`?uturnInbox=1`）整頁接管在 dev 模式下可能來不及攔住 LINE 的 SPA，驗收收件匣接管請用 `npm run build` 的產物。
+- `src/` 分層：`core/`（常數、圖示、GM 儲存、pageContext、後端請求與身份授權、INBOX_MODE）、`line/`（LINE 後台 API：Cookie 擷取、限速抓取、同步、群發、優惠券／多頁訊息）、`inbox/`（收件匣：狀態與 API、對話與 SSE、送出、內容選擇、通知、各區塊 render、條款、boot、takeover）、`ui/`（toast、複製、回覆輸入框、訊息列按鈕）、`quick-reply/`（氣泡列與管理視窗），其餘一個功能一檔（`dispatch.js`、`driver-chat.js`、`board.js`、`scroll.js`…）。各模組載入時要掛的事件／計時器集中在該模組的 `init*()`，由 `main.js` 的 `uturnMain()` 依原本順序呼叫。
+
 ## 驗證方式
 
 ```sh
 npm install
+npm test        # 先 npm run build，再對產物跑 Playwright
 npm run check
-npm test
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
