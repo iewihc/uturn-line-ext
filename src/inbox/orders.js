@@ -6,12 +6,14 @@ import { INBOX_DCHAT_DOCK_KEY, INBOX_ORDERS_COLLAPSED_KEY, ih, inbox } from "./c
 import { INBOX_BOARD_AFTER_ACTION_MS, inboxLoadBoard, inboxPatchBoard } from "./order-status.js";
 import { inboxOpenChat } from "./send.js";
 import { renderInboxSide } from "./side.js";
+import { renderInboxThread } from "./thread.js";
 import { fetchChatOrders } from "../orders-lookup.js";
 import { liveOrders, orderActionBusy, orderNotiSummary, orderRow, setOrderSystemNoti } from "../orders.js";
 
 /* ---- 訂單狀態／系統自動通知 ---- */
 async function inboxLoadOrders(chat) {
   const prev = inbox.orders.get(chat.key);
+  const hadDriver = inboxHasDriver(prev?.list);
   const st = { list: prev ? prev.list : [], loading: true, error: "" };
   inbox.orders.set(chat.key, st);
   if (!prev && inbox.selected === chat.key) renderInboxOrders();
@@ -21,8 +23,13 @@ async function inboxLoadOrders(chat) {
     if (inbox.selected === chat.key && driverChat.host === inbox.el.dchat) syncDriverChatOrders(st.list);
   } catch (e) { st.error = e.message || String(e); }
   st.loading = false;
-  if (inbox.selected === chat.key) { renderInboxOrders(); inboxAutoOpenDriverChat(chat, st.list); }
+  if (inbox.selected !== chat.key) return;
+  // 客人訊息的「轉給司機」看有沒有已派到司機的單：訊息常比訂單先畫好，有無司機變了就重畫訊息（重畫會順帶畫訂單列）
+  if (hadDriver !== inboxHasDriver(st.list)) renderInboxThread();
+  else renderInboxOrders();
+  inboxAutoOpenDriverChat(chat, st.list);
 }
+const inboxHasDriver = (list) => liveOrders(list).some((o) => o.hasDriver);
 // 選項「固定開啟司機對話」：選到有司機的訂單就自動打開（多台開第一台）；司機訊息通知卡點進來的一律開那一台。
 // 同一位客人手動關掉後不再自動開，換一位客人或點通知卡才會再開。自動打開不搶客人輸入框的游標。
 function inboxAutoOpenDriverChat(chat, list) {
