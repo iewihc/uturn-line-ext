@@ -62,6 +62,7 @@ const inbox = {
   dchatHeight: Number(storeGet(INBOX_SIDE_SPLIT_KEY, 0)) || 0, // 0＝預設（約 55%）
   optionsOpen: false,
   autoRead: storeGet(INBOX_AUTO_READ_KEY, false) === true,
+  threadAtBottom: true, // 對話訊息區是否停在底部（圖片載入後要不要跟著捲）
   hideOaName: storeGet(INBOX_HIDE_OA_NAME_KEY, false) === true,
   notes: new Map(), // "bot/chat" → { list, total, next, loading, error }
   orders: new Map(), // "bot/chat" → { list, loading, error }（以對話連結查的進行中訂單）

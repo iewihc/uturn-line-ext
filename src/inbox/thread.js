@@ -127,6 +127,11 @@ function renderInboxThread() {
     ));
   }
   thMsgs.scrollTop = thMsgs.scrollHeight;
+  // 圖片載入後才撐開高度：還停在底部就跟著捲到底，最新的訊息（常是客人剛傳的圖）才不會被擠到下面看不到
+  inbox.threadAtBottom = true;
+  for (const img of thMsgs.querySelectorAll("img")) {
+    if (!img.complete) img.addEventListener("load", () => { if (inbox.threadAtBottom) thMsgs.scrollTop = thMsgs.scrollHeight; }, { once: true });
+  }
   renderInboxNotes();
   renderInboxOrders();
   // 換了對話才清輸入框，同一對話重繪時保留草稿

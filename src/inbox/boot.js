@@ -41,6 +41,11 @@ function bootInbox() {
     if (chat && document.visibilityState === "visible") inboxLoadOrders(chat);
   }, INBOX_ORDERS_REFRESH_MS);
   initInboxSide();
+  // 使用者往上捲就不再自動捲到底（圖片載入時）
+  inbox.el.thMsgs?.addEventListener("scroll", (e) => {
+    const el = e.currentTarget;
+    inbox.threadAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  });
   inbox.el.search.addEventListener("input", renderInboxRail);
   inbox.el.railToggle.addEventListener("click", inboxToggleRail);
   inbox.el.railStrip.addEventListener("click", inboxToggleRail);
