@@ -39,18 +39,30 @@ function relaySet(key, status) {
   relayRender();
 }
 
-// 下載圖片（帶瀏覽器登入；不受頁面跨網域限制）
+// 下載圖片（帶瀏覽器登入；不受頁面跨網域限制）。再一律轉成 JPEG：
+// GM 下載回來的 blob 常沒有型別（或是 application/octet-stream、webp），LINE 收件匣會當成「檔案」送出，客人看到的是 image.jpg 附件
 function relayFetchImage(url) {
   return new Promise((resolve, reject) => {
     GM_xmlhttpRequest({
       method: "GET", url, responseType: "blob", timeout: 60000,
       onload: (r) => (r.status >= 200 && r.status < 300 && r.response
-        ? resolve(new File([r.response], "image.jpg", { type: r.response.type || "image/jpeg" }))
+        ? resolve(r.response)
         : reject(new Error(`讀不到圖片（HTTP ${r.status}）`))),
       onerror: () => reject(new Error("讀不到圖片")),
       ontimeout: () => reject(new Error("讀取圖片逾時")),
     });
-  });
+  }).then(relayToJpeg);
+}
+async function relayToJpeg(blob) {
+  const bitmap = await createImageBitmap(blob).catch(() => { throw new Error("這不是圖片，沒辦法轉"); });
+  return driverChatCompressImage(new File([await relayDrawJpeg(bitmap)], "image.jpg", { type: "image/jpeg" }));
+}
+function relayDrawJpeg(bitmap) {
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext("2d").drawImage(bitmap, 0, 0);
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("圖片轉檔失敗"))), "image/jpeg", 0.92));
 }
 
 /* ---- 轉給司機 ---- */
@@ -68,7 +80,7 @@ function relaySendToDrivers(item, orders) {
   const run = async () => {
     relaySet(key, { state: "sending", to });
     try {
-      const image = item.imageUrl ? await driverChatCompressImage(await relayFetchImage(item.imageUrl)) : null;
+      const image = item.imageUrl ? await relayFetchImage(item.imageUrl) : null;
       while (left.length) {
         const order = left[0];
         const tempId = "relay_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
