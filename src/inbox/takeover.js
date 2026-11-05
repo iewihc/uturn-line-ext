@@ -228,9 +228,11 @@ function inboxTakeover() {
   .loe-inbox-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
   .loe-inbox-option:hover { background: #eef4ff; }
   .loe-inbox-option input { width: 18px; height: 18px; accent-color: #1c6cf3; flex: none; }
-  .loe-inbox-option-text { display: flex; flex-direction: column; font-size: 14px; color: #1f2937; }
+  .loe-inbox-option-icon { flex: none; width: 20px; height: 20px; color: #64748b; display: flex; }
+  .loe-inbox-option-icon svg { width: 20px; height: 20px; }
+  .loe-inbox-option:has(input:checked) .loe-inbox-option-icon { color: #1c6cf3; }
+  .loe-inbox-option-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; color: #1f2937; }
   .loe-inbox-option-text small { font-size: 12px; color: #64748b; }
-  .loe-inbox-options-test { margin: 4px 10px 6px; justify-content: center; }
   img.loe-inbox-avatar { object-fit: cover; }
   .loe-inbox-msg.failed .loe-inbox-msg-meta { color: #b91c1c; }
   .loe-inbox-composer { flex: 0 0 auto; padding: 10px 20px 16px; background: #fff; border-top: 1px solid #e3e7ee; display: flex; flex-direction: column; gap: 8px; }

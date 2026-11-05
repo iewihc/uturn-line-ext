@@ -32,7 +32,8 @@ function inboxRenderAll() {
 function inboxOptionsButton() {
   const wrap = ih("div", { class: "loe-inbox-options" });
   const set = (key, field, value) => { inbox[field] = value; storeSet(key, value); };
-  const row = (label, checked, onChange, hint) => ih("label", { class: "loe-inbox-option" },
+  const row = (icon, label, checked, onChange, hint) => ih("label", { class: "loe-inbox-option" },
+    ih("span", { class: "loe-inbox-option-icon", html: ic(icon) }),
     ih("span", { class: "loe-inbox-option-text" }, ih("span", { text: label }), hint ? ih("small", { text: hint }) : null),
     ih("input", { type: "checkbox", checked, onchange: (e) => onChange(e.currentTarget.checked) }));
   wrap.append(ih("button", { type: "button", class: "loe-inbox-btn" + (inbox.optionsOpen ? " on" : ""), html: GEAR_ICON, "aria-expanded": inbox.optionsOpen ? "true" : "false",
@@ -41,27 +42,26 @@ function inboxOptionsButton() {
   const chat = inbox.selected && inbox.chats.get(inbox.selected);
   wrap.append(ih("div", { class: "loe-inbox-options-menu", role: "menu", "aria-label": "選項", onclick: (e) => e.stopPropagation() },
     ih("div", { class: "loe-inbox-options-group", text: "右欄" }),
-    row("固定開啟司機對話", inbox.pinDchat, (v) => { set(INBOX_PIN_DCHAT_KEY, "pinDchat", v); if (v && chat) { inbox.dchatAutoFor = ""; inboxLoadOrders(chat); } renderInboxOrders(); },
+    row("message-square", "固定開啟司機對話", inbox.pinDchat, (v) => { set(INBOX_PIN_DCHAT_KEY, "pinDchat", v); if (v && chat) { inbox.dchatAutoFor = ""; inboxLoadOrders(chat); } renderInboxOrders(); },
       "選到有司機的單就自動打開，多台開第一台"),
-    row("固定開啟記事本", inbox.pinNotes, (v) => {
+    row("notebook", "固定開啟記事本", inbox.pinNotes, (v) => {
       set(INBOX_PIN_NOTES_KEY, "pinNotes", v);
       if (v) { inbox.notesOpen = true; inbox.notesCollapsed = false; if (chat && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); }
       renderInboxNotes(); renderInboxThread();
     }, "可以收起，但不會關掉"),
     ih("div", { class: "loe-inbox-options-group", text: "列表" }),
-    row("不顯示官方帳號名稱", inbox.hideOaName, (v) => { set(INBOX_HIDE_OA_NAME_KEY, "hideOaName", v); renderInboxList(); }, "官方訊息每列只顯示群編（例如 0/），沒設群編的帳號仍顯示名稱"),
+    row("eye-off", "不顯示官方帳號名稱", inbox.hideOaName, (v) => { set(INBOX_HIDE_OA_NAME_KEY, "hideOaName", v); renderInboxList(); }, "官方訊息每列只顯示群編（例如 0/），沒設群編的帳號仍顯示名稱"),
     ih("div", { class: "loe-inbox-options-group", text: "已讀" }),
-    row("開啟對話自動標已讀", inbox.autoRead, (v) => { set(INBOX_AUTO_READ_KEY, "autoRead", v); if (v && chat?.unread) inboxMarkRead(chat); },
+    row("check-check", "開啟對話自動標已讀", inbox.autoRead, (v) => { set(INBOX_AUTO_READ_KEY, "autoRead", v); if (v && chat?.unread) inboxMarkRead(chat); },
       "不勾＝永遠不自動標，只有按「標為已讀」才標（回覆後也不標）"),
     ih("div", { class: "loe-inbox-options-group", text: "提示音" }),
-    row("新訊息提示音", inbox.sound, (v) => {
+    row("bell", "新訊息提示音", inbox.sound, (v) => {
       set(INBOX_SOUND_KEY, "sound", v);
       if (v) {
         inboxBeep(); // 使用者手勢裡建立／恢復 AudioContext
         if (typeof Notification === "function" && Notification.permission === "default") Notification.requestPermission().catch(() => {});
       }
-    }),
-    ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-options-test", html: ic("bell"), onclick: () => inboxBeep() }, ih("span", { text: "試聽" })),
+    }, "開啟時會響一聲"),
   ));
   return wrap;
 }
