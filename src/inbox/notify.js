@@ -29,6 +29,27 @@ function inboxNotify(chat, payload) {
     } catch (_) {}
   }
 }
+// 司機對話新訊息（只有自己的單）：右上卡片（同一張單合併計數）＋提示音＋背景時的桌面通知。
+// chatKey＝這張單派自哪個收件匣對話（有才能「在收件匣開」）
+function inboxNotifyDriver({ orderId, shortId, driverNo, text, chatKey }) {
+  const key = `dchat:${orderId}`;
+  const t = inbox.toasts.get(key) || { key, kind: "driver", orderId, count: 0, lines: [], timer: 0 };
+  Object.assign(t, { shortId: shortId || t.shortId || "", driverNo: driverNo || t.driverNo || "", chatKey: chatKey || t.chatKey || "" });
+  t.count += 1;
+  t.lines.push(text || "[訊息]");
+  if (t.lines.length > 3) t.lines.shift();
+  clearTimeout(t.timer);
+  t.timer = setTimeout(() => { inbox.toasts.delete(key); renderInboxToasts(); }, INBOX_TOAST_MS);
+  inbox.toasts.set(key, t);
+  renderInboxToasts();
+  if (inbox.sound) inboxBeep();
+  if (document.hidden && typeof Notification === "function" && Notification.permission === "granted") {
+    try {
+      const n = new Notification(`司機 ${t.driverNo}・${t.shortId}`, { body: t.lines.join("\n"), tag: key });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch (_) {}
+  }
+}
 // 不載外部音檔（CSP／離線都不受影響）：Web Audio 兩個短音
 function inboxAudio() {
   if (!inbox.audio) {
@@ -64,4 +85,4 @@ function playTwoTone(ctx) {
 }
 const inboxSoundReady = () => !inbox.sound || (inbox.audio && inbox.audio.state === "running");
 
-export { inboxBeep, inboxDismissToast, inboxNotify, inboxSoundReady, playTwoTone };
+export { inboxBeep, inboxDismissToast, inboxNotify, inboxNotifyDriver, inboxSoundReady, playTwoTone };

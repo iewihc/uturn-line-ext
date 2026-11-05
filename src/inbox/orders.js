@@ -1,10 +1,11 @@
 // 收件匣對話標頭下的訂單列：這位客人的進行中訂單、收起／展開、司機對話開啟與停靠。
 import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
-import { closeDriverChat, driverChat, driverChatDock, driverChatNotifyOrders, openDriverChat, renderDriverChatHead, syncDriverChatOrders } from "../driver-chat.js";
+import { closeDriverChat, driverChat, driverChatDock, openDriverChat, renderDriverChatHead, syncDriverChatOrders } from "../driver-chat.js";
 import { renderInboxNotes } from "./chat-tools.js";
 import { INBOX_DCHAT_DOCK_KEY, INBOX_ORDERS_COLLAPSED_KEY, ih, inbox } from "./core.js";
 import { INBOX_BOARD_AFTER_ACTION_MS, inboxLoadBoard, inboxPatchBoard } from "./order-status.js";
+import { inboxOpenChat } from "./send.js";
 import { renderInboxThread } from "./thread.js";
 import { fetchChatOrders } from "../orders-lookup.js";
 import { liveOrders, orderActionBusy, orderNotiSummary, orderRow, setOrderSystemNoti } from "../orders.js";
@@ -18,11 +19,29 @@ async function inboxLoadOrders(chat) {
   try {
     st.list = await fetchChatOrders(chat.botId, chat.chatId);
     inboxPatchBoard(chat, st.list);
-    driverChatNotifyOrders(st.list);
     if (inbox.selected === chat.key && driverChat.host === inbox.el.dchat) syncDriverChatOrders(st.list);
   } catch (e) { st.error = e.message || String(e); }
   st.loading = false;
-  if (inbox.selected === chat.key) renderInboxOrders();
+  if (inbox.selected === chat.key) { renderInboxOrders(); inboxAutoOpenDriverChat(chat, st.list); }
+}
+// 選到有司機的訂單：自動打開司機對話（多台開第一台；司機訊息通知卡點進來的開那一台）。
+// 同一位客人手動關掉後不再自動開，換一位客人或點通知卡才會再開。
+function inboxAutoOpenDriverChat(chat, list) {
+  const withDriver = liveOrders(list).filter((o) => o.hasDriver);
+  const want = inbox.dchatWant && withDriver.find((o) => o.id === inbox.dchatWant);
+  if (!want && (inbox.dchatAutoFor === chat.key || driverChat.host === inbox.el.dchat)) return;
+  const target = want || withDriver[0];
+  if (!target) return;
+  inbox.dchatWant = "";
+  inbox.dchatAutoFor = chat.key;
+  if (driverChat.orderId !== target.id) openInboxDriverChat(target.id);
+}
+// 通知卡「司機對話」：開那位客人的對話，訂單載入後開那一台的司機對話
+function inboxOpenDriverChatFor(chatKey, orderId) {
+  inbox.dchatWant = orderId;
+  if (inbox.selected !== chatKey) return inboxOpenChat(chatKey);
+  const chat = inbox.chats.get(chatKey);
+  if (chat) inboxLoadOrders(chat);
 }
 function openInboxDriverChat(orderId) {
   const chat = inbox.selected && inbox.chats.get(inbox.selected);
@@ -108,4 +127,4 @@ function renderInboxOrders() {
   if (inbox.el.dchat && !inbox.el.dchat.hidden && !inbox.el.dchat.dataset.dragged && !inbox.el.dchat.classList.contains("dock")) inbox.el.dchat.style.top = `${bar.offsetTop + bar.offsetHeight}px`;
 }
 
-export { inboxLoadOrders, inboxReloadSelectedOrders, inboxToggleDchatDock, renderInboxOrders };
+export { inboxLoadOrders, inboxOpenDriverChatFor, inboxReloadSelectedOrders, inboxToggleDchatDock, renderInboxOrders };

@@ -1,5 +1,7 @@
 # uturn-line-ext
 
+版本 **1.66.0**：收件匣司機訊息改即時。用發送 KEY 換 30 分鐘 token（`POST /line-ext/chat-token`，只能連即時聊天、後台 API 拒收），連 signalr-chat `/hubs/chat`、每個可調度車隊 `JoinFleet(車隊, 自己)`，`ReceiveMessage` 只留司機講的、自己的單（同後台調度中心「自己」模式：自己建的、店家叫車、客叫單當班沒設或含自己），右上角卡片（單號＋司機、最近幾則，「司機對話」開那位客人並打開這一台）。協商與長輪詢走 `GM_xmlhttpRequest`，WebSocket 被頁面擋就退回長輪詢；token 只在連上時檢查，重連前快到期自動換。選到有司機的單會自動打開司機對話（多台開第一台；手動關掉後同一位客人不再自動開）。官方帳號看板每個聊天室多帶 `orderIds`（訂單 → 客人對話）。
+
 版本 **1.65.0**：改為 Vite 打包。原本 9,200 行的單一檔案拆成 `src/` 下 52 個 ES module（見下方「開發與打包」），`uturn-line-ext.user.js` 改為 `npm run build` 的產物，並以 terser 壓縮＋改名（混淆）。功能與行為不變：每段程式只是搬到對應模組，跨模組才改成 `import`／`export`；原本散在各處、載入時就掛上的事件與計時器改集中在各模組的 `init*()`，由 `uturnMain()` 依原順序呼叫；原本在載入期直接寫入別段變數的三處（收件匣選對話時設定 `pageContext`、換對話時重設貼底狀態、換對話讓 Cookie 擷取失效）改為呼叫對應模組的函式（`setPageContext`、`resetScrollerForChat`／`forceStickFor`、`invalidateLineApiCapture`）。`@updateURL` 不變，使用者端照常自動更新。整理重複：`httpGetJson`／`httpSendJson` 合併成 `core/backend.js` 一個 `gmJsonRequest`；開頁與每輪維護共用 `enhanceChatPage()`；複製／轉發鈕的 CSS 共用一條規則；快速回覆管理視窗的列由 `replyRowInfo()` 產生；派單視窗四個布林勾選由 `boolSetting()` 產生（對外函式名不變）。加 ESLint（`npm run lint`：未使用變數、未定義名稱）——全檔掃過沒有未使用的函式或變數，只拿掉兩個多餘的 import；每個模組檔頭一行用途說明。派單視窗的「系統自動通知」勾選由最上方移到「派單後自動回覆客人」正上方。收件匣左欄「官方帳號」標題右邊加「收起」（‹）：往左收成一條直條，監聽與通知照常，點直條展開；記在 `loe_inbox_rail_collapsed_v1`，預設展開。
 
 版本 **1.64.4**：條款的「禁止提供的內容」「違反前條保密或使用授權義務」加上黃底深紅粗體；完整移除「群發操作與結果確認」，後續條款重新編號，合計八條。條款版本更新為 `2026-11-05.5`。

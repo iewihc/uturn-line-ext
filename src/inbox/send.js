@@ -23,7 +23,10 @@ function inboxSetContext(chat) {
   if (changed) { closeDispatchPopover(); refreshAiToggle(); }
 }
 async function inboxOpenChat(key) {
-  if (inbox.selected !== key && driverChat.host === inbox.el.dchat) closeDriverChat();
+  if (inbox.selected !== key) {
+    if (driverChat.host === inbox.el.dchat) closeDriverChat();
+    inbox.dchatAutoFor = ""; // 換一位客人：有司機的單再自動開司機對話
+  }
   inbox.selected = key;
   inbox.renaming = false;
   inboxDismissToast(key);

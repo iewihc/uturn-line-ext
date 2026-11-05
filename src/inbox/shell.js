@@ -1,4 +1,5 @@
 // 收件匣外框：標頭、授權閘門、左欄官方帳號列表、啟動與身份授權。
+import { startDriverLive } from "./driver-live.js";
 import { aiBots } from "../ai-toggle.js";
 import { board, closeBoard, openBoard } from "../board.js";
 import { hasLineExtAuth, lineAuthDoneText, saveLineCookie } from "../core/backend.js";
@@ -107,6 +108,7 @@ function inboxStart() {
     inboxLoadBoard(id);
   }
   inboxScheduleBoard();
+  startDriverLive();
 }
 // 收件匣的身份授權：同 LINE 後台選單的「身份授權」，用任一官方帳號讀目前的 LINE 登入；授權後馬上重抓需要 KEY 的資料
 async function inboxAuthorize(e) {

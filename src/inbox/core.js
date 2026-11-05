@@ -53,7 +53,7 @@ const inbox = {
   notesOpen: false,
   notes: new Map(), // "bot/chat" → { list, total, next, loading, error }
   orders: new Map(), // "bot/chat" → { list, loading, error }（以對話連結查的進行中訂單）
-  board: new Map(), // botId → { version, chats: Map(chatId → 看板欄位[]), counts }（官方帳號每個聊天室進行中訂單的狀態）
+  board: new Map(), // botId → { version, chats: Map(chatId → 看板欄位[]), orderChat: Map(orderId → chatId) }（官方帳號每個聊天室進行中訂單）
   orderFilter: "", // 訂單狀態篩選（看板欄位；空＝不篩）
   linked: new Set(), // 已對應到乘客的 "bot/chat"
   linkProbed: new Map(), // "bot/chat" → 上次送去比對的內容（大頭貼＋訊息編號沒變就不再問）
@@ -63,6 +63,8 @@ const inbox = {
   railCollapsed: storeGet(INBOX_RAIL_COLLAPSED_KEY, false) === true, // 左欄「官方帳號」往左收成一條（監聽不受影響）
   ordersCollapsed: storeGet(INBOX_ORDERS_COLLAPSED_KEY, false) === true, // 標頭下方訂單列收起（只剩狀態＋單號）
   dchatDock: storeGet(INBOX_DCHAT_DOCK_KEY, true) !== false, // 司機對話：true＝對話右邊再開一欄，false＝浮動蓋在對話上、可拖曳
+  dchatAutoFor: "", // 已自動開過司機對話的 "bot/chat"（手動關掉後，同一位客人不再自動開）
+  dchatWant: "", // 下一次要開的司機對話訂單（司機訊息通知卡點進來的那一台）
   flagBusy: "", // 正在改「待處理／處理完畢」的對話 key
   boardRefreshing: false, // 「官方訊息」訂單狀態數量手動重新整理中
   botsLoaded: false, started: false, // 官方帳號清單讀完／已通過身份授權開始連線

@@ -9,7 +9,7 @@ import { INBOX_CONTENT_TABS, closeInboxContents, inboxLoadContents, inboxLoadPac
 import { ih, inbox, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxTime } from "./core.js";
 import { inboxEmojiUrl, inboxMediaNode, inboxPackTabUrl, inboxStickerUrl, inboxTextNodes } from "./media.js";
 import { inboxDismissToast } from "./notify.js";
-import { renderInboxOrders } from "./orders.js";
+import { inboxOpenDriverChatFor, renderInboxOrders } from "./orders.js";
 import { inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSendSticker } from "./send.js";
 import { inboxAvatar } from "./shell.js";
 import { GEAR_ICON, closePrefixPopover, openPrefixPopover } from "../prefix.js";
@@ -234,6 +234,7 @@ function renderInboxToasts() {
   if (!host) return;
   host.textContent = "";
   for (const t of inbox.toasts.values()) {
+    if (t.kind === "driver") { host.append(inboxDriverToastCard(t)); continue; }
     const chat = inbox.chats.get(t.key);
     if (!chat) continue;
     const chip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId).slice(0, 8), title: inboxBotName(chat.botId) });
@@ -255,6 +256,28 @@ function renderInboxToasts() {
     card.style.borderLeftColor = inboxBotColor(chat.botId);
     host.append(card);
   }
+}
+
+// 司機對話通知卡：單號＋司機、最近幾則；「司機對話」開那位客人的對話並打開這一台的司機對話
+function inboxDriverToastCard(t) {
+  const chat = t.chatKey && inbox.chats.get(t.chatKey);
+  const close = () => { inboxDismissToast(t.key); renderInboxToasts(); };
+  const card = ih("div", { class: "loe-inbox-toast driver", role: "status" },
+    ih("div", { class: "loe-inbox-toast-top" },
+      ih("span", { class: "loe-inbox-tag ord", text: "司機" }),
+      ih("strong", { class: "loe-inbox-row-name", text: `${t.driverNo || "司機"}・${t.shortId || "訂單"}` }),
+      chat ? ih("span", { class: "loe-inbox-muted", text: chat.name }) : null,
+      t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則新訊息` }) : null,
+      ih("span", { class: "loe-inbox-spacer" }),
+      ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知", html: ic("x"), onclick: close }),
+    ),
+    ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
+    chat ? ih("div", { class: "loe-inbox-toast-actions" },
+      ih("button", { type: "button", class: "loe-inbox-btn primary", text: "司機對話", onclick: () => { close(); inboxOpenDriverChatFor(chat.key, t.orderId); } }),
+    ) : null,
+  );
+  if (chat) card.style.borderLeftColor = inboxBotColor(chat.botId);
+  return card;
 }
 
 export { inboxInsertText, renderInboxContents, renderInboxPicker, renderInboxThread, renderInboxToasts };

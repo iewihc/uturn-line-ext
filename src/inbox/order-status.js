@@ -28,7 +28,9 @@ async function inboxLoadBoard(botId) {
     prev ? `&version=${encodeURIComponent(prev.version)}` : "").catch(() => null);
   if (!data || !inbox.enabled.has(botId) || (data.unchanged && prev)) return;
   const chats = new Map((data.chats || []).map((c) => [c.chatId, c.columns || []]));
-  inbox.board.set(botId, { version: data.version || "", chats });
+  // 訂單 → 聊天室：司機訊息通知卡據此開那位客人的對話
+  const orderChat = new Map((data.chats || []).flatMap((c) => (c.orderIds || []).map((id) => [id, c.chatId])));
+  inbox.board.set(botId, { version: data.version || "", chats, orderChat });
   for (const chatId of chats.keys()) inbox.linked.add(inboxKey(botId, chatId));
   // 有進行中訂單、但不在已載入對話裡的客人補抓進清單（依訂單狀態篩選才不會漏）
   const missing = [...chats.keys()].filter((id) => !id.startsWith("C") && !inbox.chats.has(inboxKey(botId, id))).slice(0, INBOX_BOARD_FETCH_MISSING);
