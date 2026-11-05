@@ -11,13 +11,14 @@ import { renderInboxThread } from "./thread.js";
 /* ---------------------------------------------------------------------- *
  *   轉給司機：走司機對話（POST …/driver-chat/messages｜/images），對象＝這位客人進行中、已有司機的單；多台先選哪一台
  *   轉給客人：走收件匣送出（文字／圖片，同手動回覆）
- *   文字加前綴（客人說：／司機說：）讓對方分得出是誰講的；圖片原圖下載後轉傳（LINE 圖要帶登入、GCS 不給跨網域讀，一律 GM_xmlhttpRequest）
+ *   文字加前綴（客人說：／司機說：）讓對方分得出是誰講的；客服自己送出的訊息也能轉（raw：原文照轉、不加前綴）；圖片原圖下載後轉傳（LINE 圖要帶登入、GCS 不給跨網域讀，一律 GM_xmlhttpRequest）
  *   按一下就送，不再確認；原訊息下方標轉傳結果，失敗可重試（多台只重送還沒成功的）；轉過的可以再轉，不限次數
  * ---------------------------------------------------------------------- */
 const RELAY_PREFIX = { driver: "客人說：", customer: "司機說：" };
 const RELAY_LABEL = { driver: "司機", customer: "客人" };
 const relay = { status: new Map(), menu: null, bar: null }; // status：`${dir}:${訊息id}` → { state, error, retry, to }
 
+const relayText = (dir, item) => (item.raw ? item.text : RELAY_PREFIX[dir] + item.text);
 const relayTargets = () => {
   const chat = inboxSelectedChat();
   return chat ? liveOrders(inbox.orders.get(chat.key)?.list).filter((o) => o.hasDriver) : [];
@@ -90,7 +91,7 @@ function relaySendToDrivers(item, orders) {
           form.append("tempId", tempId);
           form.append("file", image, image.name);
           await driverChatApi("POST", order.id, "/images", form);
-        } else await driverChatApi("POST", order.id, "/messages", { content: RELAY_PREFIX.driver + item.text, tempId });
+        } else await driverChatApi("POST", order.id, "/messages", { content: relayText("driver", item), tempId });
         left.shift();
       }
       relaySet(key, { state: "sent", to });
@@ -134,7 +135,7 @@ function relayToCustomer(item) {
     try {
       const ok = item.imageUrl
         ? (await inboxSendFiles([await relayFetchImage(item.imageUrl)])).every(Boolean)
-        : await inboxSend(RELAY_PREFIX.customer + item.text);
+        : await inboxSend(relayText("customer", item));
       relaySet(key, ok ? { state: "sent" } : { state: "failed", error: "LINE 沒有送出", retry: run });
     } catch (e) {
       relaySet(key, { state: "failed", error: e.message || String(e), retry: run });
@@ -157,12 +158,12 @@ function relayControls(dir, item) {
       ih("button", { type: "button", class: "loe-relay-retry", text: "重試", onclick: () => st.retry() }));
   return ih("button", { type: "button", class: "loe-relay-btn", text: `轉給${RELAY_LABEL[dir]}`, title: `把這則訊息轉給${RELAY_LABEL[dir]}`, onclick: send });
 }
-// 收件匣客人訊息：文字、圖片、位置；客人沒有已派到司機的單就不顯示
+// 收件匣訊息：客人傳的、客服自己送出的都能轉（文字、圖片、位置）；客人沒有已派到司機的單就不顯示
 function inboxRelayControls(m) {
   const msg = m.message;
-  if (!msg?.id || m.type === "messageSent" || !relayTargets().length) return null;
+  if (!msg?.id || !relayTargets().length) return null;
   const item = relayItemOfLine(msg);
-  return item ? relayControls("driver", item) : null;
+  return item ? relayControls("driver", { ...item, raw: m.type === "messageSent" }) : null;
 }
 function relayItemOfLine(msg) {
   if (msg.type === "text" || msg.type === "textV2") return msg.text ? { id: msg.id, text: msg.text } : null;
@@ -188,11 +189,12 @@ async function relayLineImageUrl(msgId) {
   if (media.expired) throw new Error("這張圖已過期，LINE 不再提供");
   return media.url;
 }
-// 司機對話的司機訊息（只在收件匣：面板對應的就是目前這位客人）
+// 司機對話的訊息：司機傳的、調度這邊送出的都能轉（只在收件匣：面板對應的就是目前這位客人）
 function driverRelayControls(m) {
-  if (driverChat.host !== inbox.el.dchat || m.sender !== "driver" || !m.id || m.isRecalled) return null;
-  const item = m.type === "image" ? (m.imageUrl ? { id: m.id, imageUrl: m.imageUrl } : null)
-    : m.type === "text" || m.type === "location" ? (m.content ? { id: m.id, text: m.content } : null) : null;
+  if (driverChat.host !== inbox.el.dchat || (m.sender !== "driver" && m.sender !== "user") || !m.id || m.isRecalled) return null;
+  const raw = m.sender !== "driver";
+  const item = m.type === "image" ? (m.imageUrl ? { id: m.id, imageUrl: m.imageUrl, raw } : null)
+    : m.type === "text" || m.type === "location" ? (m.content ? { id: m.id, text: m.content, raw } : null) : null;
   return item ? relayControls("customer", item) : null;
 }
 
@@ -204,7 +206,7 @@ function relayHideBar() {
 function relayOnSelect() {
   const sel = document.getSelection();
   const text = sel && !sel.isCollapsed ? String(sel).trim() : "";
-  const host = (n) => (n?.nodeType === 1 ? n : n?.parentElement)?.closest(".loe-inbox-msg.in, .loe-dchat-msg.in");
+  const host = (n) => (n?.nodeType === 1 ? n : n?.parentElement)?.closest(".loe-inbox-msg, .loe-dchat-msg");
   const msgEl = text && host(sel.anchorNode);
   if (!msgEl || msgEl !== host(sel.focusNode)) return relayHideBar();
   const toDriver = msgEl.classList.contains("loe-inbox-msg");
@@ -215,7 +217,7 @@ function relayOnSelect() {
   const keep = (e) => e.preventDefault(); // 按工具列不要取消反白
   const bar = ih("div", { class: "loe-relay-bar", role: "toolbar", "aria-label": "轉傳反白的文字", onmousedown: keep },
     ih("button", { type: "button", class: "primary", text: toDriver ? "轉給司機" : "轉給客人",
-      onclick: (e) => { const item = { id, text }; if (toDriver) relayToDriver(item, e.currentTarget); else relayToCustomer(item); relayHideBar(); } }),
+      onclick: (e) => { const item = { id, text, raw: msgEl.classList.contains("out") }; if (toDriver) relayToDriver(item, e.currentTarget); else relayToCustomer(item); relayHideBar(); } }),
     ih("button", { type: "button", text: "複製", onclick: async () => { await copyText(text).catch(() => {}); toast("已複製", "ok", 1500); relayHideBar(); } }));
   bar.style.left = `${Math.max(8, rect.left + rect.width / 2 - 70)}px`;
   bar.style.top = `${Math.max(8, rect.top - 44)}px`;
