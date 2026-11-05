@@ -159,25 +159,28 @@ function inboxFileKind(file) {
   const t = file.type || "";
   return t.startsWith("image/") ? "image" : t.startsWith("video/") ? "video" : t.startsWith("audio/") ? "audio" : "file";
 }
+// 回傳每個檔案是否送出
 async function inboxSendFiles(files) {
   const chat = inboxSelectedChat();
-  if (!chat || !files.length) return;
+  const results = [];
+  if (!chat || !files.length) return results;
   for (const file of files) {
     const kind = inboxFileKind(file);
     const limit = INBOX_FILE_LIMIT_MB[kind];
-    if (file.size > limit * 1048576) { toast(`${file.name} 超過 ${limit} MB，LINE 不收`, "warn", 4000); continue; }
+    if (file.size > limit * 1048576) { toast(`${file.name} 超過 ${limit} MB，LINE 不收`, "warn", 4000); results.push(false); continue; }
     const sendId = inboxNewSendId(chat);
     const localUrl = kind === "image" ? URL.createObjectURL(file) : "";
     const bubble = inboxPushBubble(chat, { type: kind, fileName: file.name, fileSize: file.size }, sendId, { localUrl });
     const form = new FormData();
     form.append("file", file, file.name);
-    await inboxDeliver(chat, bubble, async () => {
+    results.push(await inboxDeliver(chat, bubble, async () => {
       const up = await inboxApi("POST", `/api/v1/bots/${chat.botId}/messages/${encodeURIComponent(chat.chatId)}/uploadFile`, form);
       const token = up && up.contentMessageToken;
       if (!token) throw new Error("LINE 沒有回傳上傳憑證");
       return inboxApi("POST", `${inboxMsgPath(chat)}/bulkSendFiles`, { items: [{ sendId, contentMessageToken: token }] });
-    });
+    }));
   }
+  return results;
 }
 
 export { inboxAppendToThread, inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSend, inboxSendFiles, inboxSendPayload, inboxSendSticker, inboxSetContext, inboxTextWithTokens };

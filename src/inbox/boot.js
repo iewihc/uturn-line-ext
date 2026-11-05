@@ -1,4 +1,5 @@
 // 收件匣啟動：條款 → 綁定畫面事件 → 讀官方帳號 → 授權閘門 → 連線與輪詢。
+import { initInboxRelay } from "./relay.js";
 import { openDispatchPopover } from "../dispatch.js";
 import { inboxConnect, inboxEnabledIds, inboxLoadBots, inboxLoadChats } from "./chats.js";
 import { closeInboxContents } from "./contents.js";
@@ -18,6 +19,7 @@ function bootInbox() {
   if (!root) return;
   if (!hasAcceptedInboxTerms()) { showInboxTerms(root); return; }
   root.inert = false;
+  initInboxRelay();
   const $ = (sel) => root.querySelector(sel);
   inbox.el = {
     header: $(".loe-inbox-top"), rail: $(".loe-inbox-rail-list"), search: $(".loe-inbox-search"), foot: $(".loe-inbox-rail-foot"),

@@ -648,6 +648,24 @@ const STYLE_CSS = `
     .loe-dchat-meta-line { display: flex; gap: 8px; align-items: center; font-size: 11px; color: #94a3b8; margin: 2px 4px 0; }
     .loe-dchat-recall { border: 0; background: none; padding: 0; color: #94a3b8; font: inherit; cursor: pointer; text-decoration: underline; }
     .loe-dchat-recall:hover { color: #ef4444; }
+    /* 客人 ↔ 司機一鍵轉傳 */
+    .loe-relay-btn { border: 1px solid #c7d7fb; background: ${BLUE_SOFT}; color: ${BLUE}; border-radius: 6px; padding: 1px 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; margin-left: 6px; }
+    .loe-relay-btn:hover { background: ${BLUE}; color: #fff; border-color: ${BLUE}; }
+    .loe-relay-status { margin-left: 6px; font-size: 11px; color: #64748b; }
+    .loe-relay-status.ok { color: #15803d; font-weight: 700; }
+    .loe-relay-status.err { color: #b91c1c; font-weight: 700; }
+    .loe-relay-retry { border: 1px solid #fca5a5; background: #fff; color: #b91c1c; border-radius: 6px; padding: 0 6px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .loe-relay-menu { position: fixed; z-index: 2147483600; width: 290px; background: #fff; border-radius: 12px; box-shadow: 0 10px 28px rgba(15,23,42,.2); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+    .loe-relay-menu-title { padding: 6px 8px; font-size: 12px; font-weight: 700; color: #64748b; }
+    .loe-relay-menu-item { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; text-align: left; font: inherit; cursor: pointer; }
+    .loe-relay-menu-item:hover { background: ${BLUE_SOFT}; }
+    .loe-relay-menu-item.all { color: ${BLUE}; font-weight: 700; }
+    .loe-relay-no { width: 22px; height: 22px; border-radius: 50%; background: #334155; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none; }
+    .loe-relay-car { display: flex; flex-direction: column; font-size: 12px; color: #64748b; }
+    .loe-relay-car strong { font-size: 13px; color: #1f2937; }
+    .loe-relay-bar { position: fixed; z-index: 2147483600; display: flex; gap: 2px; padding: 4px; background: #1f2937; border-radius: 10px; box-shadow: 0 6px 16px rgba(15,23,42,.3); }
+    .loe-relay-bar button { height: 30px; padding: 0 10px; border: 0; border-radius: 7px; background: none; color: #e2e8f0; font: inherit; font-size: 13px; cursor: pointer; }
+    .loe-relay-bar button.primary { background: ${BLUE}; color: #fff; font-weight: 700; }
     .loe-dchat-quick { flex: 0 0 auto; padding: 8px 12px 0; background: #fff; border-top: 1px solid #e3e7ee; }
     .loe-dchat-quick[hidden] { display: none; }
     .loe-dchat-composer { flex: 0 0 auto; display: flex; gap: 8px; align-items: flex-end; padding: 8px 12px 12px; background: #fff; }

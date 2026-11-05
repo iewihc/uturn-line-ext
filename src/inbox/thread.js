@@ -9,6 +9,7 @@ import { INBOX_CONTENT_TABS, closeInboxContents, inboxLoadContents, inboxLoadPac
 import { ih, inbox, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxTime } from "./core.js";
 import { inboxEmojiUrl, inboxMediaNode, inboxPackTabUrl, inboxStickerUrl, inboxTextNodes } from "./media.js";
 import { inboxDismissToast } from "./notify.js";
+import { inboxRelayControls } from "./relay.js";
 import { inboxOpenDriverChatFor, renderInboxOrders } from "./orders.js";
 import { inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSendSticker } from "./send.js";
 import { inboxAvatar } from "./shell.js";
@@ -121,7 +122,9 @@ function renderInboxThread() {
     }
     thMsgs.append(ih("div", { class: "loe-inbox-msg" + (out ? " out" : " in") + (m.failed ? " failed" : "") + (isCard ? " card" : "") },
       bubble,
-      ih("div", { class: "loe-inbox-msg-meta", text: out ? (isCard ? `AI 回覆 · ${meta}` : meta) : `${meta} · ${chat.name}` }),
+      ih("div", { class: "loe-inbox-msg-meta" },
+        out ? (isCard ? `AI 回覆 · ${meta}` : meta) : `${meta} · ${chat.name}`,
+        m.pending || m.failed ? null : inboxRelayControls(m)),
     ));
   }
   thMsgs.scrollTop = thMsgs.scrollHeight;

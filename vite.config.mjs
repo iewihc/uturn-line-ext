@@ -29,7 +29,8 @@ export default defineConfig({
         author: "iewihc",
         match: ["https://manager.line.biz/*", "https://chat.line.biz/*"],
         grant: ["GM_setClipboard", "GM_getValue", "GM_setValue", "GM_xmlhttpRequest", "GM_cookie"],
-        connect: ["discord.com", "discordapp.com", "mr-chi-tech.com"],
+        // line.biz：轉傳客人的 LINE 圖片；storage.googleapis.com：轉傳司機上傳的圖片
+        connect: ["discord.com", "discordapp.com", "mr-chi-tech.com", "line.biz", "storage.googleapis.com"],
         homepageURL: "https://github.com/iewihc/uturn-line-ext",
         supportURL: "https://github.com/iewihc/uturn-line-ext/issues",
         downloadURL: "https://raw.githubusercontent.com/iewihc/uturn-line-ext/main/uturn-line-ext.user.js",

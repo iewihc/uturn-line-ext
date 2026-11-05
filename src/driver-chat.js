@@ -33,6 +33,9 @@ const driverChat = {
   loading: false, polling: false, olderLoading: false, error: "", timer: 0, run: 0,
   el: {},
 };
+// 司機訊息下方額外的動作（收件匣掛「轉給客人」）；(訊息) → 節點或 null
+let driverChatMsgActions = () => null;
+const setDriverChatMsgActions = (fn) => { driverChatMsgActions = fn; };
 const driverChatNotified = new Map(); // orderId → 已提示過的司機最後訊息時間（ms），避免重複響
 const msOf = (iso) => { const t = Date.parse(iso || ""); return Number.isFinite(t) ? t : 0; };
 function driverChatSeen() {
@@ -429,7 +432,8 @@ function renderDriverChatMsgs(scrollToEnd) {
       bubble,
       ih("div", { class: "loe-dchat-meta-line" },
         ih("span", { text: meta }),
-        canRecall ? ih("button", { type: "button", class: "loe-dchat-recall", text: "收回", onclick: () => driverChatRecall(m) }) : null)));
+        canRecall ? ih("button", { type: "button", class: "loe-dchat-recall", text: "收回", onclick: () => driverChatRecall(m) }) : null,
+        driverChatMsgActions(m))));
     prevSender = senderKey;
   }
   if (driverChat.error) box.append(ih("div", { class: "loe-dchat-empty err", text: "連線不穩：" + driverChat.error }));
@@ -451,4 +455,4 @@ function initDriverChat() {
   document.addEventListener("visibilitychange", driverChatMarkRead);
 }
 
-export { NATIVE_ORDERS_REFRESH_MS, closeDriverChat, driverChat, driverChatDock, driverChatNotifyOrders, driverChatUnread, initDriverChat, msOf, openDriverChat, renderDriverChatHead, syncDriverChatOrders };
+export { NATIVE_ORDERS_REFRESH_MS, closeDriverChat, driverChat, driverChatCompressImage, driverChatDock, driverChatNotifyOrders, driverChatUnread, initDriverChat, msOf, openDriverChat, renderDriverChatHead, renderDriverChatMsgs, setDriverChatMsgActions, syncDriverChatOrders };
