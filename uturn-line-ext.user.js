@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.60.1
+// @version      1.61.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知、司機對話。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -6613,6 +6613,13 @@
    *         POST /api/v1/bots/{bot}/streamingApiToken → GET {streamingApiBaseUrl}/api/{version}/sse?token=…
    *         事件 chat.subEvent：message（客人傳來）／messageSent（官方送出）／read（客服標已讀）…
    *   發訊：POST /api/v1/bots/{bot}/chats/{chat}/messages/send { type:"text", text, sendId }，帶 X-XSRF-TOKEN
+   *         貼圖 { type:"sticker", packageId, stickerId }；多頁訊息 { type:"cardType", cardTypeMessageId }；
+   *         優惠券 { type:"coupon", couponId }；文字夾表情貼 { type:"textV2", text:"…{emoji_0}…", substitution }
+   *         （與 LINE 自家前端 ou() 同形：文字裡的 { } 要寫成 {{ }}）
+   *   檔案：POST /api/v1/bots/{bot}/messages/{chat}/uploadFile（multipart file）→ { contentMessageToken }
+   *         → POST …/messages/bulkSendFiles { items:[{ sendId, contentMessageToken }] }（LINE 網頁版同一條路）
+   *   清單：貼圖 /stickers/owned、表情貼 /emojis/owned、預設訊息 /api/v2/…/savedReplies、
+   *         多頁訊息 /cardTypeMessages、優惠券 /coupons
    *   一般聊天頁完全不走這段：INBOX_MODE 為 false 時只多一顆「收件匣」入口按鈕。
    * ---------------------------------------------------------------------- */
   const INBOX_ENABLED_KEY = "loe_inbox_enabled_bots_v1"; // 啟用監聽的官方帳號 botId 陣列
@@ -6651,6 +6658,11 @@
     linkProbed: new Map(), // "bot/chat" → 上次送去比對的內容（大頭貼＋訊息編號沒變就不再問）
     owners: new Map(), // botId → Map(bizId → name)
     renaming: false,
+    picker: null, // 貼圖／表情貼面板：{ kind: "sticker"|"emoji", pkg }（null＝收起）
+    packs: new Map(), // "botId/sticker"｜"botId/emoji" → { list: [{ id, items }], loading, error }
+    emojiTokens: new Map(), // 輸入框裡 [表情貼N] 的 N → { productId, emojiId }（送出時換成 textV2 的 substitution）
+    contents: null, // 選擇內容視窗：{ tab: "saved"|"card"|"coupon", selected }（null＝關閉）
+    contentLists: new Map(), // "botId/tab" → { list, page, next, done, loading, error }
     csrf: null,
     limiter: makeLineRateLimiter(),
     audio: null,
@@ -6699,17 +6711,19 @@
     inbox.csrf = await r.json();
     return inbox.csrf;
   }
+  // body 給 FormData 就是 multipart（檔案上傳，Content-Type 交給瀏覽器帶 boundary），其他一律 JSON
   async function inboxApi(method, path, body, retried = false) {
     await inbox.limiter.acquire();
+    const isForm = typeof FormData !== "undefined" && body instanceof FormData;
     const headers = { Accept: "application/json", "x-oa-chat-client-version": "20240513144702" };
     if (method !== "GET") {
       const csrf = await inboxCsrf();
       headers[csrf.headerName || "X-XSRF-TOKEN"] = csrf.token;
-      headers["Content-Type"] = "application/json";
+      if (!isForm) headers["Content-Type"] = "application/json";
     }
     const r = await fetch(path, {
       method, credentials: "same-origin", cache: "no-store", headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
     if (r.status === 429) { inbox.limiter.pauseUntilNextMinute(); return inboxApi(method, path, body, retried); }
     if (r.status === 403 && method !== "GET" && !retried) { inbox.csrf = null; return inboxApi(method, path, body, true); }
@@ -6734,7 +6748,8 @@
         case "audio": return "[語音]";
         case "file": return "[檔案]";
         case "location": return "[位置]";
-        case "flex": case "template": case "imagemap": case "cardType": case "coupon":
+        case "coupon": return "[優惠券]" + (m.altText ? " " + m.altText : "");
+        case "flex": case "template": case "imagemap": case "cardType":
           return "[卡片]" + (m.altText ? " " + m.altText : "");
         default: return `[${m.type || "訊息"}]`;
       }
@@ -7029,6 +7044,12 @@
     return null;
   }
   const inboxStickerUrl = (id) => `https://stickershop.line-scdn.net/stickershop/v1/sticker/${encodeURIComponent(id)}/android/sticker.png`;
+  // 表情貼（LINE 叫 sticon）：_key 是鍵盤用的小圖，泡泡裡用原圖
+  const inboxEmojiUrl = (productId, emojiId, key) =>
+    `https://stickershop.line-scdn.net/sticonshop/v1/sticon/${encodeURIComponent(productId)}/ANDROID/${encodeURIComponent(emojiId)}${key ? "_key" : ""}.png`;
+  const inboxPackTabUrl = (kind, id) => kind === "sticker"
+    ? `https://stickershop.line-scdn.net/stickershop/v1/product/${encodeURIComponent(id)}/ANDROID/tab_on.png`
+    : `https://stickershop.line-scdn.net/sticonshop/v1/sticon/${encodeURIComponent(id)}/ANDROID/tab_on.png`;
   const inboxFileSize = (n) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`;
   // 文字裡的 http(s) 連結做成可點的 <a>（新分頁開）；其餘維持純文字節點，不組 HTML
   const INBOX_URL_RE = /https?:\/\/[^\s<>"'）)\]】，。、]+/g;
@@ -7043,32 +7064,53 @@
     if (last < text.length) out.push(text.slice(last));
     return out;
   }
+  // 文字泡泡：訊息帶 emojis[]（LINE 表情貼，文字裡該位置是佔位字元）就換成圖，其餘段落走 inboxLinkify
+  function inboxTextNodes(msg, text) {
+    const emojis = Array.isArray(msg?.emojis)
+      ? msg.emojis.filter((e) => e && e.productId && e.emojiId && Number.isInteger(e.index)).sort((a, b) => a.index - b.index)
+      : [];
+    if (!emojis.length) return inboxLinkify(text);
+    const out = [];
+    let last = 0;
+    for (const e of emojis) {
+      if (e.index < last || e.index > text.length) continue;
+      if (e.index > last) out.push(...inboxLinkify(text.slice(last, e.index)));
+      out.push(ih("img", { class: "loe-inbox-emoji", src: inboxEmojiUrl(e.productId, e.emojiId, false), alt: "表情貼" }));
+      last = e.index + (e.length || 1);
+    }
+    if (last < text.length) out.push(...inboxLinkify(text.slice(last)));
+    return out;
+  }
   // 非文字訊息的泡泡內容；回 null 表示用文字顯示
   function inboxMediaNode(botId, m) {
     const msg = m.message;
     if (!msg) return null;
     const media = inboxMedia(botId, msg);
     const expiredNode = (label) => ih("span", { class: "loe-inbox-media-expired", text: `[${label}已過期，LINE 不再提供]` });
+    const fileLabel = (icon, fallback) => [
+      ih("span", { text: `${icon} ${msg.fileName || fallback}` }),
+      msg.fileSize ? ih("span", { class: "loe-inbox-muted", text: ` ${inboxFileSize(msg.fileSize)}` }) : null,
+    ];
+    // 自己上傳中／剛送出的檔案 LINE 還沒回 contentProvider：圖片顯示本機預覽，其他顯示檔名
+    const localNode = (icon, fallback) => m.sendId ? ih("span", { class: "loe-inbox-media-file" }, ...fileLabel(icon, fallback)) : null;
     switch (msg.type) {
       case "image":
-        if (!media) return null;
+        if (!media) return m.localUrl ? ih("img", { class: "loe-inbox-media-img", src: m.localUrl, alt: "圖片" }) : localNode("🖼", "圖片");
         if (media.expired) return expiredNode("圖片");
         return ih("a", { class: "loe-inbox-media-link", href: media.url, target: "_blank", rel: "noopener", title: "點擊看原圖" },
           ih("img", { class: "loe-inbox-media-img", src: media.preview, alt: "圖片", loading: "lazy" }));
       case "video":
-        if (!media) return null;
+        if (!media) return localNode("🎬", "影片");
         if (media.expired) return expiredNode("影片");
         return ih("video", { class: "loe-inbox-media-video", src: media.url, poster: media.preview, controls: true, preload: "metadata" });
       case "audio":
-        if (!media) return null;
+        if (!media) return localNode("🎵", "語音");
         if (media.expired) return expiredNode("語音");
         return ih("audio", { class: "loe-inbox-media-audio", src: media.url, controls: true, preload: "metadata" });
       case "file":
-        if (!media) return null;
+        if (!media) return localNode("📎", "檔案");
         if (media.expired) return expiredNode("檔案");
-        return ih("a", { class: "loe-inbox-media-file", href: media.url, target: "_blank", rel: "noopener" },
-          ih("span", { text: "📎 " + (msg.fileName || "檔案") }),
-          msg.fileSize ? ih("span", { class: "loe-inbox-muted", text: ` ${inboxFileSize(msg.fileSize)}` }) : null);
+        return ih("a", { class: "loe-inbox-media-file", href: media.url, target: "_blank", rel: "noopener" }, ...fileLabel("📎", "檔案"));
       case "sticker":
         return msg.stickerId ? ih("img", { class: "loe-inbox-media-sticker", src: inboxStickerUrl(msg.stickerId), alt: "貼圖", loading: "lazy" }) : null;
       case "location": {
@@ -7118,31 +7160,34 @@
     if (!th) return;
     const id = payload.message?.id;
     if (id && th.list.some((m) => m.message?.id === id)) return;
-    // 自己剛送出的樂觀泡泡：同內容、還沒拿到 id 的，認領這個 id
+    // 自己剛送出的樂觀泡泡：sendId 相同（LINE 會回帶）或同文字、還沒拿到 id 的，認領這個事件；
+    // 整則換成 LINE 的版本（檔案才有 contentProvider、表情貼才有 emojis[]），本機預覽留著當備援
     if (payload.type === "messageSent" && id) {
-      const mine = th.list.find((m) => m.pending === false && !m.failed && !m.message?.id && m.message?.text === payload.message?.text);
-      if (mine) { mine.message.id = id; mine.timestamp = payload.timestamp || mine.timestamp; return; }
+      const mine = th.list.find((m) => m.sendId && !m.failed && !m.message?.id &&
+        (payload.sendId ? m.sendId === payload.sendId : m.pending === false && m.message?.text === payload.message?.text));
+      if (mine) { mine.message = payload.message; mine.timestamp = payload.timestamp || mine.timestamp; mine.pending = false; return; }
     }
     th.list.push(payload);
   }
-  async function inboxSend(text) {
-    const key = inbox.selected;
-    const chat = key && inbox.chats.get(key);
-    if (!chat) return false;
-    text = text.trim();
-    if (!text) return false;
-    if (text.length > 5000) { toast("訊息超過 5000 字，請分段傳送", "warn", 3000); return false; }
-    const sendId = `${chat.chatId}_${Date.now()}_${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
-    let th = inbox.threads.get(key);
-    if (!th) { th = { list: [], loading: false, error: "" }; inbox.threads.set(key, th); }
-    const bubble = { type: "messageSent", timestamp: Date.now(), message: { id: "", type: "text", text }, sendId, pending: true, failed: false, error: "" };
+  /* ---- 送出：文字／貼圖／卡片／優惠券／檔案共用「樂觀泡泡 → 打 API → 認領或標失敗」 ---- */
+  const inboxMsgPath = (chat) => `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`;
+  const inboxNewSendId = (chat) => `${chat.chatId}_${Date.now()}_${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
+  const inboxSelectedChat = () => (inbox.selected && inbox.chats.get(inbox.selected)) || null;
+  function inboxPushBubble(chat, message, sendId, extra) {
+    let th = inbox.threads.get(chat.key);
+    if (!th) { th = { list: [], loading: false, error: "" }; inbox.threads.set(chat.key, th); }
+    const bubble = { type: "messageSent", timestamp: Date.now(), message: { id: "", ...message }, sendId, pending: true, failed: false, error: "", ...extra };
     th.list.push(bubble);
     renderInboxThread();
+    return bubble;
+  }
+  // deliver：真正打 API 的 async 函式；成功就把泡泡標為已送出（SSE 可能先一步認領，id 不覆蓋）
+  async function inboxDeliver(chat, bubble, deliver) {
     try {
-      const resp = await inboxApi("POST", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages/send`, { type: "text", text, sendId });
+      const resp = await deliver();
       bubble.pending = false;
-      bubble.message.id = firstText([resp?.id, resp?.messageId, resp?.message?.id]);
-      chat.preview = text; chat.at = Date.now();
+      if (!bubble.message.id) bubble.message.id = firstText([resp?.id, resp?.messageId, resp?.message?.id]);
+      chat.preview = inboxPreview(bubble) || chat.preview; chat.at = Date.now();
       if (chat.unread) inboxMarkRead(chat); // 回覆了就等於看過
       // 客服已接手：AI 處理中的對話自動轉人工（同 LINE 聊天室的送出手勢）
       if (aiState && aiState.status === "ready" && !aiState.handoff && !aiState.busy && aiState.chat === chat.chatId) switchAiHandoff(true, true);
@@ -7154,6 +7199,171 @@
       renderInboxThread();
       return false;
     }
+  }
+  // wire＝送給 LINE 的訊息（不含 sendId）；shown＝泡泡顯示用（預設同 wire）
+  async function inboxSendPayload(wire, shown = wire) {
+    const chat = inboxSelectedChat();
+    if (!chat) return false;
+    const sendId = inboxNewSendId(chat);
+    const bubble = inboxPushBubble(chat, shown, sendId);
+    return inboxDeliver(chat, bubble, () => inboxApi("POST", `${inboxMsgPath(chat)}/send`, { ...wire, sendId }));
+  }
+  const inboxSendSticker = (packageId, stickerId) => inboxSendPayload({ type: "sticker", packageId, stickerId });
+  async function inboxSend(text) {
+    text = text.trim();
+    if (!text || !inboxSelectedChat()) return false;
+    if (text.length > 5000) { toast("訊息超過 5000 字，請分段傳送", "warn", 3000); return false; }
+    const { wire, shown } = inboxTextMessage(text);
+    return inboxSendPayload(wire, shown);
+  }
+  // 輸入框裡的表情貼寫成 [表情貼N]（N 對到 inbox.emojiTokens）；沒有就送純文字，
+  // 有就照 LINE 自家前端的 textV2 寫法：{emoji_i} 佔位＋substitution，其餘 { } 逃脫成 {{ }}。
+  // shown 用「文字＋emojis[]」（跟收到的訊息同形）讓泡泡立刻顯示表情貼圖
+  const INBOX_EMOJI_TOKEN_RE = /\[表情貼(\d+)\]/g;
+  const inboxEscapeBraces = (t) => t.replaceAll("{", "{{").replaceAll("}", "}}");
+  function inboxTextMessage(text) {
+    const substitution = {}, emojis = [];
+    let shown = "", wire = "", last = 0, i = 0;
+    for (const m of text.matchAll(INBOX_EMOJI_TOKEN_RE)) {
+      const e = inbox.emojiTokens.get(m[1]);
+      if (!e) continue;
+      const plain = text.slice(last, m.index);
+      shown += plain; wire += inboxEscapeBraces(plain);
+      const key = `emoji_${i++}`;
+      substitution[key] = { type: "emoji", productId: e.productId, emojiId: e.emojiId };
+      emojis.push({ index: shown.length, length: 1, productId: e.productId, emojiId: e.emojiId });
+      shown += "$"; wire += `{${key}}`;
+      last = m.index + m[0].length;
+    }
+    if (!i) return { wire: { type: "text", text }, shown: { type: "text", text } };
+    const tail = text.slice(last);
+    return { wire: { type: "textV2", text: wire + inboxEscapeBraces(tail), substitution }, shown: { type: "text", text: shown + tail, emojis } };
+  }
+  function inboxEmojiToken(productId, emojiId) {
+    const n = String(inbox.emojiTokens.size + 1);
+    inbox.emojiTokens.set(n, { productId, emojiId });
+    return `[表情貼${n}]`;
+  }
+  // 收到的「文字＋emojis[]」（例如預設訊息）→ 輸入框用的 [表情貼N] 寫法（從後往前換，index 才不會跑掉）
+  function inboxTextWithTokens(text, emojis) {
+    const list = Array.isArray(emojis) ? emojis.filter((e) => e && e.productId && e.emojiId && Number.isInteger(e.index)).sort((a, b) => b.index - a.index) : [];
+    for (const e of list) text = text.slice(0, e.index) + inboxEmojiToken(e.productId, e.emojiId) + text.slice(e.index + (e.length || 1));
+    return text;
+  }
+  function inboxInsertAtCaret(text) {
+    const ta = inbox.el.textarea;
+    if (!ta) return;
+    const s = ta.selectionStart ?? ta.value.length, e = ta.selectionEnd ?? s;
+    ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+    ta.focus();
+    ta.setSelectionRange(s + text.length, s + text.length);
+  }
+  // 檔案：圖片／影片／語音／其他，上限同 LINE 網頁版（圖片 20MB，其他 100MB）；依序上傳（LINE 也是一個一個排隊）
+  const INBOX_FILE_LIMIT_MB = { image: 20, video: 100, audio: 100, file: 100 };
+  function inboxFileKind(file) {
+    const t = file.type || "";
+    return t.startsWith("image/") ? "image" : t.startsWith("video/") ? "video" : t.startsWith("audio/") ? "audio" : "file";
+  }
+  async function inboxSendFiles(files) {
+    const chat = inboxSelectedChat();
+    if (!chat || !files.length) return;
+    for (const file of files) {
+      const kind = inboxFileKind(file);
+      const limit = INBOX_FILE_LIMIT_MB[kind];
+      if (file.size > limit * 1048576) { toast(`${file.name} 超過 ${limit} MB，LINE 不收`, "warn", 4000); continue; }
+      const sendId = inboxNewSendId(chat);
+      const localUrl = kind === "image" ? URL.createObjectURL(file) : "";
+      const bubble = inboxPushBubble(chat, { type: kind, fileName: file.name, fileSize: file.size }, sendId, { localUrl });
+      const form = new FormData();
+      form.append("file", file, file.name);
+      await inboxDeliver(chat, bubble, async () => {
+        const up = await inboxApi("POST", `/api/v1/bots/${chat.botId}/messages/${encodeURIComponent(chat.chatId)}/uploadFile`, form);
+        const token = up && up.contentMessageToken;
+        if (!token) throw new Error("LINE 沒有回傳上傳憑證");
+        return inboxApi("POST", `${inboxMsgPath(chat)}/bulkSendFiles`, { items: [{ sendId, contentMessageToken: token }] });
+      });
+    }
+  }
+  /* ---- 貼圖／表情貼清單（每個官方帳號各自擁有，抓一次快取） ---- */
+  const INBOX_PACK_API = {
+    sticker: { path: (b) => `/api/v1/bots/${b}/stickers/owned`, id: "packageId", items: "stickerIds" },
+    emoji: { path: (b) => `/api/v1/bots/${b}/emojis/owned`, id: "productId", items: "emojiIds" },
+  };
+  async function inboxLoadPacks(botId, kind) {
+    const key = `${botId}/${kind}`;
+    if (inbox.packs.has(key)) return inbox.packs.get(key);
+    const st = { list: [], loading: true, error: "" };
+    inbox.packs.set(key, st);
+    const api = INBOX_PACK_API[kind];
+    try {
+      let next = "", guard = 0;
+      do {
+        const r = await inboxApi("GET", api.path(botId) + (next ? `?nextToken=${encodeURIComponent(next)}` : ""));
+        for (const p of r?.list || []) {
+          const items = Array.isArray(p[api.items]) ? p[api.items].map(String) : [];
+          if (p.available !== false && items.length) st.list.push({ id: String(p[api.id]), items });
+        }
+        next = r?.next || "";
+      } while (next && ++guard < 20);
+    } catch (e) { st.error = e.message; }
+    st.loading = false;
+    renderInboxPicker();
+    return st;
+  }
+  /* ---- 選擇內容（預設訊息／多頁訊息／優惠券）：清單＋動作用一張表描述 ---- */
+  const inboxDate = (ms) => new Date(ms).toLocaleDateString("zh-TW");
+  const INBOX_CONTENT_PAGE = 25;
+  const INBOX_CONTENT_TABS = {
+    saved: {
+      label: "預設訊息", action: "帶入輸入框",
+      url: (b, st) => `/api/v2/bots/${b}/savedReplies?page=${st.page}&pageSize=${INBOX_CONTENT_PAGE}`,
+      id: (x) => x.savedReplyId, title: (x) => x.title, img: () => "",
+      desc: (x) => (x.message && typeof x.message.text === "string") ? x.message.text : `[${x.message?.type || "訊息"}]`,
+    },
+    card: {
+      label: "多頁訊息", action: "傳送",
+      url: (b, st) => `/api/v1/bots/${b}/cardTypeMessages?limit=${INBOX_CONTENT_PAGE}${st.next ? `&next=${encodeURIComponent(st.next)}` : ""}`,
+      id: (x) => x.id, title: (x) => x.title, img: () => "",
+      desc: (x) => x.messageObject?.altText || x.type || "",
+    },
+    coupon: {
+      label: "優惠券", action: "傳送優惠券",
+      url: (b, st) => `/api/v1/bots/${b}/coupons?page=${st.page}&pageSize=${INBOX_CONTENT_PAGE}`,
+      id: (x) => x.couponId, title: (x) => x.title, img: (x) => x.imageUrl || "",
+      desc: (x) => [x.startTime, x.endTime].filter(Boolean).map(inboxDate).join(" ~ "),
+    },
+  };
+  async function inboxLoadContents(botId, tab, more = false) {
+    const key = `${botId}/${tab}`;
+    let st = inbox.contentLists.get(key);
+    if (!st) { st = { list: [], page: 0, next: "", done: false, loading: false, error: "" }; inbox.contentLists.set(key, st); }
+    if (st.loading || (more ? st.done : st.page > 0)) return st;
+    st.loading = true; st.error = ""; st.page += 1;
+    try {
+      const r = await inboxApi("GET", INBOX_CONTENT_TABS[tab].url(botId, st));
+      const list = Array.isArray(r?.list) ? r.list : [];
+      st.list.push(...list);
+      st.next = r?.next || "";
+      st.done = list.length < INBOX_CONTENT_PAGE || (tab === "card" && !st.next) || (typeof r?.total === "number" && st.list.length >= r.total);
+    } catch (e) { st.error = e.message; st.page -= 1; }
+    st.loading = false;
+    renderInboxContents();
+    return st;
+  }
+  const closeInboxContents = () => { inbox.contents = null; renderInboxContents(); };
+  // 預設訊息裡 LINE 的佔位字：{Nickname}＝客人顯示名、{AccountName}＝官方帳號名（LINE 聊天室也是帶入時就換掉）
+  const inboxFillPlaceholders = (text, chat) => text.replaceAll("{Nickname}", chat.name || "").replaceAll("{AccountName}", inboxBotName(chat.botId));
+  async function inboxUseContent(chat, tab, item) {
+    if (!item) return;
+    closeInboxContents();
+    if (tab === "card") return inboxSendPayload({ type: "cardType", cardTypeMessageId: item.id }, { type: "cardType", altText: item.title || "" });
+    if (tab === "coupon") return inboxSendPayload({ type: "coupon", couponId: item.couponId }, { type: "coupon", altText: item.title || "" });
+    // 預設訊息：跟 LINE 一樣帶進輸入框（可再改再送）；貼圖型的直接送；順便記一次使用次數
+    const msg = item.message || {};
+    if (msg.type === "sticker" && msg.packageId && msg.stickerId) inboxSendSticker(msg.packageId, msg.stickerId);
+    else if (typeof msg.text === "string") inboxInsertText(inboxTextWithTokens(inboxFillPlaceholders(msg.text, chat), msg.emojis));
+    else { toast(`這則預設訊息是「${msg.type || "非文字"}」，收件匣還不支援`, "warn", 3000); return; }
+    inboxApi("POST", `/api/v1/bots/${chat.botId}/savedReplies/${encodeURIComponent(item.savedReplyId)}/use`).catch(() => {});
   }
   // 派單後「標記待處理」：LINE 的 followUp API（LINE 頁面是點它自己的按鈕）
   async function inboxFollowUp() {
@@ -7714,6 +7924,8 @@
       thHead.hidden = true; thMsgs.hidden = true; thComposer.hidden = true; thEmpty.hidden = false;
       renderInboxNotes();
       renderInboxOrders();
+      renderInboxPicker();
+      renderInboxContents();
       return;
     }
     thHead.hidden = false; thMsgs.hidden = false; thComposer.hidden = false; thEmpty.hidden = true;
@@ -7794,7 +8006,7 @@
       const bubble = mediaNode
         ? ih("div", { class: "loe-inbox-bubble media" }, mediaNode)
         : ih("div", { class: "loe-inbox-bubble" + (withActions ? ` ${BUBBLE_CLASS} ${TEXT_PAD_CLASS} loe-has-forward` : "") },
-          isCard ? ih("span", { class: "loe-inbox-card-label", text: "AI 卡片回覆" }) : null, ...inboxLinkify(text));
+          isCard ? ih("span", { class: "loe-inbox-card-label", text: "AI 卡片回覆" }) : null, ...inboxTextNodes(m.message, text));
       if (withActions && !mediaNode) {
         bubble.append(
           ih("button", { type: "button", class: FORWARD_BUTTON_CLASS, html: FORWARD_ICON, "aria-label": "帶入派單", "data-loe-tip": "派單",
@@ -7815,8 +8027,95 @@
     if (thComposer.dataset.key !== chat.key) {
       thComposer.dataset.key = chat.key;
       inbox.el.textarea.value = "";
+      inbox.emojiTokens.clear();
+      inbox.picker = null;
+      inbox.contents = null;
       renderQuickBar(inbox.el.quickBar, inboxInsertText);
+      renderInboxPicker();
+      renderInboxContents();
     }
+  }
+  /* ---- 貼圖／表情貼面板（跟 LINE 一樣夾在訊息串和輸入框之間；貼圖點了直接送，表情貼插進輸入框） ---- */
+  function renderInboxPicker() {
+    const host = inbox.el.picker;
+    if (!host) return;
+    const chat = inboxSelectedChat();
+    const p = inbox.picker;
+    host.textContent = "";
+    host.hidden = !p || !chat;
+    inbox.el.tools?.querySelector('[data-tool="sticker"]')?.classList.toggle("on", !host.hidden);
+    if (host.hidden) return;
+    host.className = `loe-inbox-picker ${p.kind}`;
+    const key = `${chat.botId}/${p.kind}`;
+    if (!inbox.packs.has(key)) inboxLoadPacks(chat.botId, p.kind);
+    const st = inbox.packs.get(key);
+    const packs = st.list;
+    if (!packs.some((x) => x.id === p.pkg)) p.pkg = packs[0]?.id || "";
+    const pack = packs.find((x) => x.id === p.pkg);
+    const isSticker = p.kind === "sticker";
+    host.append(
+      ih("div", { class: "loe-inbox-picker-tabs" },
+        ...[["sticker", "貼圖"], ["emoji", "表情貼"]].map(([k, label]) => ih("button", { type: "button", class: "loe-inbox-picker-kind" + (p.kind === k ? " on" : ""), text: label,
+          onclick: () => { inbox.picker = { kind: k, pkg: "" }; renderInboxPicker(); } })),
+        ih("span", { class: "loe-inbox-picker-sep" }),
+        ...packs.map((x) => ih("button", { type: "button", class: "loe-inbox-picker-tab" + (p.pkg === x.id ? " on" : ""), title: x.id,
+          onclick: () => { p.pkg = x.id; renderInboxPicker(); } },
+          ih("img", { src: inboxPackTabUrl(p.kind, x.id), alt: "", loading: "lazy" }))),
+        ih("span", { class: "loe-inbox-spacer" }),
+        ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "收起", html: ic("x"), onclick: () => { inbox.picker = null; renderInboxPicker(); } }),
+      ),
+      ih("div", { class: "loe-inbox-picker-grid" },
+        st.loading && !packs.length ? ih("div", { class: "loe-inbox-empty", text: "讀取中…" })
+          : st.error ? ih("div", { class: "loe-inbox-empty err", text: "讀取失敗：" + st.error })
+          : !pack ? ih("div", { class: "loe-inbox-empty", text: `這個官方帳號沒有可用的${isSticker ? "貼圖" : "表情貼"}` })
+          : pack.items.map((id) => ih("button", { type: "button", title: isSticker ? "傳送這張貼圖" : "插入這個表情貼",
+            onclick: () => { if (isSticker) inboxSendSticker(pack.id, id); else inboxInsertAtCaret(inboxEmojiToken(pack.id, id)); } },
+            ih("img", { src: isSticker ? inboxStickerUrl(id) : inboxEmojiUrl(pack.id, id, true), alt: "", loading: "lazy" }))),
+      ),
+    );
+  }
+  /* ---- 選擇內容視窗 ---- */
+  function renderInboxContents() {
+    const host = inbox.el.modal;
+    if (!host) return;
+    const chat = inboxSelectedChat();
+    const c = inbox.contents;
+    host.textContent = "";
+    host.hidden = !c || !chat;
+    if (host.hidden) return;
+    const spec = INBOX_CONTENT_TABS[c.tab];
+    const key = `${chat.botId}/${c.tab}`;
+    if (!inbox.contentLists.has(key)) inboxLoadContents(chat.botId, c.tab);
+    const st = inbox.contentLists.get(key);
+    const body = ih("div", { class: "loe-inbox-modal-body" },
+      ...st.list.map((x) => {
+        const id = String(spec.id(x));
+        const on = c.selected === id;
+        return ih("button", { type: "button", class: "loe-inbox-content-item" + (on ? " on" : ""), "aria-pressed": on ? "true" : "false",
+          onclick: () => { c.selected = on ? null : id; renderInboxContents(); } },
+          spec.img(x) ? ih("img", { src: spec.img(x), alt: "", loading: "lazy" }) : null,
+          ih("div", { class: "loe-inbox-content-text" }, ih("strong", { text: spec.title(x) || "（未命名）" }), ih("div", { class: "desc", text: spec.desc(x) })));
+      }),
+      st.loading ? ih("div", { class: "loe-inbox-empty", text: "讀取中…" })
+        : st.error ? ih("div", { class: "loe-inbox-empty err", text: "讀取失敗：" + st.error })
+        : !st.list.length ? ih("div", { class: "loe-inbox-empty", text: `這個官方帳號還沒有${spec.label}` })
+        : !st.done ? ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-more", text: "載入更多", onclick: () => inboxLoadContents(chat.botId, c.tab, true) }) : null,
+    );
+    const item = st.list.find((x) => String(spec.id(x)) === c.selected);
+    host.append(ih("div", { class: "loe-inbox-modal-box", role: "dialog", "aria-modal": "true", "aria-label": "選擇內容" },
+      ih("div", { class: "loe-inbox-modal-head" },
+        ih("span", { text: "選擇內容" }),
+        ih("span", { class: "loe-inbox-muted", text: inboxBotName(chat.botId) }),
+        ih("span", { class: "loe-inbox-spacer" }),
+        ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉", html: ic("x"), onclick: closeInboxContents })),
+      ih("div", { class: "loe-inbox-modal-tabs" },
+        ...Object.entries(INBOX_CONTENT_TABS).map(([k, s]) => ih("button", { type: "button", class: "loe-inbox-modal-tab" + (c.tab === k ? " on" : ""), text: s.label,
+          onclick: () => { c.tab = k; c.selected = null; renderInboxContents(); } }))),
+      body,
+      ih("div", { class: "loe-inbox-modal-foot" },
+        ih("button", { type: "button", class: "loe-inbox-btn", text: "取消", onclick: closeInboxContents }),
+        ih("button", { type: "button", class: "loe-inbox-btn primary", text: spec.action, disabled: !item, onclick: () => inboxUseContent(chat, c.tab, item) })),
+    ));
   }
   function inboxInsertText(text) {
     const ta = inbox.el.textarea;
@@ -7865,6 +8164,7 @@
       thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
       quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
       orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
+      picker: $(".loe-inbox-picker"), tools: $(".loe-inbox-tools"), fileInput: $(".loe-inbox-file"), modal: $(".loe-inbox-modal"),
     };
     // 開著的對話定時重抓訂單狀態（分頁在背景就不抓）
     setInterval(() => {
@@ -7887,6 +8187,32 @@
     $(".loe-inbox-dispatch").addEventListener("click", (e) => { e.stopPropagation(); openDispatchPopover(""); });
     inbox.el.textarea.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); doSend(); }
+    });
+    // 貼上圖片／檔案就直接當檔案送（跟 LINE 聊天室一樣）
+    inbox.el.textarea.addEventListener("paste", (e) => {
+      const files = Array.from(e.clipboardData?.files || []);
+      if (files.length) { e.preventDefault(); inboxSendFiles(files); }
+    });
+    // 輸入框下方三顆：貼圖、表情貼／檔案／選擇內容
+    inbox.el.tools.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-tool]");
+      if (!btn) return;
+      e.stopPropagation();
+      const tool = btn.dataset.tool;
+      if (tool === "sticker") { inbox.picker = inbox.picker ? null : { kind: "sticker", pkg: "" }; renderInboxPicker(); }
+      else if (tool === "file") inbox.el.fileInput.click();
+      else if (tool === "contents") { inbox.contents = { tab: "saved", selected: null }; renderInboxContents(); }
+    });
+    inbox.el.fileInput.addEventListener("change", () => {
+      const files = Array.from(inbox.el.fileInput.files || []);
+      inbox.el.fileInput.value = "";
+      inboxSendFiles(files);
+    });
+    inbox.el.modal.addEventListener("click", (e) => { if (e.target === inbox.el.modal) closeInboxContents(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (inbox.contents) closeInboxContents();
+      else if (inbox.picker) { inbox.picker = null; renderInboxPicker(); }
     });
     // 第一個使用者手勢：建立 AudioContext（瀏覽器規定），之後新訊息才會響
     const unlock = () => { if (inbox.sound) inboxBeep(); };
@@ -8189,6 +8515,40 @@
   .loe-inbox-send { height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #1c6cf3; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
   .loe-inbox-send:hover { background: #0b57d0; }
   .loe-inbox-send:disabled { opacity: .6; cursor: progress; }
+  .loe-inbox-tools { display: flex; align-items: center; gap: 2px; }
+  .loe-inbox-tool { width: 34px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .loe-inbox-tool:hover, .loe-inbox-tool.on { background: #e8eefb; color: #1c6cf3; }
+  .loe-inbox-tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-picker { border: 1px solid #e3e7ee; border-radius: 10px; background: #fafbfd; display: flex; flex-direction: column; height: 280px; }
+  .loe-inbox-picker-tabs { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; padding: 6px 8px; border-bottom: 1px solid #e3e7ee; overflow-x: auto; }
+  .loe-inbox-picker-kind { flex: 0 0 auto; height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #6b7280; font-size: 13px; cursor: pointer; }
+  .loe-inbox-picker-kind.on { background: #fff; border-color: #d5dbe5; color: #1f2937; font-weight: 600; }
+  .loe-inbox-picker-sep { flex: 0 0 auto; width: 1px; height: 22px; margin: 0 6px; background: #e3e7ee; }
+  .loe-inbox-picker-tab { flex: 0 0 auto; width: 38px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .loe-inbox-picker-tab.on { background: #dbe7ff; }
+  .loe-inbox-picker-tab img { width: 26px; height: 26px; object-fit: contain; }
+  .loe-inbox-picker-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; padding: 8px; }
+  .loe-inbox-picker-grid > button { width: 84px; height: 84px; padding: 4px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+  .loe-inbox-picker.emoji .loe-inbox-picker-grid > button { width: 40px; height: 40px; }
+  .loe-inbox-picker-grid > button:hover { background: #e8eefb; }
+  .loe-inbox-picker-grid img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .loe-inbox-picker-grid .loe-inbox-empty { width: 100%; }
+  .loe-inbox-emoji { width: 20px; height: 20px; vertical-align: -5px; display: inline-block; }
+  .loe-inbox-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 60; }
+  .loe-inbox-modal-box { width: min(760px, calc(100vw - 32px)); height: min(640px, calc(100vh - 48px)); background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(15,23,42,.25); display: flex; flex-direction: column; }
+  .loe-inbox-modal-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 14px 18px 8px; font-size: 16px; font-weight: 700; }
+  .loe-inbox-modal-tabs { flex: 0 0 auto; display: flex; gap: 4px; padding: 0 18px; border-bottom: 1px solid #e3e7ee; }
+  .loe-inbox-modal-tab { padding: 8px 12px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: transparent; color: #6b7280; font-size: 13px; cursor: pointer; }
+  .loe-inbox-modal-tab.on { color: #1f2937; border-bottom-color: #1c6cf3; font-weight: 600; }
+  .loe-inbox-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .loe-inbox-content-item { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid #e3e7ee; border-radius: 10px; background: #fff; cursor: pointer; text-align: left; color: inherit; }
+  .loe-inbox-content-item:hover { background: #f8fafc; }
+  .loe-inbox-content-item.on { border-color: #1c6cf3; background: #eef4ff; }
+  .loe-inbox-content-item img { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; flex: 0 0 auto; }
+  .loe-inbox-content-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .loe-inbox-content-text .desc { color: #6b7280; font-size: 12px; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .loe-inbox-more { align-self: center; }
+  .loe-inbox-modal-foot { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid #e3e7ee; }
   .loe-inbox-send svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
   .loe-inbox-toasts { position: fixed; top: 64px; right: 20px; width: min(360px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: 50; }
   .loe-inbox-toast { background: #fff; border: 1px solid #e3e7ee; border-left: 4px solid #1c6cf3; border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 20px rgba(15,23,42,.12); display: flex; flex-direction: column; gap: 6px; }
@@ -8227,6 +8587,7 @@
       <aside class="loe-inbox-dchat" hidden aria-label="司機對話"></aside>
       <div class="loe-inbox-composer" hidden>
         <div class="loe-inbox-quick loe-qr-bar"></div>
+        <div class="loe-inbox-picker" hidden></div>
         <div class="loe-inbox-composer-row">
           <textarea class="loe-inbox-textarea" rows="2" placeholder="輸入回覆 (Enter傳送，Shift+Enter可換行)" aria-label="回覆內容"></textarea>
           <div class="loe-inbox-composer-btns">
@@ -8234,9 +8595,16 @@
             <button type="button" class="loe-inbox-send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg><span>傳送</span></button>
           </div>
         </div>
+        <div class="loe-inbox-tools" role="toolbar" aria-label="更多傳送方式">
+          <button type="button" class="loe-inbox-tool" data-tool="sticker" title="貼圖、表情貼" aria-label="貼圖、表情貼"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></button>
+          <button type="button" class="loe-inbox-tool" data-tool="file" title="檔案：圖片、影片、語音或其他檔案（圖片 20MB、其他 100MB 以內）" aria-label="檔案"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></button>
+          <button type="button" class="loe-inbox-tool" data-tool="contents" title="選擇內容：預設訊息、多頁訊息、優惠券" aria-label="選擇內容"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 12h8"></path><path d="M12 8v8"></path></svg></button>
+          <input type="file" class="loe-inbox-file" multiple hidden tabindex="-1" aria-hidden="true">
+        </div>
       </div>
     </main>
   </div>
+  <div class="loe-inbox-modal" hidden></div>
   <div class="loe-inbox-toasts" aria-live="polite"></div>
 </div>
 </body>`;
