@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.59.0
+// @version      1.60.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知、司機對話。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -968,10 +968,11 @@
     return { cookies, cookieReadError };
   }
 
-  async function captureLineApiParams() {
+  // botIdOverride：收件匣網址沒有官方帳號，由呼叫端指定一個（只用來組讀 Cookie 的網址）
+  async function captureLineApiParams(botIdOverride) {
     if (location.hostname !== "chat.line.biz" || window.top !== window.self) return;
     const pathname = location.pathname;
-    const botId = getOaId();
+    const botId = botIdOverride || getOaId();
     const chatId = getChatId();
     if (!/^U[0-9a-f]{32}$/i.test(botId)) return;
     const run = ++lineApiDebugRun;
@@ -1307,18 +1308,18 @@
   }
 
   // 身份授權：輸入發送 KEY → 擷取 LINE cookie → 後端驗 KEY 通過才存 cookie → KEY 記在本機。取消回 { cancelled: true }。
-  async function saveLineCookie() {
+  // botId：收件匣指定用哪個官方帳號讀 Cookie（同一個 LINE 登入，哪個帳號都一樣）；沒給就用目前頁面的帳號。
+  async function saveLineCookie(botId) {
     const account = getDispatcher();
-    const groupId = getOaId();
+    const groupId = botId || getOaId();
     if (!account) throw new Error("請先在轉發設定填寫後台帳號");
+    const changed = () => getDispatcher() !== account || (!botId && getOaId() !== groupId);
     const key = await askSendKey(account);
     if (key === null) return { cancelled: true };
-    if (getDispatcher() !== account || getOaId() !== groupId)
-      throw new Error("帳號已變更，請在目前帳號重新操作");
-    const snapshot = await captureLineApiParams();
+    if (changed()) throw new Error("帳號已變更，請在目前帳號重新操作");
+    const snapshot = await captureLineApiParams(groupId);
     if (!snapshot) throw new Error("Cookie 未擷取完成，請重試");
-    if (getDispatcher() !== account || getOaId() !== groupId)
-      throw new Error("帳號已變更，請在目前帳號重新操作");
+    if (changed()) throw new Error("帳號已變更，請在目前帳號重新操作");
     if (snapshot.missingCookies.length)
       throw new Error("缺少 " + snapshot.missingCookies.join(", ") +
         "；請在 Tampermonkey 進階設定將 Allow scripts to access cookies 設為 All，儲存後重新整理");
@@ -1330,6 +1331,9 @@
     storeSet(sendKeyStoreKey(account), key);
     return result;
   }
+
+  const lineAuthDoneText = (result) =>
+    `已授權至 ${result.account}` + (result.keyExpiresAt ? `（KEY 到期 ${new Date(result.keyExpiresAt).toLocaleDateString("zh-TW")}）` : "");
 
   // 誰同步的：帶後台帳號（沒設就不帶）；官方帳號名稱讓後端對到 AI 官方帳號、自動記下官方後台編號
   // （之後後台「開官方聊天室」就能直接開）。同步客戶與同步記事本共用。
@@ -4429,9 +4433,8 @@
         label: "身份授權",
         icon: "shield-check",
         title: "授權設定中的後台帳號使用目前的 LINE 登入狀態",
-        run: saveLineCookie,
-        done: (result) => result.cancelled ? null :
-          `已授權至 ${result.account}` + (result.keyExpiresAt ? `（KEY 到期 ${new Date(result.keyExpiresAt).toLocaleDateString("zh-TW")}）` : ""),
+        run: () => saveLineCookie(),
+        done: (result) => result.cancelled ? null : lineAuthDoneText(result),
       },
       {
         id: "loe-line-sync-button",
@@ -6785,6 +6788,7 @@
   async function inboxLoadBots() {
     const data = await inboxApi("GET", "/api/v1/bots?limit=1000&noFilter=true");
     const list = Array.isArray(data?.list) ? data.list : [];
+    if (!list.length && inbox.bots.length) return; // LINE 偶爾回空清單：沿用上一份，不要讓開關全部變關
     inbox.bots = list
       .filter((b) => b && typeof b.botId === "string" && LINE_BOT_ID_RE.test(b.botId) && !b.disabledCrm)
       .map((b, i) => ({
@@ -6792,9 +6796,10 @@
         unreadCount: Number(b.unreadCount) || 0, color: INBOX_OA_COLORS[i % INBOX_OA_COLORS.length],
       }));
     inbox.botById = new Map(inbox.bots.map((b) => [b.botId, b]));
-    // 已經沒有權限的帳號從啟用清單拿掉
-    for (const id of [...inbox.enabled]) if (!inbox.botById.has(id)) inbox.enabled.delete(id);
+    // 清單暫時少了某個帳號也不從啟用清單拿掉（存的是使用者的選擇），只是先不監聽；權限回來就自動接上
   }
+  // 啟用且目前清單裡有的帳號（實際要監聽的）
+  const inboxEnabledIds = () => [...inbox.enabled].filter((id) => inbox.botById.has(id));
 
   /* ---- SSE：每個帳號一條；失敗退避重連；連線數已滿等一分鐘再試 ---- */
   function inboxConn(botId) {
@@ -7342,7 +7347,7 @@
     const live = [...inbox.conns.values()].filter((c) => c.status === "live").length;
     const stats = ih("div", { class: "loe-inbox-stats" },
       ih("span", { class: "loe-inbox-muted", text: "啟用帳號" }),
-      ih("strong", { text: `${inbox.enabled.size}／${inbox.bots.length}` }),
+      ih("strong", { text: `${inboxEnabledIds().length}／${inbox.bots.length}` }),
       ih("span", { class: "loe-inbox-muted", text: "連線中" }),
       ih("strong", { text: String(live) }),
       ih("span", { class: "loe-inbox-muted", text: "未讀對話" }),
@@ -7362,6 +7367,14 @@
       },
     }, ih("span", { text: inbox.sound ? "提示音 開" : "提示音 關" }));
     const hint = inboxSoundReady() ? null : ih("span", { class: "loe-inbox-hint", text: "點一下頁面啟用提示音" });
+    const authed = hasLineExtAuth();
+    const authBtn = ih("button", {
+      type: "button", class: "loe-inbox-btn" + (authed ? " on" : " warn"), html: ic("shield-check"),
+      title: authed
+        ? `已授權：${getDispatcher()}（點擊可重新授權）`
+        : "授權後才能用：司機對話、取消訂單、依訂單狀態篩選、找客叫／AI 單、系統自動通知",
+      onclick: inboxAuthorize,
+    }, ih("span", { text: authed ? "已授權" : "身份授權" }));
     host.append(
       ih("div", { class: "loe-inbox-brand" },
         ih("span", { class: "loe-inbox-logo", html: ic("inbox") }),
@@ -7372,11 +7385,33 @@
       ih("div", { class: "loe-inbox-spacer" }),
       ih("div", { class: "loe-inbox-actions" },
         ih("button", { type: "button", class: "loe-inbox-btn", text: "全部開啟", onclick: () => inbox.bots.forEach((b) => { if (!inbox.enabled.has(b.botId)) inboxSetEnabled(b.botId, true); }) }),
-        ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => [...inbox.enabled].forEach((id) => inboxSetEnabled(id, false)) }),
-        hint, soundBtn,
+        ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => inboxEnabledIds().forEach((id) => inboxSetEnabled(id, false)) }),
+        authBtn, hint, soundBtn,
         ih("a", { class: "loe-inbox-btn", href: "https://chat.line.biz/", html: ic("external-link") }, ih("span", { text: "回 LINE 後台" })),
       ),
     );
+  }
+  // 收件匣的身份授權：同 LINE 後台選單的「身份授權」，用任一官方帳號讀目前的 LINE 登入；授權後馬上重抓需要 KEY 的資料
+  async function inboxAuthorize(e) {
+    const btn = e.currentTarget;
+    const botId = (inbox.selected && inbox.chats.get(inbox.selected)?.botId) || inboxEnabledIds()[0] || inbox.bots[0]?.botId;
+    if (!botId) return toast("還沒讀到官方帳號，請稍候再試", "warn", 3000);
+    btn.disabled = true;
+    try {
+      const result = await saveLineCookie(botId);
+      if (result.cancelled) return;
+      toast(lineAuthDoneText(result), "ok", 4000);
+      inbox.linkProbed.clear();
+      for (const id of inboxEnabledIds()) inboxLoadBoard(id);
+      for (const c of inbox.chats.values()) inboxQueueLink(c);
+      const sel = inbox.selected && inbox.chats.get(inbox.selected);
+      if (sel) inboxLoadOrders(sel);
+    } catch (err) {
+      toast(err.message || "身份授權失敗", "err", 6000);
+    } finally {
+      btn.disabled = false;
+      renderInboxHeader();
+    }
   }
   function renderInboxRail() {
     const host = inbox.el.rail;
@@ -7478,19 +7513,32 @@
     await Promise.all(missing.map((id) => inboxFetchChat(botId, id)));
     renderInboxList();
   }
+  // 用剛查到的這位客人訂單（同一批、同欄位口徑）直接修正看板與計數：完成／取消後計數立刻歸零
+  function inboxPatchBoard(chat, list) {
+    const board = inbox.board.get(chat.botId);
+    if (!board) return;
+    const cols = [...new Set(liveOrders(list).map((o) => o.column))].filter((c) => ORDER_COLUMNS.some((x) => x.id === c));
+    const prev = board.chats.get(chat.chatId) || [];
+    if (prev.length === cols.length && prev.every((c) => cols.includes(c))) return;
+    for (const c of prev) board.counts[c] = Math.max(0, (board.counts[c] || 0) - 1);
+    for (const c of cols) board.counts[c] = (board.counts[c] || 0) + 1;
+    if (cols.length) board.chats.set(chat.chatId, cols); else board.chats.delete(chat.chatId);
+    board.version = ""; // 下一輪整份重抓，跟後端對齊
+    renderInboxList();
+  }
   let inboxBoardTimer = 0;
   function inboxScheduleBoard() {
     clearTimeout(inboxBoardTimer);
     inboxBoardTimer = setTimeout(async () => {
-      await Promise.all([...inbox.enabled].map((id) => inboxLoadBoard(id)));
-      inboxScheduleBoard();
+      try { await Promise.all(inboxEnabledIds().map((id) => inboxLoadBoard(id))); }
+      finally { inboxScheduleBoard(); } // 某次出錯也不能讓輪詢停掉
     }, document.visibilityState === "visible" ? INBOX_BOARD_REFRESH_MS : INBOX_BOARD_HIDDEN_MS);
   }
   function renderInboxOrderFilters() {
     const host = inbox.el.orderFilters;
     if (!host) return;
     host.textContent = "";
-    const boards = [...inbox.enabled].map((id) => inbox.board.get(id)).filter(Boolean);
+    const boards = inboxEnabledIds().map((id) => inbox.board.get(id)).filter(Boolean);
     host.hidden = !boards.length;
     if (!boards.length) return;
     const count = (col) => boards.reduce((n, b) => n + (b.counts[col] || 0), 0);
@@ -7586,7 +7634,7 @@
       if (selected) row.style.borderLeftColor = inboxBotColor(c.botId);
       rows.append(row);
     }
-    if (!chats.length) rows.append(ih("div", { class: "loe-inbox-empty", text: !inbox.enabled.size ? "打開左邊的帳號開關開始監聽。" : (inbox.el.listSearch?.value || "").trim() ? "沒有符合搜尋的對話。" : "沒有符合的對話。換個篩選，或等新訊息進來。" }));
+    if (!chats.length) rows.append(ih("div", { class: "loe-inbox-empty", text: !inboxEnabledIds().length ? "打開左邊的帳號開關開始監聽。" : (inbox.el.listSearch?.value || "").trim() ? "沒有符合搜尋的對話。" : "沒有符合的對話。換個篩選，或等新訊息進來。" }));
   }
   /* ---- 訂單狀態／系統自動通知 ---- */
   async function inboxLoadOrders(chat) {
@@ -7596,6 +7644,7 @@
     if (!prev && inbox.selected === chat.key) renderInboxOrders();
     try {
       st.list = await fetchChatOrders(chat.botId, chat.chatId);
+      inboxPatchBoard(chat, st.list);
       driverChatNotifyOrders(st.list);
       if (inbox.selected === chat.key && driverChat.host === inbox.el.dchat) syncDriverChatOrders(st.list);
     } catch (e) { st.error = e.message || String(e); }
@@ -7619,6 +7668,8 @@
   }
   // 訂單有動作（開關自動通知、取消）：先重畫停用按鈕，結束後重抓
   function inboxOrdersChanged(done) {
+    const chat = inbox.selected && inbox.chats.get(inbox.selected);
+    if (chat) inboxPatchBoard(chat, inbox.orders.get(chat.key)?.list || []);
     renderInboxOrders();
     if (done) inboxReloadSelectedOrders();
   }
@@ -7852,13 +7903,18 @@
         return;
       }
       inboxRenderAll();
-      for (const id of inbox.enabled) {
+      for (const id of inboxEnabledIds()) {
         inboxConnect(id);
         inboxLoadChats(id).catch((e) => toast(`${inboxBotName(id)}：讀取對話失敗，${e.message}`, "err", 4000));
         inboxLoadBoard(id);
       }
       inboxScheduleBoard();
-      setInterval(() => inboxLoadBots().then(renderInboxRail).catch(() => {}), INBOX_BOTS_REFRESH_MS);
+      setInterval(() => inboxLoadBots().then(() => {
+        // 之前不在清單（沒權限）的已開帳號回來了：接上（已在連線／重試中的不動，照原本退避）
+        for (const id of inboxEnabledIds()) if (!inbox.conns.has(id)) { inboxConnect(id); inboxLoadChats(id).catch(() => {}); inboxLoadBoard(id); }
+        renderInboxHeader();
+        renderInboxRail();
+      }).catch(() => {}), INBOX_BOTS_REFRESH_MS);
     })();
   }
   if (INBOX_MODE) { bootInbox(); return; }
@@ -7999,6 +8055,7 @@
   .loe-inbox-btn:hover { background: #f8fafc; border-color: #b6c2d6; }
   .loe-inbox-btn:disabled { opacity: .5; cursor: default; }
   .loe-inbox-btn.on { background: #eef4ff; border-color: #1c6cf3; color: #1c6cf3; }
+  .loe-inbox-btn.warn { background: #fffbeb; border-color: #f59e0b; color: #b45309; font-weight: 600; }
   .loe-inbox-btn.primary { background: #1c6cf3; border-color: #1c6cf3; color: #fff; font-weight: 600; }
   .loe-inbox-btn.primary:hover { background: #0b57d0; }
   .loe-inbox-hint { font-size: 12px; color: #9a3412; background: #ffedd5; padding: 2px 8px; border-radius: 10px; }
