@@ -8,7 +8,7 @@ import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
 import { inboxConnect, inboxEnabledIds, inboxLoadChats, inboxSetEnabled, inboxUnreadTotal } from "./chats.js";
 import { inboxLoadNotes, inboxMarkRead, renderInboxNotes } from "./chat-tools.js";
-import { INBOX_AUTO_READ_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
+import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
 import { renderInboxList } from "./list.js";
 import { inboxBeep, inboxSoundReady } from "./notify.js";
 import { inboxChatColumns, inboxLoadBoard, inboxQueueLink, inboxScheduleBoard } from "./order-status.js";
@@ -48,6 +48,8 @@ function inboxOptionsButton() {
       if (v) { inbox.notesOpen = true; inbox.notesCollapsed = false; if (chat && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); }
       renderInboxNotes(); renderInboxThread();
     }, "可以收起，但不會關掉"),
+    ih("div", { class: "loe-inbox-options-group", text: "列表" }),
+    row("不顯示官方帳號名稱", inbox.hideOaName, (v) => { set(INBOX_HIDE_OA_NAME_KEY, "hideOaName", v); renderInboxList(); }, "官方訊息每列只顯示群編（例如 0/），沒設群編的帳號仍顯示名稱"),
     ih("div", { class: "loe-inbox-options-group", text: "已讀" }),
     row("開啟對話自動標已讀", inbox.autoRead, (v) => { set(INBOX_AUTO_READ_KEY, "autoRead", v); if (v && chat?.unread) inboxMarkRead(chat); },
       "不勾＝永遠不自動標，只有按「標為已讀」才標（回覆後也不標）"),

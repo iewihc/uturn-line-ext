@@ -37,8 +37,9 @@ function renderInboxList() {
       inboxAvatar(c),
       ih("span", { class: "loe-inbox-row-main" },
         ih("span", { class: "loe-inbox-row-top" },
-          ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(c.botId).slice(0, 6), title: inboxBotName(c.botId) }),
-          group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `派單預設群編：${group}` }) : null,
+          // 選項「不顯示官方帳號名稱」：有群編就只顯示群編（沒群編仍顯示名稱，才分得出是哪個帳號）
+          inbox.hideOaName && group ? null : ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(c.botId).slice(0, 6), title: inboxBotName(c.botId) }),
+          group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `${inboxBotName(c.botId)}・派單預設群編：${group}` }) : null,
           ih("span", { class: "loe-inbox-row-name", text: c.name }),
           ih("span", { class: "loe-inbox-row-time", text: inboxTime(c.at) }),
         ),
@@ -55,7 +56,8 @@ function renderInboxList() {
         ),
       ),
     );
-    row.querySelector(".loe-inbox-oa-chip").style.background = inboxBotColor(c.botId);
+    const oaChip = row.querySelector(".loe-inbox-oa-chip");
+    if (oaChip) oaChip.style.background = inboxBotColor(c.botId);
     if (selected) row.style.borderLeftColor = inboxBotColor(c.botId);
     rows.append(row);
   }

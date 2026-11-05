@@ -26,6 +26,7 @@ const INBOX_RAIL_COLLAPSED_KEY = "loe_inbox_rail_collapsed_v1"; // 左欄「官�
 const INBOX_DCHAT_DOCK_KEY = "loe_inbox_dchat_dock_v1"; // 司機對話停靠在最右邊一欄（false＝浮動可拖曳）
 const INBOX_PIN_DCHAT_KEY = "loe_inbox_pin_dchat_v1"; // 選項：固定開啟司機對話（選到有司機的單就自動開；預設開）
 const INBOX_PIN_NOTES_KEY = "loe_inbox_pin_notes_v1"; // 選項：固定開啟記事本（預設關）
+const INBOX_HIDE_OA_NAME_KEY = "loe_inbox_hide_oa_name_v1"; // 選項：官方訊息列表不顯示官方帳號名稱（有群編時只顯示群編）
 const INBOX_AUTO_READ_KEY = "loe_inbox_auto_read_v1"; // 選項：開啟對話自動標已讀（預設關＝永不自動，只手動按）
 const INBOX_SIDE_SPLIT_KEY = "loe_inbox_side_split_v1"; // 右欄司機對話的高度（px；兩個都開時中間可拖拉）
 const INBOX_TERMS_VERSION = "2026-11-05.5"; // 條款內容變更時更新，與腳本版本分開，避免一般更新重複要求同意
@@ -61,6 +62,7 @@ const inbox = {
   dchatHeight: Number(storeGet(INBOX_SIDE_SPLIT_KEY, 0)) || 0, // 0＝預設（約 55%）
   optionsOpen: false,
   autoRead: storeGet(INBOX_AUTO_READ_KEY, false) === true,
+  hideOaName: storeGet(INBOX_HIDE_OA_NAME_KEY, false) === true,
   notes: new Map(), // "bot/chat" → { list, total, next, loading, error }
   orders: new Map(), // "bot/chat" → { list, loading, error }（以對話連結查的進行中訂單）
   board: new Map(), // botId → { version, chats: Map(chatId → 看板欄位[]), orderChat: Map(orderId → chatId) }（官方帳號每個聊天室進行中訂單）
@@ -150,4 +152,4 @@ async function inboxApi(method, path, body, retried = false) {
   return text ? JSON.parse(text) : null;
 }
 
-export { INBOX_BOTS_REFRESH_MS, INBOX_DCHAT_DOCK_KEY, INBOX_AUTO_READ_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
+export { INBOX_BOTS_REFRESH_MS, INBOX_DCHAT_DOCK_KEY, INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
