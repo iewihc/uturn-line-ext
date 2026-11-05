@@ -93,4 +93,4 @@ function inboxMediaNode(botId, m) {
   }
 }
 
-export { inboxEmojiUrl, inboxLinkify, inboxMediaNode, inboxPackTabUrl, inboxStickerUrl, inboxTextNodes };
+export { inboxEmojiUrl, inboxLinkify, inboxMedia, inboxMediaNode, inboxPackTabUrl, inboxStickerUrl, inboxTextNodes };

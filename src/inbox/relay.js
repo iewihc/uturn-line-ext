@@ -3,7 +3,8 @@ import { setDriverChatMsgActions, driverChat, driverChatCompressImage, renderDri
 import { driverChatApi, liveOrders } from "../orders.js";
 import { copyText } from "../ui/copy.js";
 import { toast } from "../ui/toast.js";
-import { ih, inbox } from "./core.js";
+import { ih, inbox, inboxApi } from "./core.js";
+import { inboxMedia } from "./media.js";
 import { inboxSend, inboxSendFiles, inboxSelectedChat } from "./send.js";
 import { renderInboxThread } from "./thread.js";
 
@@ -80,7 +81,7 @@ function relaySendToDrivers(item, orders) {
   const run = async () => {
     relaySet(key, { state: "sending", to });
     try {
-      const image = item.imageUrl ? await relayFetchImage(item.imageUrl) : null;
+      const image = item.lineImage ? await relayFetchImage(await relayLineImageUrl(item.id)) : null;
       while (left.length) {
         const order = left[0];
         const tempId = "relay_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -164,12 +165,26 @@ function inboxRelayControls(m) {
 function relayItemOfLine(msg) {
   if (msg.type === "text" || msg.type === "textV2") return msg.text ? { id: msg.id, text: msg.text } : null;
   if (msg.type === "location") return { id: msg.id, text: [msg.title, msg.address].filter(Boolean).join(" ") || `${msg.latitude},${msg.longitude}` };
-  if (msg.type === "image") {
-    const p = msg.contentProvider;
-    const url = p?.type === "line" && p.contentHash ? `https://chat-content.line.biz/bot/${inboxSelectedChat()?.botId}/${p.contentHash}` : p?.originalContentUrl;
-    return url && !p.expired ? { id: msg.id, imageUrl: url } : null;
-  }
+  // 客人的圖：網址按下去才找（剛收到的即時事件常還沒帶 contentProvider）；已過期的不給轉
+  if (msg.type === "image") return inboxMedia(inboxSelectedChat()?.botId, msg)?.expired ? null : { id: msg.id, lineImage: true };
   return null;
+}
+// 客人那張圖的原圖網址：先看畫面上的訊息，沒有就重抓一次這位客人的訊息（順便把畫面上那則補成圖片）
+async function relayLineImageUrl(msgId) {
+  const chat = inboxSelectedChat();
+  if (!chat) throw new Error("沒有選到客人");
+  const th = inbox.threads.get(chat.key);
+  const shown = th?.list.find((m) => m.message?.id === msgId);
+  let media = shown && inboxMedia(chat.botId, shown.message);
+  if (!media?.url) {
+    const data = await inboxApi("GET", `/api/v3/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`);
+    const fresh = (data?.list || []).find((m) => m?.message?.id === msgId);
+    if (fresh && shown) { shown.message = fresh.message; renderInboxThread(); }
+    media = fresh && inboxMedia(chat.botId, fresh.message);
+  }
+  if (!media?.url) throw new Error("LINE 還沒給這張圖的網址，稍後再試");
+  if (media.expired) throw new Error("這張圖已過期，LINE 不再提供");
+  return media.url;
 }
 // 司機對話的司機訊息（只在收件匣：面板對應的就是目前這位客人）
 function driverRelayControls(m) {
