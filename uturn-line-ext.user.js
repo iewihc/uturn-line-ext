@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.54.0
-// @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出。
+// @version      1.55.0
+// @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣。
 // @author       iewihc
 // @match        https://manager.line.biz/*
 // @match        https://chat.line.biz/*
@@ -18,11 +18,20 @@
 // @supportURL   https://github.com/iewihc/uturn-line-ext/issues
 // @downloadURL  https://raw.githubusercontent.com/iewihc/uturn-line-ext/main/uturn-line-ext.user.js
 // @updateURL    https://raw.githubusercontent.com/iewihc/uturn-line-ext/main/uturn-line-ext.user.js
-// @run-at       document-idle
+// @run-at       document-start
 // ==/UserScript==
 (function () {
   "use strict";
 
+  // 多開收件匣：?uturnInbox=1 → document-start 就接管整頁，LINE 的 SPA 不啟動。
+  // 其他頁面維持舊行為：等 DOMContentLoaded（等同原本的 document-idle）再跑主程式。
+  const INBOX_MODE = location.hostname === "chat.line.biz" && window.top === window.self &&
+    /(?:^\?|&)uturnInbox=1(?:&|$)/.test(location.search);
+  if (INBOX_MODE) { inboxTakeover(); uturnMain(); }
+  else if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", uturnMain, { once: true });
+  else uturnMain();
+
+  function uturnMain() {
   // 版本單一來源＝標頭 @version（Tampermonkey 自動更新必讀此行）。
   // 這裡不再各寫一份，改從 GM_info.script.version 衍生，杜絕漂移。
   const UTURN_BUILD =
@@ -93,6 +102,11 @@
     "shield-check": '<path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"></path><path d="m9 12 2 2 4-4"></path>',
     refresh: '<path d="M20 7v5h-5M4 17v-5h5"></path><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"></path>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path>',
+    inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
+    pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path>',
+    "notebook": '<path d="M2 6h4"></path><path d="M2 10h4"></path><path d="M2 14h4"></path><path d="M2 18h4"></path><rect width="16" height="20" x="4" y="2" rx="2"></rect><path d="M16 2v20"></path>',
+    "external-link": '<path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>',
   };
   const ic = (name) =>
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -734,7 +748,11 @@
     pushRepliesToBackend(getDispatcher(), arr);
   }
   /* ---- 每個官方帳號(OA)獨立：前綴 + webhook 以 OA id 分開儲存 ---- */
+  // 收件匣沒有 /{oa}/chat/{chat} 網址也沒有 LINE 的標題列：選中對話時設定這份情境，
+  // 派單視窗、前綴、店配覆寫、AI 切換等既有功能就能原封不動地用在收件匣。
+  let pageContext = null; // { botId, chatId, customerName, oaName } | null
   function getOaId() {
+    if (pageContext) return pageContext.botId;
     const parts = location.pathname.split("/").filter(Boolean);
     // chat.line.biz/{oaId}/chat/...  ；找出符合 OA id 樣式的片段
     const m = parts.find((p) => /^U[0-9a-fA-F]{20,}$/.test(p) || /^@/.test(p));
@@ -745,12 +763,14 @@
     return parts[0] || "default";
   }
   function getOaName() {
+    if (pageContext) return pageContext.oaName;
     const dd = document.querySelector("header .dropdown.btn-group");
     return dd ? dd.textContent.trim() : "";
   }
   // 目前對話的客戶名稱（頂部標題），完整帶入。
   // LINE 把 emoji 以 <img alt="🍿"> 呈現，這裡用 alt 還原，得到「🍿Z3721/版主 允🐱」這種完整名稱。
   function getCustomerName() {
+    if (pageContext) return pageContext.customerName;
     const h = document.querySelector(".sub-header h4");
     if (!h) return "";
     let name = "";
@@ -765,6 +785,7 @@
     return name.trim();
   }
   function getChatId() {
+    if (pageContext) return pageContext.chatId;
     const parts = location.pathname.split("/").filter(Boolean);
     const ci = parts.indexOf("chat");
     return ci >= 0 && parts[ci + 1] ? parts[ci + 1] : "";
@@ -2796,6 +2817,10 @@
   function setPrefixForGid(gid, text) {
     storeSet(`${PREFIX_KEY}::${gid}`, text || "");
   }
+  function getPrefixForGid(gid) {
+    const v = storeGet(`${PREFIX_KEY}::${gid}`, "");
+    return typeof v === "string" ? v : "";
+  }
   // chat 層級覆寫：key = gid/chat -> { group, pickup }
   function getChatOverrides() {
     const v = storeGet(CHAT_OVERRIDE_KEY, null);
@@ -3003,6 +3028,7 @@
   function setPrefix(text) {
     storeSet(scopedKey(PREFIX_KEY), text || "");
     renderPrefixChip();
+    if (INBOX_MODE) { renderInboxThread(); renderInboxList(); }
   }
   // Webhook 與後台帳號為「全域共用」：設定一次，所有帳號／頁面共用。
   // 讀取時：先讀全域；若全域空、但舊版有存成「此帳號專屬」，自動搬到全域(一次性)。
@@ -3226,7 +3252,8 @@
       .forEach(populateQuickMenu);
   }
   // 輸入框上方的快捷氣泡列（最多前 5 個；點了帶入對話框）
-  function renderQuickBar(bar) {
+  // onPick：點氣泡時要把範本塞到哪裡（LINE 聊天室＝原生輸入框；收件匣＝自己的 textarea）
+  function renderQuickBar(bar, onPick = fillReplyTextarea) {
     bar = bar || document.querySelector(`.${QR_BAR_CLASS}`);
     if (!bar) return;
     bar.textContent = "";
@@ -3239,7 +3266,7 @@
       chip.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        fillReplyTextarea(r.text);
+        onPick(r.text);
       });
       bar.appendChild(chip);
     };
@@ -4172,12 +4199,27 @@
     });
     replySyncBtn.insertAdjacentElement("afterend", estBtn); // 順序：同步群編設定 → 同步快捷 → 估價
 
+    // 多開收件匣入口（新分頁開 ?uturnInbox=1；這一頁本身不開任何 SSE）
+    const inboxLink = document.createElement("a");
+    inboxLink.id = "loe-inbox-link";
+    inboxLink.className = "loe-import-btn";
+    inboxLink.href = "/?uturnInbox=1";
+    inboxLink.target = "_blank";
+    inboxLink.rel = "noopener";
+    inboxLink.style.textDecoration = "none";
+    inboxLink.title = "多開收件匣：同時監聽多個官方帳號的新訊息並直接回覆";
+    inboxLink.insertAdjacentHTML("beforeend", ic("inbox"));
+    const inboxLabel = document.createElement("span");
+    inboxLabel.textContent = "收件匣";
+    inboxLink.appendChild(inboxLabel);
+    estBtn.insertAdjacentElement("afterend", inboxLink);
+
     // 版本號放在工具列末端，進階功能按鈕會插在它前面。
     const verChip = document.createElement("span");
     verChip.className = "loe-version-chip";
     verChip.textContent = "v" + UTURN_BUILD;
     verChip.title = "懶惰蟲版本 v" + UTURN_BUILD;
-    estBtn.insertAdjacentElement("afterend", verChip);
+    inboxLink.insertAdjacentElement("afterend", verChip);
 
     renderPrefixChip();
   }
@@ -4375,6 +4417,7 @@
   }
   // 自動回覆：填入訊息並按下「傳送」
   function autoSendReply(text) {
+    if (INBOX_MODE) { inboxSend(text).catch(() => {}); return true; }
     fillReplyTextarea(text, true);
     const sendBtn = document.querySelector(
       ".send-group.btn-group input.btn, .send-group.btn-group button.btn",
@@ -4461,6 +4504,7 @@
   // 每次點完等 ~900ms 再判斷（避免連點把標記切掉）。連續 3 輪都已標記才算完成，
   // 整體最多 ~10 秒；到時停止重試。
   function markFollowUp() {
+    if (INBOX_MODE) { inboxFollowUp().catch(() => {}); return; }
     const STEP = 300,
       MAX = 10000,
       MAX_CLICKS = 3;
@@ -4856,6 +4900,7 @@
     aiState = status.aiAccount
       ? { bot, chat, status: status.matched ? "ready" : "unmatched", handoff: !!status.handoffActive, busy: false }
       : null;
+    if (INBOX_MODE) inboxNoteAi(bot, chat, aiState);
   }
 
   // 換對話／回到分頁時重讀：已記下對應只要一次後端查詢，沒有才讀 LINE 客人資料再比對
@@ -4905,6 +4950,7 @@
     } finally {
       s.busy = false;
       if (aiState === s) renderAiToggle();
+      if (INBOX_MODE) inboxNoteAi(s.bot, s.chat, s);
     }
   }
 
@@ -4954,14 +5000,14 @@
       return;
     }
     const sig = [s.chat, s.status, s.handoff, s.busy].join("|");
-    if (box && box.isConnected && box.dataset.sig === sig && box.nextElementSibling &&
-        box.nextElementSibling.isConnected) return;
-    const anchor = findFollowUpBtn();
+    if (box && box.isConnected && box.dataset.sig === sig &&
+        (INBOX_MODE || (box.nextElementSibling && box.nextElementSibling.isConnected))) return;
+    const anchor = INBOX_MODE ? inbox.el.aiSlot : findFollowUpBtn();
     if (!anchor) {
       if (box) box.remove();
       return;
     }
-    if (!box || box.nextElementSibling !== anchor) {
+    if (!box || (INBOX_MODE ? box.parentElement !== anchor : box.nextElementSibling !== anchor)) {
       if (box) box.remove();
       box = document.createElement("span");
       box.className = AI_TOGGLE_CLASS;
@@ -4974,7 +5020,8 @@
         e.stopPropagation();
         switchAiHandoff(btn.dataset.handoff === "1");
       });
-      anchor.insertAdjacentElement("beforebegin", box);
+      if (INBOX_MODE) anchor.appendChild(box);
+      else anchor.insertAdjacentElement("beforebegin", box);
     }
     box.dataset.sig = sig;
     box.textContent = "";
@@ -5687,7 +5734,7 @@
   // LINE 內部重排等都接得住）。全腳本只留這一個常駐計時器。
   let heartbeatPath = location.pathname;
   let heartbeatTick = 0;
-  setInterval(() => {
+  if (!INBOX_MODE) setInterval(() => {
     // SPA 的 pushState / replaceState 不一定更新 DOM，也不會觸發 popstate。
     // 只在操作對象改變時排入維護，確保舊視窗與 KEY 一併清除。
     // 先比對 pathname 字串，沒變就不拆解 URL（OA/chat id 都只由 pathname 推得）。
@@ -5752,6 +5799,1067 @@
     },
     { capture: true, passive: true },
   );
+
+  /* ---------------------------------------------------------------------- *
+   * 多開收件匣（https://chat.line.biz/?uturnInbox=1）
+   *   頁面在 document-start 就被接管（見檔尾 inboxTakeover），LINE 的 SPA 不啟動；
+   *   同網域所以 fetch／EventSource 原生帶 cookie，不需要 CORS 或 GM_xmlhttpRequest。
+   *   收訊：每個「啟用」的官方帳號一條 SSE
+   *         POST /api/v1/bots/{bot}/streamingApiToken → GET {streamingApiBaseUrl}/api/{version}/sse?token=…
+   *         事件 chat.subEvent：message（客人傳來）／messageSent（官方送出）／read（客服標已讀）…
+   *   發訊：POST /api/v1/bots/{bot}/chats/{chat}/messages/send { type:"text", text, sendId }，帶 X-XSRF-TOKEN
+   *   一般聊天頁完全不走這段：INBOX_MODE 為 false 時只多一顆「收件匣」入口按鈕。
+   * ---------------------------------------------------------------------- */
+  const INBOX_ENABLED_KEY = "loe_inbox_enabled_bots_v1"; // 啟用監聽的官方帳號 botId 陣列
+  const INBOX_SOUND_KEY = "loe_inbox_sound_v1"; // 新訊息提示音（預設開）
+  const INBOX_PAGES_PER_BOT = 2; // 每個帳號初始掃幾頁對話（25 位/頁）
+  const INBOX_TOAST_MS = 20000; // 通知卡片停留時間；同一位客人再來訊會重新計時
+  const INBOX_BOTS_REFRESH_MS = 60000; // 未啟用帳號的未讀數靠 /api/v1/bots 每分鐘更新
+  const INBOX_LIMIT_RETRY_MS = 60000; // 連線數已滿時隔多久再試
+  const INBOX_OA_COLORS = ["#1c6cf3", "#0f766e", "#7c3aed", "#b45309", "#be185d", "#0369a1", "#4d7c0f", "#9f1239"];
+  const INBOX_FILTERS = [
+    { id: "unread", label: "未讀" },
+    { id: "all", label: "全部" },
+    { id: "unassigned", label: "未指派" },
+    { id: "mine", label: "我負責" },
+  ];
+
+  const inbox = {
+    bots: [], // [{ botId, name, iconUrl, unreadCount, color }]
+    botById: new Map(),
+    me: null, // /api/v1/me → { bizId, name }
+    enabled: new Set((storeGet(INBOX_ENABLED_KEY, []) || []).filter((v) => typeof v === "string")),
+    sound: storeGet(INBOX_SOUND_KEY, true) !== false,
+    conns: new Map(), // botId → { es, status, lastEventId, retry, timer, error }
+    chats: new Map(), // "bot/chat" → chat 模型
+    threads: new Map(), // "bot/chat" → { list, loading, error }
+    toasts: new Map(), // "bot/chat" → { count, lines, timer }
+    selected: null,
+    filter: "unread",
+    notesOpen: false,
+    notes: new Map(), // "bot/chat" → { list, total, next, loading, error }
+    owners: new Map(), // botId → Map(bizId → name)
+    renaming: false,
+    csrf: null,
+    limiter: makeLineRateLimiter(),
+    audio: null,
+    lastEventAt: 0,
+    el: {},
+  };
+  const inboxKey = (botId, chatId) => `${botId}/${chatId}`;
+  const inboxBotName = (botId) => inbox.botById.get(botId)?.name || botId;
+  const inboxBotColor = (botId) => inbox.botById.get(botId)?.color || INBOX_OA_COLORS[0];
+  const inboxInitial = (name) => (name || "").replace(/^[^-]*-/, "").trim().slice(0, 1) || "？";
+  const inboxChatUrl = (chat) => `${location.origin}/${chat.botId}/chat/${encodeURIComponent(chat.chatId)}`;
+  // 群編顯示：固定去掉第 1 個字元（emoji 算一個字；*📗→📗、W0/→0/），去掉後空白就不顯示。派單送出仍用完整群編。
+  const inboxGroupLabel = (g) => Array.from(String(g || "")).slice(1).join("").trim() || "";
+
+  // DOM 建構小工具：attrs 的 text → textContent、class → className、on<event> → listener，其餘 setAttribute。
+  // 所有來自 LINE 的字串一律走 textContent，不組 HTML。
+  function ih(tag, attrs, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v == null || v === false) continue;
+      if (k === "class") node.className = v;
+      else if (k === "text") node.textContent = v;
+      else if (k === "html") node.innerHTML = v; // 只給內建 SVG 圖示
+      else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of children.flat()) {
+      if (c == null || c === false) continue;
+      node.append(c.nodeType ? c : document.createTextNode(String(c)));
+    }
+    return node;
+  }
+  function inboxTime(ms) {
+    if (!ms) return "";
+    const d = new Date(ms), now = new Date();
+    const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return d.toDateString() === now.toDateString() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+  }
+
+  /* ---- LINE 同網域 API：GET 不帶 CSRF，其餘帶 X-XSRF-TOKEN；429 暫停到下一分鐘重送；403 換一次 token ---- */
+  async function inboxCsrf(force) {
+    if (!force && inbox.csrf) return inbox.csrf;
+    const r = await fetch("/api/v1/csrfToken", { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } });
+    if (r.status === 401) throw new Error("LINE 登入已失效，請先登入 chat.line.biz");
+    if (!r.ok) throw new Error(`取不到 CSRF token（${r.status}）`);
+    inbox.csrf = await r.json();
+    return inbox.csrf;
+  }
+  async function inboxApi(method, path, body, retried = false) {
+    await inbox.limiter.acquire();
+    const headers = { Accept: "application/json", "x-oa-chat-client-version": "20240513144702" };
+    if (method !== "GET") {
+      const csrf = await inboxCsrf();
+      headers[csrf.headerName || "X-XSRF-TOKEN"] = csrf.token;
+      headers["Content-Type"] = "application/json";
+    }
+    const r = await fetch(path, {
+      method, credentials: "same-origin", cache: "no-store", headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (r.status === 429) { inbox.limiter.pauseUntilNextMinute(); return inboxApi(method, path, body, retried); }
+    if (r.status === 403 && method !== "GET" && !retried) { inbox.csrf = null; return inboxApi(method, path, body, true); }
+    if (r.status === 401) throw new Error("LINE 登入已失效，請先登入 chat.line.biz");
+    if (!r.ok) throw new Error(`LINE 回應 ${r.status}`);
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
+  }
+
+  /* ---- 資料模型 ---- */
+  // 對話清單的 latestEvent 與 SSE 的 payload 同形：{ type, timestamp, source, message }
+  function inboxPreview(ev) {
+    if (!ev) return "";
+    const m = ev.message;
+    if (ev.type === "message" || ev.type === "messageSent") {
+      if (!m) return "";
+      switch (m.type) {
+        case "text": case "textV2": return m.text || "";
+        case "sticker": return "[貼圖]";
+        case "image": return "[圖片]";
+        case "video": return "[影片]";
+        case "audio": return "[語音]";
+        case "file": return "[檔案]";
+        case "location": return "[位置]";
+        case "flex": case "template": case "imagemap": case "cardType": case "coupon":
+          return "[卡片]" + (m.altText ? " " + m.altText : "");
+        default: return `[${m.type || "訊息"}]`;
+      }
+    }
+    return { follow: "[加入好友]", unfollow: "[封鎖]", join: "[加入群組]", postback: "[按了卡片按鈕]", callReceived: "[來電]" }[ev.type] || "";
+  }
+  function inboxChatFromLine(botId, item, prev) {
+    const p = item.profile || {};
+    const le = item.latestEvent || null;
+    const unread = item.read === false;
+    return {
+      botId, chatId: item.chatId, key: inboxKey(botId, item.chatId),
+      name: firstText([p.nickname, item.nickname, p.name]) || "（未提供名稱）",
+      lineName: firstText([p.name]),
+      nickname: firstText([p.nickname, item.nickname]),
+      unread,
+      // LINE 清單不給未讀「則數」：0 代表未知（畫紅點），只有 SSE 進來的才累計成數字
+      unreadCount: unread && prev ? prev.unreadCount : 0,
+      preview: inboxPreview(le) || (prev ? prev.preview : ""),
+      at: item.lastTalkedAt || item.updatedAt || (le && le.timestamp) || 0,
+      assignedBizId: item.assignedBizId || "",
+      done: !!item.done,
+      followedUp: !!item.followedUp, // LINE 的「待處理」標記
+      avatarUrl: p.iconHash && p.iconHash !== "biz-app"
+        ? `https://profile.line-scdn.net/${encodeURIComponent(p.iconHash)}/preview` : "",
+      chatType: item.chatType || "",
+    };
+  }
+  // 未指派不顯示文字（清單與標題列都省略），只有「未指派」篩選用得到這個狀態
+  function inboxAssigneeLabel(chat) {
+    if (!chat.assignedBizId) return "";
+    return inbox.me && chat.assignedBizId === inbox.me.bizId ? "我負責" : "已指派";
+  }
+  function inboxUnreadTotal() {
+    let n = 0;
+    for (const c of inbox.chats.values()) if (c.unread) n++;
+    return n;
+  }
+
+  /* ---- 帳號清單（含每個帳號的未讀數，未啟用的也看得到） ---- */
+  async function inboxLoadBots() {
+    const data = await inboxApi("GET", "/api/v1/bots?limit=1000&noFilter=true");
+    const list = Array.isArray(data?.list) ? data.list : [];
+    inbox.bots = list
+      .filter((b) => b && typeof b.botId === "string" && LINE_BOT_ID_RE.test(b.botId) && !b.disabledCrm)
+      .map((b, i) => ({
+        botId: b.botId, name: firstText([b.name]) || b.botId, iconUrl: b.iconUrl || "",
+        unreadCount: Number(b.unreadCount) || 0, color: INBOX_OA_COLORS[i % INBOX_OA_COLORS.length],
+      }));
+    inbox.botById = new Map(inbox.bots.map((b) => [b.botId, b]));
+    // 已經沒有權限的帳號從啟用清單拿掉
+    for (const id of [...inbox.enabled]) if (!inbox.botById.has(id)) inbox.enabled.delete(id);
+  }
+
+  /* ---- SSE：每個帳號一條；失敗退避重連；連線數已滿等一分鐘再試 ---- */
+  function inboxConn(botId) {
+    let c = inbox.conns.get(botId);
+    if (!c) { c = { botId, es: null, status: "off", lastEventId: "", retry: 0, timer: 0, error: "", connecting: false }; inbox.conns.set(botId, c); }
+    return c;
+  }
+  function inboxDrop(c) {
+    if (c.es) { c.es.close(); c.es = null; }
+  }
+  async function inboxConnect(botId) {
+    const c = inboxConn(botId);
+    if (c.es || c.connecting) return;
+    clearTimeout(c.timer); c.timer = 0;
+    c.connecting = true; c.status = "connecting"; c.error = "";
+    renderInboxRail();
+    let tok;
+    try { tok = await inboxApi("POST", `/api/v1/bots/${botId}/streamingApiToken`, {}); }
+    catch (e) { c.connecting = false; return inboxScheduleReconnect(c, e.message); }
+    c.connecting = false;
+    if (!inbox.enabled.has(botId)) { c.status = "off"; return renderInboxRail(); } // 等 token 期間被關掉
+    const base = tok?.streamingApiBaseUrl || "https://chat-streaming-api.line.biz";
+    const ver = tok?.streamingApiVersion || "v1";
+    const q = new URLSearchParams({
+      token: tok?.streamingApiToken || "", deviceType: "", clientType: "PC", pingSecs: "20",
+      lastEventId: c.lastEventId || tok?.lastEventId || "",
+    });
+    const es = new EventSource(`${base}/api/${ver}/sse?${q}`);
+    c.es = es;
+    es.addEventListener("init", () => { if (c.es !== es) return; c.status = "live"; c.retry = 0; c.error = ""; renderInboxRail(); });
+    es.addEventListener("ping", () => { inbox.lastEventAt = Date.now(); });
+    es.addEventListener("chat", (ev) => {
+      if (c.es !== es) return;
+      inbox.lastEventAt = Date.now();
+      if (ev.lastEventId) c.lastEventId = ev.lastEventId;
+      inboxOnChatEvent(botId, ev.data).catch(() => {});
+    });
+    es.addEventListener("fail", (ev) => {
+      if (c.es !== es) return;
+      let sub = "";
+      try { sub = JSON.parse(ev.data).subEvent || ""; } catch (_) {}
+      inboxDrop(c);
+      if (sub === "too_many_sse_connections") {
+        c.status = "limit"; c.error = "連線數已滿，請關閉一個 LINE 分頁";
+        c.timer = setTimeout(() => { c.timer = 0; if (inbox.enabled.has(botId)) inboxConnect(botId); }, INBOX_LIMIT_RETRY_MS);
+        renderInboxRail();
+      } else inboxScheduleReconnect(c, "LINE 中斷連線");
+    });
+    es.addEventListener("reload", () => { if (c.es !== es) return; inboxDrop(c); inboxScheduleReconnect(c, "LINE 要求重新連線"); });
+    es.onerror = () => { if (c.es !== es) return; inboxDrop(c); inboxScheduleReconnect(c, "連線中斷"); };
+  }
+  function inboxScheduleReconnect(c, why) {
+    if (!inbox.enabled.has(c.botId)) { c.status = "off"; c.error = ""; return renderInboxRail(); }
+    c.status = "error"; c.error = why || ""; c.retry += 1;
+    const delay = Math.min(30000, 2000 * 2 ** Math.min(c.retry - 1, 4));
+    clearTimeout(c.timer);
+    c.timer = setTimeout(() => { c.timer = 0; if (inbox.enabled.has(c.botId)) inboxConnect(c.botId); }, delay);
+    renderInboxRail();
+  }
+  function inboxDisconnect(botId) {
+    const c = inboxConn(botId);
+    clearTimeout(c.timer); c.timer = 0;
+    inboxDrop(c);
+    c.status = "off"; c.error = ""; c.retry = 0;
+  }
+  function inboxSetEnabled(botId, on) {
+    if (on) inbox.enabled.add(botId); else inbox.enabled.delete(botId);
+    storeSet(INBOX_ENABLED_KEY, [...inbox.enabled]);
+    if (on) {
+      inboxConnect(botId);
+      inboxLoadChats(botId).catch((e) => toast(`${inboxBotName(botId)}：讀取對話失敗，${e.message}`, "err", 4000));
+    } else {
+      inboxDisconnect(botId);
+      for (const [k, c] of inbox.chats) if (c.botId === botId) { inbox.chats.delete(k); inbox.threads.delete(k); inboxDismissToast(k); }
+      if (inbox.selected && inbox.selected.startsWith(botId + "/")) { inbox.selected = null; inboxSetContext(null); }
+    }
+    inboxRenderAll();
+  }
+
+  /* ---- 對話清單與單一對話 ---- */
+  async function inboxLoadChats(botId) {
+    let next = "";
+    for (let page = 0; page < INBOX_PAGES_PER_BOT; page++) {
+      const url = lineChatsPageUrl(botId, next);
+      const data = await inboxApi("GET", url.pathname + url.search);
+      if (!inbox.enabled.has(botId)) return;
+      for (const item of data?.list || []) {
+        if (!item || typeof item.chatId !== "string") continue;
+        const k = inboxKey(botId, item.chatId);
+        inbox.chats.set(k, inboxChatFromLine(botId, item, inbox.chats.get(k)));
+      }
+      inboxRenderAll();
+      next = typeof data?.next === "string" ? data.next : "";
+      if (!next) break;
+    }
+    inboxProbeAi(botId);
+  }
+  async function inboxFetchChat(botId, chatId) {
+    try {
+      const item = await inboxApi("GET", `/api/v1/bots/${botId}/chats/${encodeURIComponent(chatId)}`);
+      if (!item || typeof item.chatId !== "string") return null;
+      const k = inboxKey(botId, chatId);
+      const chat = inboxChatFromLine(botId, item, inbox.chats.get(k));
+      inbox.chats.set(k, chat);
+      return chat;
+    } catch (_) { return null; }
+  }
+  async function inboxOnChatEvent(botId, raw) {
+    let data;
+    try { data = JSON.parse(raw); } catch (_) { return; }
+    const payload = data?.payload || {};
+    const chatId = data?.chatId || payload?.source?.chatId;
+    if (typeof chatId !== "string") return;
+    const key = inboxKey(botId, chatId);
+    const sub = data.subEvent;
+    let chat = inbox.chats.get(key);
+    if (!chat) {
+      if (sub !== "message" && sub !== "messageSent") return; // 不在清單裡的對話只關心訊息
+      chat = await inboxFetchChat(botId, chatId);
+      if (!chat) return;
+    }
+    switch (sub) {
+      case "message":
+        chat.unread = true;
+        chat.unreadCount += 1;
+        chat.preview = inboxPreview(payload) || chat.preview;
+        chat.at = payload.timestamp || Date.now();
+        inboxAppendToThread(key, payload);
+        inboxNotify(chat, payload);
+        break;
+      case "messageSent":
+        chat.preview = inboxPreview(payload) || chat.preview;
+        chat.at = payload.timestamp || Date.now();
+        inboxAppendToThread(key, payload);
+        break;
+      case "read": // 客服（任一分頁）標了已讀
+        chat.unread = false; chat.unreadCount = 0;
+        inboxDismissToast(key);
+        break;
+      case "done": chat.done = true; break;
+      case "undone": chat.done = false; break;
+      case "followedUp": chat.followedUp = true; break;
+      case "unfollowedUp": chat.followedUp = false; break;
+      case "assigneeRemoved": chat.assignedBizId = ""; break;
+      case "assigneeUpdated": case "nicknameUpdated": case "spam": case "unspam": case "delete": case "leave": case "botLeave": {
+        const fresh = await inboxFetchChat(botId, chatId);
+        if (!fresh) { inbox.chats.delete(key); inbox.threads.delete(key); inboxDismissToast(key); if (inbox.selected === key) inbox.selected = null; }
+        break;
+      }
+      default: return; // typing／chatRead 等不重繪
+    }
+    inboxRenderAll();
+  }
+
+  /* ---- AI 客服狀態（有 AI 的帳號才有）：帳號層級記在 aiBots，對話層級記在 inboxAi ---- */
+  const inboxAi = new Map(); // "bot/chat" → { status: ready|unmatched|error, handoff, full }（full＝開過對話、做過大頭貼比對）
+  const inboxAiQueue = [];
+  let inboxAiBusy = 0;
+  function inboxNoteAi(bot, chat, state) {
+    const key = inboxKey(bot, chat);
+    if (state) inboxAi.set(key, { status: state.status, handoff: !!state.handoff, full: true });
+    renderInboxList();
+    renderInboxRail();
+  }
+  // 列表標籤：AI處理／轉人工；只做過輕量查詢還對不到的顯示中性的「AI」，開過對話仍對不到才顯示「未對到 AI」
+  function inboxAiLabel(chat) {
+    if (aiBots.get(chat.botId) !== true) return null;
+    const live = aiState && aiState.bot === chat.botId && aiState.chat === chat.chatId && aiState.status !== "loading"
+      ? { status: aiState.status, handoff: aiState.handoff, full: true } : inboxAi.get(chat.key);
+    if (!live || live.status === "error") return { text: "AI", cls: "ai" };
+    if (live.status !== "ready") return live.full ? { text: "未對到 AI", cls: "ai-unmatched" } : { text: "AI", cls: "ai" };
+    return live.handoff ? { text: "轉人工", cls: "ai-human" } : { text: "AI處理", cls: "ai-on" };
+  }
+  // 有 AI 的帳號：列表上的對話逐一向後端問狀態（最多同時 2 個；問過的不再問）
+  function inboxQueueAi(chat) {
+    if (aiBots.get(chat.botId) === false || inboxAi.has(chat.key) || inboxAiQueue.includes(chat.key)) return;
+    inboxAiQueue.push(chat.key);
+    inboxDrainAi();
+  }
+  function inboxDrainAi() {
+    while (inboxAiBusy < 2 && inboxAiQueue.length) {
+      const chat = inbox.chats.get(inboxAiQueue.shift());
+      if (!chat) continue;
+      inboxAiBusy++;
+      inboxResolveAi(chat).finally(() => { inboxAiBusy--; inboxDrainAi(); });
+    }
+  }
+  // 同 refreshAiToggle：先問後端有沒有記下對應，沒有才讀 LINE 客人資料（原名＋暱稱＋大頭貼）再比對一次
+  async function inboxResolveAi(chat) {
+    try {
+      const resolve = (body) => lineBackendRequest("POST", aiChatPath(chat.botId, chat.chatId) + "/resolve", body, undefined,
+        { "X-Oa-Name": encodeURIComponent(inboxBotName(chat.botId)) });
+      let status = await resolve({});
+      aiBots.set(chat.botId, !!(status && status.aiAccount));
+      if (status && status.aiAccount && !status.matched) {
+        const profile = await fetchAiProfile(chat.botId, chat.chatId).catch(() => null);
+        if (profile) status = await resolve(profile);
+      }
+      if (status && status.aiAccount) inboxAi.set(chat.key, { status: status.matched ? "ready" : "unmatched", handoff: !!status.handoffActive, full: true });
+    } catch (_) {
+      inboxAi.set(chat.key, { status: "error", handoff: false, full: false });
+    }
+    renderInboxList();
+    renderInboxRail();
+  }
+  // 帳號有沒有 AI：啟用、讀完對話後拿最近一位客人問一次（resolve 回 aiAccount）
+  function inboxProbeAi(botId) {
+    if (aiBots.has(botId)) return;
+    const chat = [...inbox.chats.values()].filter((c) => c.botId === botId).sort((a, b) => b.at - a.at)[0];
+    if (chat) inboxQueueAi({ ...chat }); // 先假設有 AI 排進佇列；resolve 會寫回 aiBots
+  }
+
+  // 圖片／影片／語音／檔案的實際網址：LINE 自己存的走 chat-content.line.biz（縮圖加 /preview），外部來源用它給的網址
+  function inboxMedia(botId, message) {
+    const p = message && message.contentProvider;
+    if (!p) return null;
+    if (p.type === "line" && p.contentHash) {
+      const url = `https://chat-content.line.biz/bot/${botId}/${p.contentHash}`;
+      return { url, preview: url + "/preview", expired: !!p.expired || (p.expiredAt && p.expiredAt <= Date.now()) };
+    }
+    if (p.type === "external") return { url: p.originalContentUrl || "", preview: p.previewImageUrl || p.originalContentUrl || "", expired: false };
+    return null;
+  }
+  const inboxStickerUrl = (id) => `https://stickershop.line-scdn.net/stickershop/v1/sticker/${encodeURIComponent(id)}/android/sticker.png`;
+  const inboxFileSize = (n) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${n} B`;
+  // 文字裡的 http(s) 連結做成可點的 <a>（新分頁開）；其餘維持純文字節點，不組 HTML
+  const INBOX_URL_RE = /https?:\/\/[^\s<>"'）)\]】，。、]+/g;
+  function inboxLinkify(text) {
+    const out = [];
+    let last = 0;
+    for (const m of String(text).matchAll(INBOX_URL_RE)) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      out.push(ih("a", { class: "loe-inbox-link", href: m[0], target: "_blank", rel: "noopener", text: m[0] }));
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+  // 非文字訊息的泡泡內容；回 null 表示用文字顯示
+  function inboxMediaNode(botId, m) {
+    const msg = m.message;
+    if (!msg) return null;
+    const media = inboxMedia(botId, msg);
+    const expiredNode = (label) => ih("span", { class: "loe-inbox-media-expired", text: `[${label}已過期，LINE 不再提供]` });
+    switch (msg.type) {
+      case "image":
+        if (!media) return null;
+        if (media.expired) return expiredNode("圖片");
+        return ih("a", { class: "loe-inbox-media-link", href: media.url, target: "_blank", rel: "noopener", title: "點擊看原圖" },
+          ih("img", { class: "loe-inbox-media-img", src: media.preview, alt: "圖片", loading: "lazy" }));
+      case "video":
+        if (!media) return null;
+        if (media.expired) return expiredNode("影片");
+        return ih("video", { class: "loe-inbox-media-video", src: media.url, poster: media.preview, controls: true, preload: "metadata" });
+      case "audio":
+        if (!media) return null;
+        if (media.expired) return expiredNode("語音");
+        return ih("audio", { class: "loe-inbox-media-audio", src: media.url, controls: true, preload: "metadata" });
+      case "file":
+        if (!media) return null;
+        if (media.expired) return expiredNode("檔案");
+        return ih("a", { class: "loe-inbox-media-file", href: media.url, target: "_blank", rel: "noopener" },
+          ih("span", { text: "📎 " + (msg.fileName || "檔案") }),
+          msg.fileSize ? ih("span", { class: "loe-inbox-muted", text: ` ${inboxFileSize(msg.fileSize)}` }) : null);
+      case "sticker":
+        return msg.stickerId ? ih("img", { class: "loe-inbox-media-sticker", src: inboxStickerUrl(msg.stickerId), alt: "貼圖", loading: "lazy" }) : null;
+      case "location": {
+        const q = encodeURIComponent(msg.address || `${msg.latitude},${msg.longitude}`);
+        return ih("a", { class: "loe-inbox-media-file", href: `https://www.google.com/maps/search/?api=1&query=${q}`, target: "_blank", rel: "noopener", title: "在 Google 地圖開啟" },
+          ih("span", { text: "📍 " + firstText([msg.title, msg.address]) || "位置" }),
+          msg.title && msg.address ? ih("span", { class: "loe-inbox-muted", text: " " + msg.address }) : null);
+      }
+      default: return null;
+    }
+  }
+
+  /* ---- 訊息串 ---- */
+  function inboxSetContext(chat) {
+    const next = chat ? { botId: chat.botId, chatId: chat.chatId, customerName: chat.name, oaName: inboxBotName(chat.botId) } : null;
+    const changed = (pageContext && pageContext.chatId) !== (next && next.chatId);
+    pageContext = next;
+    if (changed) { closeDispatchPopover(); refreshAiToggle(); }
+  }
+  async function inboxOpenChat(key) {
+    inbox.selected = key;
+    inbox.renaming = false;
+    inboxDismissToast(key);
+    inboxSetContext(inbox.chats.get(key) || null);
+    inboxRenderAll();
+    const chat = inbox.chats.get(key);
+    if (chat && inbox.notesOpen && !inbox.notes.has(key)) inboxLoadNotes(chat);
+    if (!chat || inbox.threads.has(key)) return;
+    const th = { list: [], loading: true, error: "" };
+    inbox.threads.set(key, th);
+    renderInboxThread();
+    try {
+      const data = await inboxApi("GET", `/api/v3/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`);
+      // LINE 回新→舊，這裡翻成舊→新；載入期間 SSE 塞進來的保留在後面
+      const items = (data?.list || []).filter((m) => m && (m.type === "message" || m.type === "messageSent")).reverse();
+      const seen = new Set(items.map((m) => m.message?.id).filter(Boolean));
+      th.list = items.concat(th.list.filter((m) => !seen.has(m.message?.id)));
+    } catch (e) { th.error = e.message; }
+    th.loading = false;
+    if (inbox.selected === key) renderInboxThread();
+  }
+  function inboxAppendToThread(key, payload) {
+    const th = inbox.threads.get(key);
+    if (!th) return;
+    const id = payload.message?.id;
+    if (id && th.list.some((m) => m.message?.id === id)) return;
+    // 自己剛送出的樂觀泡泡：同內容、還沒拿到 id 的，認領這個 id
+    if (payload.type === "messageSent" && id) {
+      const mine = th.list.find((m) => m.pending === false && !m.failed && !m.message?.id && m.message?.text === payload.message?.text);
+      if (mine) { mine.message.id = id; mine.timestamp = payload.timestamp || mine.timestamp; return; }
+    }
+    th.list.push(payload);
+  }
+  async function inboxSend(text) {
+    const key = inbox.selected;
+    const chat = key && inbox.chats.get(key);
+    if (!chat) return false;
+    text = text.trim();
+    if (!text) return false;
+    if (text.length > 5000) { toast("訊息超過 5000 字，請分段傳送", "warn", 3000); return false; }
+    const sendId = `${chat.chatId}_${Date.now()}_${String(Math.floor(Math.random() * 1e8)).padStart(8, "0")}`;
+    let th = inbox.threads.get(key);
+    if (!th) { th = { list: [], loading: false, error: "" }; inbox.threads.set(key, th); }
+    const bubble = { type: "messageSent", timestamp: Date.now(), message: { id: "", type: "text", text }, sendId, pending: true, failed: false, error: "" };
+    th.list.push(bubble);
+    renderInboxThread();
+    try {
+      const resp = await inboxApi("POST", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages/send`, { type: "text", text, sendId });
+      bubble.pending = false;
+      bubble.message.id = firstText([resp?.id, resp?.messageId, resp?.message?.id]);
+      chat.preview = text; chat.at = Date.now();
+      if (chat.unread) inboxMarkRead(chat); // 回覆了就等於看過
+      // 客服已接手：AI 處理中的對話自動轉人工（同 LINE 聊天室的送出手勢）
+      if (aiState && aiState.status === "ready" && !aiState.handoff && !aiState.busy && aiState.chat === chat.chatId) switchAiHandoff(true, true);
+      inboxRenderAll();
+      return true;
+    } catch (e) {
+      bubble.pending = false; bubble.failed = true; bubble.error = e.message;
+      toast("傳送失敗：" + e.message, "err", 4000);
+      renderInboxThread();
+      return false;
+    }
+  }
+  // 派單後「標記待處理」：LINE 的 followUp API（LINE 頁面是點它自己的按鈕）
+  async function inboxFollowUp() {
+    const chat = inbox.selected && inbox.chats.get(inbox.selected);
+    if (!chat) return;
+    try {
+      await inboxApi("PUT", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/followUp`, {});
+      chat.followedUp = true;
+      inboxRenderAll();
+    } catch (e) { toast("標記待處理失敗：" + e.message, "err", 3000); }
+  }
+  // 改客人暱稱：LINE 的 nickname API；空字串＝清掉暱稱、恢復顯示原名
+  async function inboxRename(chat, nickname) {
+    nickname = String(nickname || "").trim();
+    await inboxApi("PUT", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/nickname`, { nickname });
+    chat.nickname = nickname;
+    chat.name = nickname || chat.lineName || "（未提供名稱）";
+    if (pageContext && pageContext.chatId === chat.chatId) pageContext.customerName = chat.name;
+    toast(nickname ? `已改為「${nickname}」` : "已清除暱稱，顯示 LINE 原名", "ok");
+    inboxRenderAll();
+  }
+  async function inboxOwnerNames(botId) {
+    let map = inbox.owners.get(botId);
+    if (map) return map;
+    map = new Map();
+    try {
+      const data = await inboxApi("GET", `/api/v1/bots/${botId}/owners`);
+      for (const o of data?.list || []) if (o && typeof o.bizId === "string") map.set(o.bizId, firstText([o.name]));
+    } catch (_) {}
+    inbox.owners.set(botId, map);
+    return map;
+  }
+  // 記事本：GET notes（20 則一頁，next 游標）；新增 POST { body }；刪除 DELETE /notes/{noteId}
+  async function inboxLoadNotes(chat, more = false) {
+    const key = chat.key;
+    let st = inbox.notes.get(key);
+    if (!st) { st = { list: [], total: 0, next: "", loading: false, error: "" }; inbox.notes.set(key, st); }
+    if (st.loading) return;
+    st.loading = true; st.error = "";
+    renderInboxNotes();
+    try {
+      const url = new URL(`/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/notes`, location.origin);
+      url.searchParams.set("limit", "20"); url.searchParams.set("withTotal", "true");
+      if (more && st.next) url.searchParams.set("next", st.next);
+      const data = await inboxApi("GET", url.pathname + url.search);
+      const list = (data?.list || []).filter((n) => n && typeof n.noteId === "string");
+      st.list = more ? st.list.concat(list) : list;
+      st.total = Number.isInteger(data?.total) ? data.total : st.list.length;
+      st.next = typeof data?.next === "string" ? data.next : "";
+      await inboxOwnerNames(chat.botId);
+    } catch (e) { st.error = e.message; }
+    st.loading = false;
+    renderInboxNotes();
+    renderInboxThread();
+  }
+  async function inboxAddNote(chat, body) {
+    body = String(body || "").trim();
+    if (!body) return false;
+    await inboxApi("POST", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/notes`, { body });
+    toast("已新增筆記", "ok");
+    await inboxLoadNotes(chat);
+    return true;
+  }
+  async function inboxDeleteNote(chat, noteId) {
+    await inboxApi("DELETE", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/notes/${encodeURIComponent(noteId)}`);
+    toast("已刪除筆記", "ok");
+    await inboxLoadNotes(chat);
+  }
+  function renderInboxNotes() {
+    const host = inbox.el.notes;
+    if (!host) return;
+    const chat = inbox.selected && inbox.chats.get(inbox.selected);
+    host.hidden = !inbox.notesOpen || !chat;
+    if (host.hidden) return;
+    host.textContent = "";
+    const st = inbox.notes.get(chat.key);
+    const owners = inbox.owners.get(chat.botId) || new Map();
+    host.append(ih("div", { class: "loe-inbox-notes-head" },
+      ih("strong", { text: `記事本 ${st ? st.total : ""}` }),
+      ih("span", { class: "loe-inbox-spacer" }),
+      ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉記事本", html: ic("x"), onclick: () => { inbox.notesOpen = false; renderInboxNotes(); } }),
+    ));
+    const ta = ih("textarea", { class: "loe-inbox-note-input", rows: "3", placeholder: "新增筆記（客人看不到，只有客服看得到）", "aria-label": "新增筆記" });
+    const addBtn = ih("button", { type: "button", class: "loe-inbox-btn primary", text: "新增筆記", onclick: async () => {
+      addBtn.disabled = true;
+      try { if (await inboxAddNote(chat, ta.value)) ta.value = ""; } catch (e) { toast("新增筆記失敗：" + e.message, "err", 4000); }
+      addBtn.disabled = false;
+    } });
+    host.append(ih("div", { class: "loe-inbox-note-add" }, ta, addBtn));
+    const list = ih("div", { class: "loe-inbox-notes-list" });
+    if (!st || (st.loading && !st.list.length)) list.append(ih("div", { class: "loe-inbox-empty", text: "讀取中…" }));
+    else if (st.error) list.append(ih("div", { class: "loe-inbox-empty err", text: "讀取失敗：" + st.error }));
+    else if (!st.list.length) list.append(ih("div", { class: "loe-inbox-empty", text: "還沒有筆記" }));
+    for (const n of st?.list || []) {
+      const del = ih("button", { type: "button", class: "loe-inbox-note-del", text: "刪除", onclick: async () => {
+        if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "確定刪除？"; setTimeout(() => { del.dataset.armed = ""; del.textContent = "刪除"; }, 4000); return; }
+        del.disabled = true;
+        try { await inboxDeleteNote(chat, n.noteId); } catch (e) { toast("刪除筆記失敗：" + e.message, "err", 4000); del.disabled = false; }
+      } });
+      list.append(ih("div", { class: "loe-inbox-note" },
+        ih("div", { class: "loe-inbox-note-body", text: firstText([n.body, n.text]) }),
+        ih("div", { class: "loe-inbox-note-meta" },
+          ih("span", { text: `${owners.get(n.userBizId) || "客服"} · ${inboxTime(toEpochMs(n.updatedAt || n.createdAt))}` }),
+          ih("span", { class: "loe-inbox-spacer" }), del),
+      ));
+    }
+    if (st && st.next) list.append(ih("button", { type: "button", class: "loe-inbox-btn", text: st.loading ? "讀取中…" : "載入更多", disabled: st.loading, onclick: () => inboxLoadNotes(chat, true) }));
+    host.append(list);
+  }
+  async function inboxMarkRead(chat) {
+    chat.unread = false; chat.unreadCount = 0;
+    inboxDismissToast(chat.key);
+    inboxRenderAll();
+    try { await inboxApi("PUT", `/api/v2/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/markAsRead`, {}); }
+    catch (e) { toast("標記已讀失敗：" + e.message, "err", 3000); }
+  }
+
+  /* ---- 通知：卡片（同一位客人合併計數）＋提示音＋背景時的桌面通知 ---- */
+  function inboxDismissToast(key) {
+    const t = inbox.toasts.get(key);
+    if (!t) return;
+    clearTimeout(t.timer);
+    inbox.toasts.delete(key);
+  }
+  function inboxNotify(chat, payload) {
+    const key = chat.key;
+    const t = inbox.toasts.get(key) || { key, count: 0, lines: [], timer: 0 };
+    t.count += 1;
+    t.lines.push(inboxPreview(payload) || "[訊息]");
+    if (t.lines.length > 3) t.lines.shift();
+    clearTimeout(t.timer);
+    t.timer = setTimeout(() => { inbox.toasts.delete(key); renderInboxToasts(); }, INBOX_TOAST_MS);
+    inbox.toasts.set(key, t);
+    if (inbox.sound) inboxBeep();
+    if (document.hidden && typeof Notification === "function" && Notification.permission === "granted") {
+      try {
+        const n = new Notification(`${inboxBotName(chat.botId)}・${chat.name}`, { body: t.lines.join("\n"), tag: key });
+        n.onclick = () => { window.focus(); inboxOpenChat(key); n.close(); };
+      } catch (_) {}
+    }
+  }
+  // 不載外部音檔（CSP／離線都不受影響）：Web Audio 兩個短音
+  function inboxAudio() {
+    if (!inbox.audio) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      inbox.audio = new Ctx();
+      inbox.audio.addEventListener("statechange", renderInboxHeader);
+    }
+    return inbox.audio;
+  }
+  function inboxBeep() {
+    try {
+      const ctx = inboxAudio();
+      if (!ctx) return;
+      if (ctx.state !== "running") { ctx.resume().catch(() => {}); return; }
+      const t0 = ctx.currentTime;
+      [[880, 0], [1175, 0.12]].forEach(([freq, delay]) => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.type = "sine"; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t0 + delay);
+        gain.gain.exponentialRampToValueAtTime(0.25, t0 + delay + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + 0.18);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t0 + delay); osc.stop(t0 + delay + 0.2);
+      });
+    } catch (_) {}
+  }
+  const inboxSoundReady = () => !inbox.sound || (inbox.audio && inbox.audio.state === "running");
+
+  /* ---- 畫面 ---- */
+  function inboxRenderAll() {
+    renderInboxHeader();
+    renderInboxRail();
+    renderInboxList();
+    renderInboxThread();
+    renderInboxToasts();
+    const n = inboxUnreadTotal();
+    document.title = (n ? `(${n}) ` : "") + "UTurn 收件匣";
+  }
+  function renderInboxHeader() {
+    const host = inbox.el.header;
+    if (!host) return;
+    host.textContent = "";
+    const live = [...inbox.conns.values()].filter((c) => c.status === "live").length;
+    const stats = ih("div", { class: "loe-inbox-stats" },
+      ih("span", { class: "loe-inbox-muted", text: "啟用帳號" }),
+      ih("strong", { text: `${inbox.enabled.size}／${inbox.bots.length}` }),
+      ih("span", { class: "loe-inbox-muted", text: "連線中" }),
+      ih("strong", { text: String(live) }),
+      ih("span", { class: "loe-inbox-muted", text: "未讀對話" }),
+      ih("span", { class: "loe-inbox-badge", text: String(inboxUnreadTotal()) }),
+    );
+    const soundBtn = ih("button", {
+      type: "button", class: "loe-inbox-btn" + (inbox.sound ? " on" : ""), "aria-pressed": inbox.sound ? "true" : "false",
+      html: ic("bell"),
+      onclick: () => {
+        inbox.sound = !inbox.sound;
+        storeSet(INBOX_SOUND_KEY, inbox.sound);
+        if (inbox.sound) {
+          inboxBeep(); // 使用者手勢裡建立／恢復 AudioContext
+          if (typeof Notification === "function" && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+        }
+        renderInboxHeader();
+      },
+    }, ih("span", { text: inbox.sound ? "提示音 開" : "提示音 關" }));
+    const hint = inboxSoundReady() ? null : ih("span", { class: "loe-inbox-hint", text: "點一下頁面啟用提示音" });
+    host.append(
+      ih("div", { class: "loe-inbox-brand" },
+        ih("span", { class: "loe-inbox-logo", html: ic("inbox") }),
+        ih("strong", { text: "UTurn 多開收件匣" }),
+        ih("span", { class: "loe-inbox-muted", text: "懶惰蟲 v" + UTURN_BUILD }),
+      ),
+      stats,
+      ih("div", { class: "loe-inbox-spacer" }),
+      ih("div", { class: "loe-inbox-actions" },
+        ih("button", { type: "button", class: "loe-inbox-btn", text: "全部開啟", onclick: () => inbox.bots.forEach((b) => { if (!inbox.enabled.has(b.botId)) inboxSetEnabled(b.botId, true); }) }),
+        ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => [...inbox.enabled].forEach((id) => inboxSetEnabled(id, false)) }),
+        hint, soundBtn,
+        ih("a", { class: "loe-inbox-btn", href: "https://chat.line.biz/", html: ic("external-link") }, ih("span", { text: "回 LINE 後台" })),
+      ),
+    );
+  }
+  function renderInboxRail() {
+    const host = inbox.el.rail;
+    if (!host) return;
+    const q = (inbox.el.search?.value || "").trim().toLowerCase();
+    host.textContent = "";
+    for (const b of inbox.bots) {
+      if (q && !b.name.toLowerCase().includes(q) && !getPrefixForGid(b.botId).toLowerCase().includes(q)) continue;
+      const on = inbox.enabled.has(b.botId);
+      const c = inbox.conns.get(b.botId);
+      const status = on ? (c?.status || "connecting") : "off";
+      const label = { live: "連線中", connecting: "連線中…", limit: c?.error || "連線數已滿", error: c?.error ? `重連中：${c.error}` : "重連中", off: "已關閉" }[status] || status;
+      let unread = 0;
+      if (on) { for (const ch of inbox.chats.values()) if (ch.botId === b.botId && ch.unread) unread++; }
+      else unread = b.unreadCount;
+      const avatar = b.iconUrl
+        ? ih("img", { class: "loe-inbox-oa-avatar", src: b.iconUrl, alt: "" })
+        : ih("span", { class: "loe-inbox-oa-avatar", text: b.name.slice(0, 1) });
+      avatar.style.background = b.color;
+      host.append(ih("div", { class: "loe-inbox-oa" + (on ? " on" : "") },
+        avatar,
+        ih("div", { class: "loe-inbox-oa-main" },
+          ih("div", { class: "loe-inbox-oa-name" },
+            ih("span", { class: "loe-inbox-oa-title", text: b.name, title: b.name }),
+            inboxGroupLabel(getPrefixForGid(b.botId)) ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(getPrefixForGid(b.botId)), title: `此帳號的派單預設群編：${getPrefixForGid(b.botId)}` }) : null,
+          ),
+          ih("div", { class: `loe-inbox-oa-status ${status}` },
+            ih("span", { class: "loe-inbox-dot" }), ih("span", { text: label }),
+            aiBots.get(b.botId) === true ? ih("span", { class: "loe-inbox-tag ai", text: "AI", title: "這個官方帳號有 AI 客服；對話標題列可切換 AI處理／轉人工" }) : null,
+          ),
+        ),
+        unread > 0 ? ih("span", { class: "loe-inbox-badge", text: String(unread), title: on ? "未讀對話" : "LINE 回報的未讀數" }) : null,
+        ih("button", {
+          type: "button", class: "loe-inbox-switch", role: "switch", "aria-checked": on ? "true" : "false", "aria-label": `監聽 ${b.name}`,
+          onclick: () => inboxSetEnabled(b.botId, !on),
+        }, ih("span", { class: "loe-inbox-knob" })),
+      ));
+    }
+    if (!inbox.bots.length) host.append(ih("div", { class: "loe-inbox-empty", text: "讀取官方帳號中…" }));
+    if (inbox.el.foot) {
+      inbox.el.foot.textContent = "";
+      const ago = inbox.lastEventAt ? `${Math.max(0, Math.round((Date.now() - inbox.lastEventAt) / 1000))} 秒前` : "尚無";
+      inbox.el.foot.append(
+        ih("div", {}, "監聽中 ", ih("strong", { text: String([...inbox.conns.values()].filter((c) => c.es).length) }), " 個帳號"),
+        ih("div", {}, "最後事件 ", ih("strong", { text: ago })),
+      );
+    }
+  }
+  function inboxVisibleChats() {
+    const f = inbox.filter;
+    const q = (inbox.el.listSearch?.value || "").trim().toLowerCase();
+    const overrides = q ? getChatOverrides() : {};
+    const groupOf = (c) => (overrides[c.key] && overrides[c.key].group) || getPrefixForGid(c.botId);
+    const hit = (c) => !q || [c.name, c.preview, inboxBotName(c.botId), groupOf(c)].some((v) => String(v || "").toLowerCase().includes(q));
+    return [...inbox.chats.values()]
+      .filter((c) => inbox.enabled.has(c.botId) && hit(c))
+      .filter((c) => {
+        if (f === "unread") return c.unread;
+        if (f === "unassigned") return !c.assignedBizId;
+        if (f === "mine") return inbox.me && c.assignedBizId === inbox.me.bizId;
+        return true;
+      })
+      .sort((a, b) => b.at - a.at);
+  }
+  // 客人頭像：LINE 的 preview 圖；沒有或載入失敗就退回名字第一個字
+  function inboxAvatar(chat) {
+    const fallback = ih("span", { class: "loe-inbox-avatar", text: inboxInitial(chat.name) });
+    if (!chat.avatarUrl) return fallback;
+    const img = ih("img", { class: "loe-inbox-avatar", src: chat.avatarUrl, alt: "", loading: "lazy" });
+    img.addEventListener("error", () => img.replaceWith(fallback), { once: true });
+    return img;
+  }
+  function renderInboxList() {
+    const filters = inbox.el.filters, rows = inbox.el.rows;
+    if (!filters || !rows) return;
+    filters.textContent = "";
+    for (const f of INBOX_FILTERS) {
+      if (f.id === "mine" && !inbox.me?.bizId) continue;
+      filters.append(ih("button", {
+        type: "button", class: "loe-inbox-chip" + (inbox.filter === f.id ? " on" : ""), "aria-pressed": inbox.filter === f.id ? "true" : "false",
+        text: f.label, onclick: () => { inbox.filter = f.id; renderInboxList(); },
+      }));
+    }
+    rows.textContent = "";
+    const chats = inboxVisibleChats();
+    const overrides = getChatOverrides();
+    for (const c of chats) {
+      const selected = inbox.selected === c.key;
+      const group = (overrides[c.key] && overrides[c.key].group) || getPrefixForGid(c.botId);
+      const ai = inboxAiLabel(c);
+      if (aiBots.get(c.botId) === true) inboxQueueAi(c);
+      const row = ih("button", { type: "button", class: "loe-inbox-row" + (selected ? " selected" : ""), "aria-current": selected ? "true" : null, onclick: () => inboxOpenChat(c.key) },
+        inboxAvatar(c),
+        ih("span", { class: "loe-inbox-row-main" },
+          ih("span", { class: "loe-inbox-row-top" },
+            ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(c.botId).slice(0, 6), title: inboxBotName(c.botId) }),
+            inboxGroupLabel(group) ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group), title: `派單預設群編：${group}` }) : null,
+            ih("span", { class: "loe-inbox-row-name", text: c.name }),
+            ih("span", { class: "loe-inbox-row-time", text: inboxTime(c.at) }),
+          ),
+          ih("span", { class: "loe-inbox-row-mid" },
+            ih("span", { class: "loe-inbox-row-preview", text: c.preview }),
+            c.unread ? ih("span", { class: "loe-inbox-unread" + (c.unreadCount ? "" : " dot"), text: c.unreadCount ? String(c.unreadCount) : "" }) : null,
+          ),
+          ih("span", { class: "loe-inbox-row-meta" },
+            ai ? ih("span", { class: `loe-inbox-tag ${ai.cls}`, text: ai.text }) : null,
+            c.followedUp ? ih("span", { class: "loe-inbox-tag", text: "待處理" }) : null,
+            c.done ? ih("span", { class: "loe-inbox-tag done", text: "處理完畢" }) : null,
+            inboxAssigneeLabel(c) ? ih("span", { class: "loe-inbox-muted", text: inboxAssigneeLabel(c) }) : null,
+          ),
+        ),
+      );
+      row.querySelector(".loe-inbox-oa-chip").style.background = inboxBotColor(c.botId);
+      if (selected) row.style.borderLeftColor = inboxBotColor(c.botId);
+      rows.append(row);
+    }
+    if (!chats.length) rows.append(ih("div", { class: "loe-inbox-empty", text: !inbox.enabled.size ? "打開左邊的帳號開關開始監聽。" : (inbox.el.listSearch?.value || "").trim() ? "沒有符合搜尋的對話。" : "沒有符合的對話。換個篩選，或等新訊息進來。" }));
+  }
+  function renderInboxThread() {
+    const { thHead, thMsgs, thComposer, thEmpty } = inbox.el;
+    if (!thHead) return;
+    const chat = inbox.selected && inbox.chats.get(inbox.selected);
+    thHead.textContent = "";
+    thMsgs.textContent = "";
+    if (!chat) {
+      thHead.hidden = true; thMsgs.hidden = true; thComposer.hidden = true; thEmpty.hidden = false;
+      renderInboxNotes();
+      return;
+    }
+    thHead.hidden = false; thMsgs.hidden = false; thComposer.hidden = false; thEmpty.hidden = true;
+    const oaChip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId), title: inboxBotName(chat.botId) });
+    oaChip.style.background = inboxBotColor(chat.botId);
+    const state = [inboxAssigneeLabel(chat), chat.followedUp ? "待處理" : "", chat.done ? "處理完畢" : "", `最後訊息 ${inboxTime(chat.at)}`].filter(Boolean).join(" · ");
+    if (!inbox.el.aiSlot) { inbox.el.aiSlot = ih("span", { class: "loe-inbox-ai-slot" }); }
+    let title;
+    if (inbox.renaming) {
+      // 輸入框先帶目前顯示的名字（有暱稱就是暱稱，沒有就是 LINE 原名），從它改起；
+      // 存的時候若跟原名一樣就當作沒有暱稱（不把原名當暱稱存進去）
+      const input = ih("input", { class: "loe-inbox-rename", type: "text", value: chat.name, placeholder: chat.lineName || "暱稱", "aria-label": "客人暱稱", maxlength: "20" });
+      const save = async () => {
+        const next = input.value.trim();
+        try { await inboxRename(chat, next === chat.lineName ? "" : next); inbox.renaming = false; }
+        catch (e) { toast("改暱稱失敗：" + e.message, "err", 4000); }
+        renderInboxThread();
+      };
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(); } if (e.key === "Escape") { inbox.renaming = false; renderInboxThread(); } });
+      title = ih("div", { class: "loe-inbox-th-name" }, input,
+        ih("button", { type: "button", class: "loe-inbox-btn primary", text: "儲存", onclick: save }),
+        ih("button", { type: "button", class: "loe-inbox-btn", text: "取消", onclick: () => { inbox.renaming = false; renderInboxThread(); } }),
+        oaChip);
+      setTimeout(() => { input.focus(); input.select(); }, 0);
+    } else {
+      title = ih("div", { class: "loe-inbox-th-name" },
+        ih("strong", { text: chat.name }),
+        ih("button", { type: "button", class: "loe-inbox-x loe-inbox-rename-btn", html: ic("pencil"), "aria-label": "修改客人暱稱", title: chat.nickname ? `暱稱「${chat.nickname}」，LINE 原名「${chat.lineName}」（點擊修改）` : "修改客人暱稱（LINE 原名不會變）",
+          onclick: () => { inbox.renaming = true; renderInboxThread(); } }),
+        oaChip);
+    }
+    const notesCount = inbox.notes.get(chat.key)?.total;
+    thHead.append(
+      inboxAvatar(chat),
+      ih("div", { class: "loe-inbox-th-title" },
+        title,
+        ih("div", { class: "loe-inbox-muted", text: (chat.nickname && chat.lineName ? `原名 ${chat.lineName} · ` : "") + state }),
+      ),
+      ih("div", { class: "loe-inbox-spacer" }),
+      ih("button", { type: "button", class: "loe-inbox-btn" + (inbox.notesOpen ? " on" : ""), html: ic("notebook"), "aria-pressed": inbox.notesOpen ? "true" : "false", title: "這位客人的 LINE 記事本（客人看不到）",
+        onclick: () => { inbox.notesOpen = !inbox.notesOpen; if (inbox.notesOpen && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); renderInboxNotes(); renderInboxThread(); } },
+        ih("span", { text: "記事本" + (Number.isInteger(notesCount) ? ` ${notesCount}` : "") })),
+      (() => {
+        const prefix = getPrefix(); // pageContext 已指向這個帳號
+        return ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-prefix" + (prefix ? "" : " empty"), html: GEAR_ICON,
+          title: prefix ? `此官方帳號的預設群編：${prefix}（點擊修改）` : "設定此官方帳號的預設群編",
+          onclick: (e) => { e.stopPropagation(); if (openPrefixPopover._pop) closePrefixPopover(); else openPrefixPopover(e.currentTarget); } },
+          ih("span", { text: inboxGroupLabel(prefix) || (prefix ? prefix : "設定群編") }));
+      })(),
+      inbox.el.aiSlot, // AI處理／轉人工（renderAiToggle 掛進來；沒有 AI 的帳號是空的）
+      ih("button", { type: "button", class: "loe-inbox-btn", text: "標為已讀", disabled: !chat.unread, onclick: () => inboxMarkRead(chat) }),
+      ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", html: ic("external-link"), title: "在 LINE 官方聊天室開啟這位客人（新分頁）" }, ih("span", { text: "在官方視窗開啟" })),
+    );
+    const th = inbox.threads.get(chat.key);
+    if (!th || th.loading) thMsgs.append(ih("div", { class: "loe-inbox-empty", text: "讀取訊息中…" }));
+    else if (th.error) thMsgs.append(ih("div", { class: "loe-inbox-empty err", text: "讀取失敗：" + th.error }));
+    else if (!th.list.length) thMsgs.append(ih("div", { class: "loe-inbox-empty", text: "還沒有訊息" }));
+    let lastDay = "";
+    for (const m of th?.list || []) {
+      const day = m.timestamp ? new Date(m.timestamp).toDateString() : "";
+      if (day && day !== lastDay) {
+        lastDay = day;
+        const d = new Date(m.timestamp);
+        thMsgs.append(ih("div", { class: "loe-inbox-day", text: d.toDateString() === new Date().toDateString() ? "今天" : `${d.getMonth() + 1}/${d.getDate()}` }));
+      }
+      const out = m.type === "messageSent";
+      const meta = m.pending ? "傳送中…" : m.failed ? `傳送失敗：${m.error || ""}` : inboxTime(m.timestamp);
+      const text = inboxPreview(m) || "[訊息]";
+      const isText = !!m.message && (m.message.type === "text" || m.message.type === "textV2" || m.message.type === "location");
+      const mediaNode = inboxMediaNode(chat.botId, m);
+      const withActions = isText && !m.pending && !m.failed;
+      // AI 客服回的是卡片（LINE 回成 text 但 originalType=flex；也涵蓋 template／imagemap／cardType），另一種樣式標示
+      const orig = m.message && m.message.originalType;
+      const isCard = out && !!(orig && orig !== "text" || (m.message && ["flex", "template", "imagemap", "cardType"].includes(m.message.type)));
+      // 與 LINE 聊天室同一套：泡泡掛 BUBBLE_CLASS／TEXT_PAD_CLASS，右上角常駐「派單」「複製」
+      const bubble = mediaNode
+        ? ih("div", { class: "loe-inbox-bubble media" }, mediaNode)
+        : ih("div", { class: "loe-inbox-bubble" + (withActions ? ` ${BUBBLE_CLASS} ${TEXT_PAD_CLASS} loe-has-forward` : "") },
+          isCard ? ih("span", { class: "loe-inbox-card-label", text: "AI 卡片回覆" }) : null, ...inboxLinkify(text));
+      if (withActions && !mediaNode) {
+        bubble.append(
+          ih("button", { type: "button", class: FORWARD_BUTTON_CLASS, html: FORWARD_ICON, "aria-label": "帶入派單", "data-loe-tip": "派單",
+            onclick: (e) => { e.stopPropagation(); openDispatchPopover(text); } }),
+          ih("button", { type: "button", class: BUTTON_CLASS, html: COPY_ICON, "aria-label": "複製這則訊息", "data-loe-tip": "複製",
+            onclick: async (e) => { e.stopPropagation(); const btn = e.currentTarget; try { flashCopied(btn, await copyText(text)); } catch (_) { flashCopied(btn, false); } } }),
+        );
+      }
+      thMsgs.append(ih("div", { class: "loe-inbox-msg" + (out ? " out" : " in") + (m.failed ? " failed" : "") + (isCard ? " card" : "") },
+        bubble,
+        ih("div", { class: "loe-inbox-msg-meta", text: out ? (isCard ? `AI 回覆 · ${meta}` : meta) : `${meta} · ${chat.name}` }),
+      ));
+    }
+    thMsgs.scrollTop = thMsgs.scrollHeight;
+    renderInboxNotes();
+    // 換了對話才清輸入框，同一對話重繪時保留草稿
+    if (thComposer.dataset.key !== chat.key) {
+      thComposer.dataset.key = chat.key;
+      inbox.el.textarea.value = "";
+      renderQuickBar(inbox.el.quickBar, inboxInsertText);
+    }
+  }
+  function inboxInsertText(text) {
+    const ta = inbox.el.textarea;
+    if (!ta) return;
+    const cur = ta.value;
+    ta.value = cur && !/\n$/.test(cur) ? cur + "\n" + text : cur + text;
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+  function renderInboxToasts() {
+    const host = inbox.el.toasts;
+    if (!host) return;
+    host.textContent = "";
+    for (const t of inbox.toasts.values()) {
+      const chat = inbox.chats.get(t.key);
+      if (!chat) continue;
+      const chip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId).slice(0, 8), title: inboxBotName(chat.botId) });
+      chip.style.background = inboxBotColor(chat.botId);
+      const card = ih("div", { class: "loe-inbox-toast", role: "status" },
+        ih("div", { class: "loe-inbox-toast-top" },
+          chip,
+          ih("strong", { class: "loe-inbox-row-name", text: chat.name }),
+          t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則新訊息` }) : null,
+          ih("span", { class: "loe-inbox-spacer" }),
+          ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知", html: ic("x"), onclick: () => { inboxDismissToast(t.key); renderInboxToasts(); } }),
+        ),
+        ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
+        ih("div", { class: "loe-inbox-toast-actions" },
+          ih("button", { type: "button", class: "loe-inbox-btn primary", text: "在收件匣回覆", onclick: () => inboxOpenChat(t.key) }),
+          ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", text: "開官方視窗" }),
+        ),
+      );
+      card.style.borderLeftColor = inboxBotColor(chat.botId);
+      host.append(card);
+    }
+  }
+
+  /* ---- 啟動（只在 INBOX_MODE） ---- */
+  function bootInbox() {
+    const root = document.getElementById("loe-inbox");
+    if (!root) return;
+    const $ = (sel) => root.querySelector(sel);
+    inbox.el = {
+      header: $(".loe-inbox-top"), rail: $(".loe-inbox-rail-list"), search: $(".loe-inbox-search"), foot: $(".loe-inbox-rail-foot"),
+      filters: $(".loe-inbox-filters"), rows: $(".loe-inbox-rows"), listSearch: $(".loe-inbox-list-search"),
+      thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
+      quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
+    };
+    inbox.el.search.addEventListener("input", renderInboxRail);
+    inbox.el.listSearch.addEventListener("input", renderInboxList);
+    document.addEventListener("click", () => closePrefixPopover());
+    const sendBtn = $(".loe-inbox-send");
+    const doSend = async () => {
+      const ta = inbox.el.textarea;
+      sendBtn.disabled = true;
+      const ok = await inboxSend(ta.value);
+      sendBtn.disabled = false;
+      if (ok) ta.value = "";
+      ta.focus();
+    };
+    sendBtn.addEventListener("click", doSend);
+    $(".loe-inbox-dispatch").addEventListener("click", (e) => { e.stopPropagation(); openDispatchPopover(""); });
+    inbox.el.textarea.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); doSend(); }
+    });
+    // 第一個使用者手勢：建立 AudioContext（瀏覽器規定），之後新訊息才會響
+    const unlock = () => { if (inbox.sound) inboxBeep(); };
+    ["pointerdown", "keydown"].forEach((ev) => document.addEventListener(ev, unlock, { once: true, capture: true }));
+    setInterval(() => { if (inbox.el.foot) renderInboxRail(); }, 10000); // 「最後事件 n 秒前」
+    inboxRenderAll();
+    (async () => {
+      try {
+        inbox.me = await inboxApi("GET", "/api/v1/me").catch(() => null);
+        await inboxLoadBots();
+      } catch (e) {
+        inbox.el.rail.textContent = "";
+        inbox.el.rail.append(ih("div", { class: "loe-inbox-empty err", text: `讀取官方帳號失敗：${e.message}` }));
+        return;
+      }
+      inboxRenderAll();
+      for (const id of inbox.enabled) {
+        inboxConnect(id);
+        inboxLoadChats(id).catch((e) => toast(`${inboxBotName(id)}：讀取對話失敗，${e.message}`, "err", 4000));
+      }
+      setInterval(() => inboxLoadBots().then(renderInboxRail).catch(() => {}), INBOX_BOTS_REFRESH_MS);
+    })();
+  }
+  if (INBOX_MODE) { bootInbox(); return; }
 
   /* ---------------------------------------------------------------------- *
    * Boot
@@ -5851,4 +6959,208 @@
     childList: true,
     subtree: true,
   });
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * 收件匣頁面骨架：document-start 就停掉 LINE 的載入並整頁換掉。
+   *   只放版面與樣式；資料與互動都在 uturnMain 裡的 bootInbox()。
+   *   共用樣式（.loe-toast、.loe-qr-bar、.loe-qr-chip）由 uturnMain 的 <style> 提供。
+   * ---------------------------------------------------------------------- */
+  function inboxTakeover() {
+    try { window.stop(); } catch (_) {}
+    document.documentElement.innerHTML = `
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UTurn 收件匣</title>
+<style>
+  :root { color-scheme: light; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 14px/1.5 "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; color: #1f2937; background: #f3f5f9; }
+  button, input, textarea { font: inherit; }
+  a { color: #1c6cf3; }
+  .loe-inbox { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .loe-inbox [hidden] { display: none !important; }
+  .loe-inbox-top { flex: 0 0 auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-height: 56px; padding: 6px 20px; background: #fff; border-bottom: 1px solid #e3e7ee; }
+  .loe-inbox-brand { display: flex; align-items: center; gap: 10px; }
+  .loe-inbox-brand strong { font-size: 16px; }
+  .loe-inbox-logo { width: 28px; height: 28px; border-radius: 8px; background: #1c6cf3; color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+  .loe-inbox-logo svg, .loe-inbox-btn svg, .loe-inbox-x svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-stats { display: flex; align-items: center; gap: 8px; }
+  .loe-inbox-muted { font-size: 12px; color: #6b7280; }
+  .loe-inbox-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 7px; border-radius: 10px; background: #fee2e2; color: #b91c1c; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .loe-inbox-spacer { flex: 1 1 auto; }
+  .loe-inbox-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .loe-inbox-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #d5dbe5; background: #fff; color: #1f2937; font-size: 13px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .loe-inbox-btn:hover { background: #f8fafc; border-color: #b6c2d6; }
+  .loe-inbox-btn:disabled { opacity: .5; cursor: default; }
+  .loe-inbox-btn.on { background: #eef4ff; border-color: #1c6cf3; color: #1c6cf3; }
+  .loe-inbox-btn.primary { background: #1c6cf3; border-color: #1c6cf3; color: #fff; font-weight: 600; }
+  .loe-inbox-btn.primary:hover { background: #0b57d0; }
+  .loe-inbox-hint { font-size: 12px; color: #9a3412; background: #ffedd5; padding: 2px 8px; border-radius: 10px; }
+  .loe-inbox-body { flex: 1 1 auto; display: flex; align-items: stretch; min-height: 0; }
+  @media (max-width: 960px) { .loe-inbox { height: auto; min-height: 100vh; overflow: visible; } .loe-inbox-body { flex-wrap: wrap; } }
+  .loe-inbox-rail { flex: 0 0 272px; min-width: 0; min-height: 0; background: #fff; border-right: 1px solid #e3e7ee; display: flex; flex-direction: column; }
+  .loe-inbox-rail-head, .loe-inbox-list-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; font-size: 13px; color: #374151; }
+  .loe-inbox-rail-head span, .loe-inbox-list-head span { font-size: 11px; color: #6b7280; }
+  .loe-inbox-search { margin: 0 12px 10px; height: 34px; padding: 0 10px; border: 1px solid #d5dbe5; border-radius: 8px; font-size: 13px; }
+  .loe-inbox-rail-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 0 8px 12px; }
+  .loe-inbox-rail-foot { flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid #e3e7ee; font-size: 11px; color: #6b7280; display: flex; flex-direction: column; gap: 4px; }
+  .loe-inbox-rail-foot strong { color: #1f2937; }
+  .loe-inbox-oa { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; }
+  .loe-inbox-oa.on { background: #f8fafc; }
+  .loe-inbox-oa-avatar { width: 32px; height: 32px; border-radius: 9px; flex: 0 0 auto; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
+  .loe-inbox-oa-main { flex: 1 1 auto; min-width: 0; }
+  .loe-inbox-oa-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #6b7280; }
+  .loe-inbox-oa.on .loe-inbox-oa-name { color: #1f2937; }
+  .loe-inbox-oa-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .loe-inbox-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+  .loe-inbox-oa-status.live { color: #16a34a; }
+  .loe-inbox-oa-status.connecting { color: #ca8a04; }
+  .loe-inbox-oa-status.limit, .loe-inbox-oa-status.error { color: #dc2626; }
+  .loe-inbox-switch { width: 38px; height: 22px; border-radius: 11px; border: 0; padding: 2px; background: #cbd5e1; cursor: pointer; display: flex; align-items: center; justify-content: flex-start; flex: 0 0 auto; }
+  .loe-inbox-switch[aria-checked="true"] { background: #1c6cf3; justify-content: flex-end; }
+  .loe-inbox-knob { width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+  .loe-inbox-empty { padding: 28px 16px; text-align: center; color: #6b7280; font-size: 13px; }
+  .loe-inbox-empty.err { color: #b91c1c; }
+  .loe-inbox-list { flex: 0 0 400px; min-width: 0; min-height: 0; background: #fff; border-right: 1px solid #e3e7ee; display: flex; flex-direction: column; }
+  .loe-inbox-filters { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 10px; }
+  .loe-inbox-chip { height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid #d5dbe5; background: #fff; color: #374151; font-size: 12px; cursor: pointer; }
+  .loe-inbox-chip.on { background: #1c6cf3; border-color: #1c6cf3; color: #fff; }
+  .loe-inbox-rows { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+  .loe-inbox-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; border: 0; border-left: 3px solid transparent; background: #fff; cursor: pointer; color: #1f2937; }
+  .loe-inbox-row:hover { background: #f8fafc; }
+  .loe-inbox-row.selected { background: #eef4ff; }
+  .loe-inbox-avatar { width: 40px; height: 40px; border-radius: 50%; background: #e5e7eb; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: #4b5563; flex: 0 0 auto; }
+  .loe-inbox-row-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .loe-inbox-row-top, .loe-inbox-row-mid, .loe-inbox-row-meta { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .loe-inbox-oa-chip { font-size: 11px; padding: 1px 6px; border-radius: 4px; color: #fff; white-space: nowrap; flex: 0 0 auto; }
+  .loe-inbox-row-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
+  .loe-inbox-row-time { font-size: 11px; color: #6b7280; white-space: nowrap; }
+  .loe-inbox-row-preview { flex: 1 1 auto; min-width: 0; color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .loe-inbox-unread { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+  .loe-inbox-unread.dot { min-width: 10px; width: 10px; height: 10px; padding: 0; }
+  .loe-inbox-tag { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: #ffedd5; color: #9a3412; }
+  .loe-inbox-tag.done { background: #e5e7eb; color: #4b5563; }
+  .loe-inbox-tag.ai { background: #eef2ff; color: #4f46e5; font-weight: 700; }
+  .loe-inbox-tag.group { background: #eef4ff; color: #1c6cf3; border: 1px solid rgba(28,108,243,.35); font-weight: 600; }
+  .loe-inbox-prefix { color: #1c6cf3; border-color: rgba(28,108,243,.35); font-weight: 600; }
+  .loe-inbox-prefix.empty { color: #6b7280; font-weight: 400; }
+  .loe-inbox-tag.ai-on { background: #6366f1; color: #fff; }
+  .loe-inbox-tag.ai-human { background: #f97316; color: #fff; }
+  .loe-inbox-tag.ai-unmatched { background: #e5e7eb; color: #6b7280; }
+  .loe-inbox-oa-name { display: flex; align-items: center; gap: 5px; }
+  .loe-inbox-oa-name > .loe-inbox-oa-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .loe-inbox-oa-name > .loe-inbox-tag { flex: 0 0 auto; }
+  .loe-inbox-oa-status > .loe-inbox-tag.ai { padding: 0 5px; line-height: 16px; }
+  .loe-inbox-thread { flex: 1 1 560px; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #f3f5f9; position: relative; }
+  .loe-inbox-notes { position: absolute; top: 57px; right: 0; bottom: 0; width: min(340px, 100%); background: #fff; border-left: 1px solid #e3e7ee; box-shadow: -6px 0 18px rgba(15,23,42,.08); display: flex; flex-direction: column; z-index: 4; }
+  .loe-inbox-notes-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e3e7ee; }
+  .loe-inbox-note-add { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-bottom: 1px solid #e3e7ee; align-items: flex-end; }
+  .loe-inbox-note-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; border: 1px solid #d5dbe5; border-radius: 8px; font-size: 13px; }
+  .loe-inbox-notes-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .loe-inbox-note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 8px 10px; }
+  .loe-inbox-note-body { white-space: pre-wrap; word-break: break-word; }
+  .loe-inbox-note-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: #92400e; }
+  .loe-inbox-note-del { border: 0; background: transparent; color: #b91c1c; font-size: 11px; cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+  .loe-inbox-note-del:hover { background: #fee2e2; }
+  .loe-inbox-rename { height: 32px; padding: 0 10px; border: 1px solid #1c6cf3; border-radius: 8px; font-size: 14px; min-width: 180px; }
+  .loe-inbox-rename-btn { color: #9ca3af; }
+  .loe-inbox-rename-btn:hover { color: #1c6cf3; }
+  .loe-inbox-th-head { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 20px; background: #fff; border-bottom: 1px solid #e3e7ee; }
+  .loe-inbox-th-head .loe-inbox-avatar { width: 36px; height: 36px; }
+  .loe-inbox-th-title { min-width: 0; }
+  .loe-inbox-th-name { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .loe-inbox-th-msgs { flex: 1 1 auto; min-height: 0; padding: 20px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+  .loe-inbox-th-empty { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; color: #6b7280; }
+  .loe-inbox-day { align-self: center; font-size: 11px; color: #6b7280; background: #e5e7eb; padding: 2px 10px; border-radius: 10px; }
+  .loe-inbox-msg { display: flex; flex-direction: column; gap: 2px; max-width: 68%; }
+  .loe-inbox-msg.in { align-self: flex-start; align-items: flex-start; }
+  .loe-inbox-msg.out { align-self: flex-end; align-items: flex-end; }
+  .loe-inbox-bubble { padding: 9px 13px; border-radius: 14px; background: #fff; color: #1f2937; white-space: pre-wrap; word-break: break-word; box-shadow: 0 1px 1px rgba(0,0,0,.05); }
+  .loe-inbox-msg.out .loe-inbox-bubble { background: #1c6cf3; color: #fff; }
+  .loe-inbox-msg.failed .loe-inbox-bubble { background: #fee2e2; color: #991b1b; }
+  .loe-inbox-bubble.media { padding: 4px; background: #fff; }
+  .loe-inbox-msg.out .loe-inbox-bubble.media { background: #fff; color: #1f2937; }
+  .loe-inbox-media-link { display: block; line-height: 0; }
+  .loe-inbox-media-img { max-width: 260px; max-height: 260px; border-radius: 10px; display: block; object-fit: contain; }
+  .loe-inbox-media-video { max-width: 320px; max-height: 260px; border-radius: 10px; display: block; background: #000; }
+  .loe-inbox-media-audio { display: block; width: 260px; }
+  .loe-inbox-media-sticker { width: 120px; height: 120px; object-fit: contain; display: block; }
+  .loe-inbox-media-file { display: inline-block; padding: 6px 10px; color: #1c6cf3; text-decoration: none; word-break: break-all; }
+  .loe-inbox-media-file:hover { text-decoration: underline; }
+  .loe-inbox-media-expired { display: inline-block; padding: 6px 10px; color: #6b7280; font-size: 12px; }
+  .loe-inbox-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+  .loe-inbox-link:hover { opacity: .85; }
+  .loe-inbox-msg.in .loe-inbox-link, .loe-inbox-msg.card .loe-inbox-link { color: #1c6cf3; }
+  .loe-inbox-msg.card .loe-inbox-bubble { background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; border-left: 4px solid #6366f1; border-radius: 10px 14px 14px 10px; }
+  .loe-inbox-msg.card .loe-inbox-msg-meta { color: #6366f1; }
+  .loe-inbox-card-label { display: block; font-size: 11px; font-weight: 700; color: #6366f1; margin-bottom: 4px; letter-spacing: .02em; }
+  .loe-inbox-msg.card .loe-copy-button, .loe-inbox-msg.card .loe-forward-button { color: #6366f1; }
+  .loe-inbox-msg-meta { font-size: 11px; color: #9ca3af; }
+  .loe-inbox-msg .loe-copy-button, .loe-inbox-msg .loe-forward-button { opacity: .85; }
+  .loe-inbox-msg.out .loe-copy-button, .loe-inbox-msg.out .loe-forward-button { background: rgba(255,255,255,.96); }
+  .loe-inbox-bubble.loe-has-forward { min-width: 96px; }
+  .loe-inbox-ai-slot { display: inline-flex; align-items: center; }
+  img.loe-inbox-avatar { object-fit: cover; }
+  .loe-inbox-msg.failed .loe-inbox-msg-meta { color: #b91c1c; }
+  .loe-inbox-composer { flex: 0 0 auto; padding: 10px 20px 16px; background: #fff; border-top: 1px solid #e3e7ee; display: flex; flex-direction: column; gap: 8px; }
+  .loe-inbox-composer-row { display: flex; gap: 10px; align-items: flex-end; }
+  .loe-inbox-textarea { flex: 1 1 auto; min-width: 0; min-height: 60px; resize: vertical; padding: 10px 12px; border: 1px solid #d5dbe5; border-radius: 10px; font-size: 14px; line-height: 1.5; }
+  .loe-inbox-composer-btns { display: flex; flex-direction: column; gap: 6px; align-self: stretch; justify-content: flex-end; }
+  .loe-inbox-dispatch { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid #f97316; background: #fff; color: #c2410c; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+  .loe-inbox-dispatch:hover { background: #fff7ed; }
+  .loe-inbox-dispatch svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-send { height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #1c6cf3; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+  .loe-inbox-send:hover { background: #0b57d0; }
+  .loe-inbox-send:disabled { opacity: .6; cursor: progress; }
+  .loe-inbox-send svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-toasts { position: fixed; top: 64px; right: 20px; width: min(360px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+  .loe-inbox-toast { background: #fff; border: 1px solid #e3e7ee; border-left: 4px solid #1c6cf3; border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 20px rgba(15,23,42,.12); display: flex; flex-direction: column; gap: 6px; }
+  .loe-inbox-toast-top { display: flex; align-items: center; gap: 6px; }
+  .loe-inbox-toast-body { color: #374151; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .loe-inbox-toast-actions { display: flex; gap: 6px; }
+  .loe-inbox-toast-actions .loe-inbox-btn { height: 28px; font-size: 12px; }
+  .loe-inbox-x { width: 24px; height: 24px; border: 0; background: transparent; cursor: pointer; color: #6b7280; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
+  .loe-inbox-x:hover { background: #f1f5f9; }
+  .loe-inbox .loe-qr-bar { padding: 0; margin: 0; }
+</style>
+</head>
+<body>
+<div id="loe-inbox" class="loe-inbox">
+  <header class="loe-inbox-top"></header>
+  <div class="loe-inbox-body">
+    <aside class="loe-inbox-rail">
+      <div class="loe-inbox-rail-head"><strong>官方帳號</strong><span>打開 ＝ 監聽新訊息</span></div>
+      <input class="loe-inbox-search" type="search" placeholder="搜尋帳號或群編" aria-label="搜尋帳號或群編">
+      <div class="loe-inbox-rail-list"></div>
+      <div class="loe-inbox-rail-foot"></div>
+    </aside>
+    <section class="loe-inbox-list">
+      <div class="loe-inbox-list-head"><strong>待回覆</strong><span>依最後訊息時間</span></div>
+      <input class="loe-inbox-search loe-inbox-list-search" type="search" placeholder="搜尋客人、訊息內容、官方帳號或群編" aria-label="搜尋待回覆">
+      <div class="loe-inbox-filters"></div>
+      <div class="loe-inbox-rows"></div>
+    </section>
+    <main class="loe-inbox-thread">
+      <div class="loe-inbox-th-head" hidden></div>
+      <div class="loe-inbox-th-msgs" hidden></div>
+      <div class="loe-inbox-th-empty">從中間選一位客人，或等通知進來</div>
+      <aside class="loe-inbox-notes" hidden aria-label="記事本"></aside>
+      <div class="loe-inbox-composer" hidden>
+        <div class="loe-inbox-quick loe-qr-bar"></div>
+        <div class="loe-inbox-composer-row">
+          <textarea class="loe-inbox-textarea" rows="2" placeholder="輸入回覆，以這個官方帳號的身分送出（Enter 傳送，Shift＋Enter 換行）" aria-label="回覆內容"></textarea>
+          <div class="loe-inbox-composer-btns">
+            <button type="button" class="loe-inbox-dispatch" title="派單：開啟派單視窗（上車地址自行填寫，或點訊息旁的派單帶入）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17h4V5H2v12h3"></path><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg><span>派單</span></button>
+            <button type="button" class="loe-inbox-send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg><span>傳送</span></button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <div class="loe-inbox-toasts" aria-live="polite"></div>
+</div>
+</body>`;
+  }
 })();
