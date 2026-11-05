@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.56.0
-// @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知。
+// @version      1.57.0
+// @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知、司機對話。
 // @author       iewihc
 // @match        https://manager.line.biz/*
 // @match        https://chat.line.biz/*
@@ -70,6 +70,8 @@
   const FLEET_KEY = "loe_fleet_v1"; // 目前要拉哪個車隊的遠端設定（如 HELLO）
   const DISPATCH_BUTTON_CLASS = "loe-dispatch-button"; // 派單按鈕
   const DISPATCH_POP_CLASS = "loe-dispatch-pop";
+  const DRIVER_CHAT_BUTTON_CLASS = "loe-dchat-button"; // 原生聊天頁「司機對話」按鈕（派單左邊）
+  const DRIVER_CHAT_FLOAT_CLASS = "loe-dchat-float"; // 原生聊天頁的司機對話浮動面板
   const ESTIMATE_BUTTON_CLASS = "loe-estimate-button"; // 估價按鈕
   const AUTOREPLY_KEY = "loe_dispatch_autoreply_v1"; // 派單後是否自動回覆客人
   const MEMO_INCLUDE_KEY = "loe_dispatch_memo_include_v1"; // 派單是否帶入筆記(note:)
@@ -104,6 +106,7 @@
     refresh: '<path d="M20 7v5h-5M4 17v-5h5"></path><path d="M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"></path>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path>',
     inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>',
+    image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>',
     bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>',
     pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path>',
     "notebook": '<path d="M2 6h4"></path><path d="M2 10h4"></path><path d="M2 14h4"></path><path d="M2 18h4"></path><rect width="16" height="20" x="4" y="2" rx="2"></rect><path d="M16 2v20"></path>',
@@ -700,6 +703,68 @@
     .loe-ai-toggle button.on.human { background: #f97316; }
     .loe-ai-toggle button:disabled { opacity: .6; cursor: progress; }
     .loe-ai-toggle .loe-ai-note { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; color: #94a3b8; font-weight: 600; cursor: help; }
+
+    /* 司機對話：原生頁按鈕（派單左邊，藍色外框）＋浮動面板；面板內容兩種模式共用 */
+    .${DRIVER_CHAT_BUTTON_CLASS} {
+      position: relative; top: 4px; display: inline-flex; align-items: center; gap: 5px;
+      height: 32px; margin-right: 8px; padding: 0 12px; border: 1px solid ${BLUE}; border-radius: 6px;
+      background: #fff; color: ${BLUE}; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+    }
+    .${DRIVER_CHAT_BUTTON_CLASS}.on, .${DRIVER_CHAT_BUTTON_CLASS}:hover { background: ${BLUE_SOFT}; }
+    .${DRIVER_CHAT_BUTTON_CLASS} > svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .loe-dchat-badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+    .${DRIVER_CHAT_FLOAT_CLASS} {
+      position: fixed; right: 16px; top: 72px; width: min(400px, calc(100vw - 32px)); height: min(620px, calc(100vh - 260px));
+      z-index: 2147483000; background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(15,23,42,.25);
+      display: flex; flex-direction: column; overflow: hidden; font-size: 13px; color: #1f2937;
+    }
+    .loe-dchat-head { flex: 0 0 auto; padding: 10px 12px 8px; border-bottom: 1px solid #e3e7ee; display: flex; flex-direction: column; gap: 6px; background: #fff; }
+    .loe-dchat-title { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .loe-dchat-spacer { flex: 1 1 auto; }
+    .loe-dchat-x { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .loe-dchat-x:hover { background: #f1f5f9; }
+    .loe-dchat-x svg, .loe-dchat-icon-btn svg, .loe-dchat-send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .loe-dchat-col { padding: 1px 8px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 600; background: #6b7280; }
+    .loe-dchat-col.booking { background: #7c3aed; } .loe-dchat-col.pending { background: #f59e0b; }
+    .loe-dchat-col.accepted { background: #1c6cf3; } .loe-dchat-col.arrived { background: #16a34a; } .loe-dchat-col.executing { background: #0d9488; }
+    .loe-dchat-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .loe-dchat-tab { position: relative; height: 26px; padding: 0 10px; border: 1px solid #d5dbe5; border-radius: 999px; background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+    .loe-dchat-tab.on { border-color: ${BLUE}; background: ${BLUE_SOFT}; color: ${BLUE}; font-weight: 700; }
+    .loe-dchat-dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
+    .loe-dchat-meta, .loe-dchat-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+    .loe-dchat-chip { height: 24px; padding: 0 8px; border: 1px solid #e3e7ee; border-radius: 6px; background: #f8fafc; color: #334155; font: inherit; font-size: 12px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .loe-dchat-chip:hover { border-color: ${BLUE}; color: ${BLUE}; }
+    .loe-dchat-msgs { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; background: #f3f5f9; display: flex; flex-direction: column; gap: 4px; }
+    .loe-dchat-empty { margin: auto; color: #94a3b8; text-align: center; padding: 16px; }
+    .loe-dchat-empty.err { color: #dc2626; margin: 8px 0; }
+    .loe-dchat-older { align-self: center; height: 26px; padding: 0 12px; border: 1px solid #d5dbe5; border-radius: 999px; background: #fff; font: inherit; font-size: 12px; cursor: pointer; margin-bottom: 6px; }
+    .loe-dchat-system { align-self: center; max-width: 90%; padding: 4px 10px; border-radius: 8px; background: #e2e8f0; color: #475569; font-size: 12px; text-align: center; white-space: pre-line; }
+    .loe-dchat-msg { display: flex; flex-direction: column; max-width: 82%; }
+    .loe-dchat-msg.in { align-self: flex-start; align-items: flex-start; }
+    .loe-dchat-msg.out { align-self: flex-end; align-items: flex-end; }
+    .loe-dchat-who { font-size: 11px; color: #64748b; margin: 6px 4px 2px; }
+    .loe-dchat-bubble { padding: 7px 11px; border-radius: 14px; background: #fff; color: #1f2937; white-space: pre-wrap; word-break: break-word; line-height: 1.45; box-shadow: 0 1px 1px rgba(15,23,42,.05); }
+    .loe-dchat-msg.out .loe-dchat-bubble { background: #dbeafe; }
+    .loe-dchat-msg.out.mine .loe-dchat-bubble { background: ${BLUE}; color: #fff; }
+    .loe-dchat-msg.out.mine .loe-dchat-bubble a { color: #fff; }
+    .loe-dchat-bubble.failed { outline: 2px solid #ef4444; cursor: pointer; }
+    .loe-dchat-img { display: block; max-width: 220px; max-height: 260px; border-radius: 8px; }
+    .loe-dchat-recalled { color: #94a3b8; }
+    .loe-dchat-meta-line { display: flex; gap: 8px; align-items: center; font-size: 11px; color: #94a3b8; margin: 2px 4px 0; }
+    .loe-dchat-recall { border: 0; background: none; padding: 0; color: #94a3b8; font: inherit; cursor: pointer; text-decoration: underline; }
+    .loe-dchat-recall:hover { color: #ef4444; }
+    .loe-dchat-quick { flex: 0 0 auto; padding: 8px 12px 0; background: #fff; border-top: 1px solid #e3e7ee; }
+    .loe-dchat-quick[hidden] { display: none; }
+    .loe-dchat-composer { flex: 0 0 auto; display: flex; gap: 8px; align-items: flex-end; padding: 8px 12px 12px; background: #fff; }
+    .loe-dchat-quick:not([hidden]) + .loe-dchat-composer { border-top: 0; }
+    .loe-dchat-quick[hidden] + .loe-dchat-composer { border-top: 1px solid #e3e7ee; }
+    .loe-dchat-input { flex: 1 1 auto; min-height: 40px; max-height: 140px; resize: vertical; padding: 8px 10px; border: 1px solid #d5dbe5; border-radius: 8px; font: inherit; font-size: 13px; }
+    .loe-dchat-input:focus { outline: none; border-color: ${BLUE}; box-shadow: 0 0 0 3px rgba(28,108,243,.12); }
+    .loe-dchat-btns { display: flex; flex-direction: column; gap: 6px; }
+    .loe-dchat-icon-btn, .loe-dchat-send { width: 38px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+    .loe-dchat-icon-btn { border: 1px solid #d5dbe5; background: #fff; color: #475569; }
+    .loe-dchat-send { border: 0; background: ${BLUE}; color: #fff; }
+    .loe-dchat-send:hover { background: ${BLUE_HOVER}; }
   `;
   document.head.appendChild(style);
 
@@ -5850,6 +5915,469 @@
   );
 
   /* ---------------------------------------------------------------------- *
+   * 司機對話（調度 ↔ 司機，基於訂單）
+   *   跟 admin 調度中心的司機對話是同一個對話：懶惰蟲用「身份授權」的發送 KEY 代表調度人員讀寫，
+   *   司機在 App 看到的發話人是你的後台名稱。
+   *   GET  /line-ext/orders/{id}/driver-chat?account=&sinceSeq=｜beforeMessageId=（X-Line-Send-Key）
+   *   POST …/messages {content, tempId}；…/images（multipart file＋tempId）；…/read；…/messages/{mid}/recall
+   *   面板開著每 3 秒抓新訊息；紅點＝訂單查詢的 lastDriverMessageAt 晚於本機「看過」的時間。
+   *   收件匣：面板停靠在對話右側（同記事本）；LINE 原生聊天頁：派單左邊的「司機對話」開浮動面板。
+   * ---------------------------------------------------------------------- */
+  const DRIVER_CHAT_POLL_MS = 3000;
+  const DRIVER_CHAT_SEEN_KEY = "loe_driver_chat_seen_v1"; // orderId → 看過的司機最後訊息時間（ms）
+  const DRIVER_CHAT_SEEN_MAX = 300;
+  const DRIVER_CHAT_IMAGE_MAX_PX = 1600;
+  const DRIVER_CHAT_RECALL_MS = 24 * 60 * 60 * 1000;
+  const NATIVE_ORDERS_REFRESH_MS = 15000;
+
+  const driverChat = {
+    host: null, onClose: null, // 面板掛載點（收件匣 aside／原生頁浮動 div）與關閉時的收尾
+    orders: [], orderId: "", // 可切換的訂單（有司機的）與目前這張
+    order: null, me: null, messages: [], latestSeq: 0, hasMore: false,
+    loading: false, polling: false, olderLoading: false, error: "", timer: 0, run: 0,
+    el: {},
+  };
+  const driverChatNotified = new Map(); // orderId → 已提示過的司機最後訊息時間（ms），避免重複響
+
+  const msOf = (iso) => { const t = Date.parse(iso || ""); return Number.isFinite(t) ? t : 0; };
+  function driverChatSeen() {
+    const m = storeGet(DRIVER_CHAT_SEEN_KEY, {});
+    return m && typeof m === "object" ? m : {};
+  }
+  function driverChatMarkSeen(orderId, iso) {
+    const t = msOf(iso);
+    if (!orderId || !t) return;
+    const m = driverChatSeen();
+    if ((m[orderId] || 0) >= t) return;
+    m[orderId] = t;
+    const keys = Object.keys(m);
+    if (keys.length > DRIVER_CHAT_SEEN_MAX) keys.sort((a, b) => m[a] - m[b]).slice(0, keys.length - DRIVER_CHAT_SEEN_MAX).forEach((k) => delete m[k]);
+    storeSet(DRIVER_CHAT_SEEN_KEY, m);
+  }
+  // 司機講了話、調度還沒看（目前開著的那張不算）
+  function driverChatUnread(order) {
+    const t = msOf(order && order.lastDriverMessageAt);
+    return !!t && driverChat.orderId !== order.id && (driverChatSeen()[order.id] || 0) < t;
+  }
+  // 訂單列表更新後：有新的未讀司機訊息就響一聲＋提示（每則只提示一次）
+  function driverChatNotifyOrders(orders) {
+    for (const o of orders) {
+      const t = msOf(o.lastDriverMessageAt);
+      if (!t || !driverChatUnread(o)) continue;
+      const prev = driverChatNotified.get(o.id);
+      driverChatNotified.set(o.id, t);
+      if (prev === undefined || prev >= t) continue; // 第一次看到這張單只記下、不響（避免開頁就一直響）
+      driverChatBeep();
+      toast(`💬 司機 ${o.driverNo || ""} 在 ${o.shortId || "訂單"} 傳了訊息`, "ok", 5000);
+    }
+  }
+
+  // 兩個短音；收件匣用收件匣的提示音開關，原生頁直接響
+  let driverChatAudio = null;
+  function driverChatBeep() {
+    if (INBOX_MODE) { if (inbox.sound) inboxBeep(); return; }
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      driverChatAudio = driverChatAudio || new Ctx();
+      if (driverChatAudio.state !== "running") driverChatAudio.resume().catch(() => {});
+      playTwoTone(driverChatAudio);
+    } catch (_) {}
+  }
+
+  function driverChatApi(method, orderId, sub, body, query = "") {
+    const account = getDispatcher();
+    const key = storedSendKey(account);
+    if (!account || !key)
+      return Promise.reject(new Error("請先在懶惰蟲完成「身份授權」才能和司機對話"));
+    return lineBackendRequest(method,
+      `/line-ext/orders/${encodeURIComponent(orderId)}/driver-chat${sub}?account=${encodeURIComponent(account)}${query}`,
+      body, undefined, { "X-Line-Send-Key": key });
+  }
+
+  // 開面板：host 由呼叫端提供（收件匣 aside 或原生頁浮動 div），onClose 負責收掉 host
+  function openDriverChat({ host, orders, orderId, onClose }) {
+    closeDriverChat();
+    Object.assign(driverChat, {
+      host, onClose, orders: orders.filter((o) => o.hasDriver), orderId,
+      order: null, me: null, messages: [], latestSeq: 0, hasMore: false, error: "", loading: true, run: driverChat.run + 1,
+    });
+    buildDriverChat();
+    const run = driverChat.run;
+    loadDriverChat(run);
+    driverChat.timer = setInterval(() => pollDriverChat(run), DRIVER_CHAT_POLL_MS);
+  }
+  function closeDriverChat() {
+    if (driverChat.timer) clearInterval(driverChat.timer);
+    driverChat.timer = 0;
+    driverChat.run++;
+    const onClose = driverChat.onClose;
+    if (driverChat.host) driverChat.host.textContent = "";
+    Object.assign(driverChat, { host: null, onClose: null, orderId: "", el: {} });
+    if (onClose) onClose();
+  }
+  // 訂單列表更新時同步面板的訂單分頁（目前這張不見了就關掉）
+  function syncDriverChatOrders(orders) {
+    if (!driverChat.host) return;
+    const withDriver = orders.filter((o) => o.hasDriver);
+    if (!withDriver.some((o) => o.id === driverChat.orderId)) return closeDriverChat();
+    driverChat.orders = withDriver;
+    renderDriverChatHead();
+  }
+
+  function driverChatIsMine(m) {
+    return m.sender === "user" && !!driverChat.me && m.senderId === driverChat.me.id;
+  }
+  function driverChatMerge(list) {
+    for (const m of list) {
+      const i = driverChat.messages.findIndex((x) => m.id && x.id === m.id);
+      if (i >= 0) driverChat.messages[i] = { ...driverChat.messages[i], ...m, pending: false, failed: "" };
+      else driverChat.messages.push(m);
+    }
+    driverChat.messages.sort((a, b) => (a.seq && b.seq ? a.seq - b.seq : msOf(a.timestamp) - msOf(b.timestamp)));
+  }
+  // 有新的司機訊息、畫面看得到時才標已讀（司機那邊才不會在你沒看時顯示已讀）
+  function driverChatAfterLoad(run, newDriverMessages) {
+    if (run !== driverChat.run) return;
+    const lastDriver = [...driverChat.messages].reverse().find((m) => m.sender === "driver");
+    if (lastDriver) driverChatMarkSeen(driverChat.orderId, lastDriver.timestamp);
+    if (newDriverMessages && document.visibilityState === "visible") {
+      const last = driverChat.messages[driverChat.messages.length - 1];
+      driverChatApi("POST", driverChat.orderId, "/read", { upToMessageId: (last && last.id) || "" }).catch(() => {});
+    }
+  }
+  function driverChatApply(data) {
+    driverChat.order = data.order || driverChat.order;
+    driverChat.me = data.me || driverChat.me;
+    driverChat.latestSeq = Math.max(driverChat.latestSeq, data.latestSeq || 0);
+  }
+  async function loadDriverChat(run) {
+    try {
+      const data = await driverChatApi("GET", driverChat.orderId, "", undefined, "&limit=50");
+      if (run !== driverChat.run) return;
+      driverChatApply(data);
+      driverChat.messages = [];
+      driverChatMerge(data.messages || []);
+      driverChat.hasMore = !!data.hasMore;
+      driverChat.error = "";
+    } catch (e) {
+      if (run !== driverChat.run) return;
+      driverChat.error = e.message || String(e);
+    }
+    driverChat.loading = false;
+    renderDriverChat(true);
+    driverChatAfterLoad(run, driverChat.messages.some((m) => m.sender === "driver"));
+  }
+  async function pollDriverChat(run) {
+    if (run !== driverChat.run || driverChat.loading || driverChat.polling) return;
+    if (!driverChat.latestSeq) return loadDriverChat(run); // 還沒有任何訊息：重抓最新一頁
+    driverChat.polling = true;
+    try {
+      const data = await driverChatApi("GET", driverChat.orderId, "", undefined, `&sinceSeq=${driverChat.latestSeq}&limit=100`);
+      if (run !== driverChat.run) return;
+      const fresh = (data.messages || []).filter((m) => !driverChat.messages.some((x) => x.id === m.id));
+      const statusChanged = data.order && driverChat.order && data.order.status !== driverChat.order.status;
+      driverChatApply(data);
+      driverChat.error = "";
+      if (fresh.length) {
+        driverChatMerge(fresh);
+        renderDriverChatMsgs(false);
+        if (fresh.some((m) => m.sender === "driver")) {
+          if (document.visibilityState !== "visible") driverChatBeep();
+          driverChatAfterLoad(run, true);
+        }
+      }
+      if (statusChanged) renderDriverChatHead();
+    } catch (e) {
+      if (run === driverChat.run && !driverChat.error) { driverChat.error = e.message || String(e); renderDriverChatMsgs(false); }
+    } finally {
+      driverChat.polling = false;
+    }
+  }
+  async function loadOlderDriverChat() {
+    const first = driverChat.messages.find((m) => m.id);
+    if (!first || driverChat.olderLoading) return;
+    driverChat.olderLoading = true;
+    renderDriverChatMsgs(false);
+    const run = driverChat.run;
+    const box = driverChat.el.msgs;
+    const before = box ? box.scrollHeight - box.scrollTop : 0;
+    try {
+      const data = await driverChatApi("GET", driverChat.orderId, "", undefined, `&beforeMessageId=${encodeURIComponent(first.id)}&limit=50`);
+      if (run !== driverChat.run) return;
+      driverChatMerge(data.messages || []);
+      driverChat.hasMore = !!data.hasMore;
+    } catch (e) { toast("載入更早訊息失敗：" + (e.message || e), "err", 4000); }
+    driverChat.olderLoading = false;
+    renderDriverChatMsgs(false);
+    if (box) box.scrollTop = box.scrollHeight - before; // 保持原本看到的位置
+  }
+
+  const newDriverChatTempId = () => "ext_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  function driverChatPendingMessage(tempId, fields) {
+    return { id: "", tempId, sender: "user", senderId: driverChat.me ? driverChat.me.id : "", senderName: driverChat.me ? driverChat.me.name : "",
+      timestamp: new Date().toISOString(), pending: true, failed: "", ...fields };
+  }
+  // 送出（文字或圖片）：先放樂觀泡泡，成功換成正式訊息；失敗留著可點重送（同 tempId，後端不會重複）
+  async function driverChatSubmit(pending, request) {
+    const run = driverChat.run;
+    if (!driverChat.messages.includes(pending)) driverChat.messages.push(pending);
+    pending.pending = true; pending.failed = "";
+    renderDriverChatMsgs(true);
+    try {
+      const res = await request();
+      if (run !== driverChat.run) return;
+      const msg = res && res.message;
+      if (msg) {
+        const dup = driverChat.messages.findIndex((x) => x !== pending && x.id === msg.id); // 輪詢先抓到了
+        if (dup >= 0) driverChat.messages.splice(driverChat.messages.indexOf(pending), 1);
+        else Object.assign(pending, msg, { pending: false, failed: "" });
+        driverChat.latestSeq = Math.max(driverChat.latestSeq, msg.seq || 0);
+      }
+    } catch (e) {
+      if (run !== driverChat.run) return;
+      pending.pending = false;
+      pending.failed = e.message || String(e);
+    }
+    renderDriverChatMsgs(false);
+  }
+  function driverChatSendText(text) {
+    const content = String(text || "").trim();
+    if (!content || !driverChat.orderId) return false;
+    const orderId = driverChat.orderId;
+    const pending = driverChatPendingMessage(newDriverChatTempId(), { type: "text", content });
+    pending.retry = () => driverChatSubmit(pending, () => driverChatApi("POST", orderId, "/messages", { content, tempId: pending.tempId }));
+    pending.retry();
+    return true;
+  }
+  async function driverChatSendImage(file) {
+    if (!file || !/^image\//.test(file.type) || !driverChat.orderId) return;
+    const orderId = driverChat.orderId;
+    let upload;
+    try { upload = await driverChatCompressImage(file); }
+    catch (_) { return toast("讀不到這張圖片", "err", 3000); }
+    const pending = driverChatPendingMessage(newDriverChatTempId(), { type: "image", imageUrl: URL.createObjectURL(upload) });
+    pending.retry = () => driverChatSubmit(pending, () => {
+      const form = new FormData();
+      form.append("tempId", pending.tempId);
+      form.append("file", upload, upload.name);
+      return driverChatApi("POST", orderId, "/images", form);
+    });
+    pending.retry();
+  }
+  // 手機原圖常 5–15MB：長邊縮到 1600、轉 JPG 再傳（GIF 保留動畫不轉）
+  async function driverChatCompressImage(file) {
+    if (file.type === "image/gif") return file;
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, DRIVER_CHAT_IMAGE_MAX_PX / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size < 1.5e6 && file.type === "image/jpeg") return file;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("壓縮失敗"))), "image/jpeg", 0.85));
+    return new File([blob], "image.jpg", { type: "image/jpeg" });
+  }
+  async function driverChatRecall(m) {
+    if (!window.confirm("收回這則訊息？司機那邊也會看不到。")) return;
+    try {
+      await driverChatApi("POST", driverChat.orderId, `/messages/${encodeURIComponent(m.id)}/recall`, {});
+      m.isRecalled = true;
+      renderDriverChatMsgs(false);
+    } catch (e) { toast("收回失敗：" + (e.message || e), "err", 4000); }
+  }
+
+  /* ---- 畫面 ---- */
+  // 骨架只建一次（輸入框草稿、捲動位置不因輪詢重繪而跑掉）；標頭與訊息各自重繪
+  function buildDriverChat() {
+    const host = driverChat.host;
+    host.textContent = "";
+    const head = ih("div", { class: "loe-dchat-head" });
+    const msgs = ih("div", { class: "loe-dchat-msgs" });
+    const quick = ih("div", { class: "loe-dchat-quick" });
+    const textarea = ih("textarea", { class: "loe-dchat-input", rows: "2", placeholder: "傳訊息給司機（Enter 送出，Shift＋Enter 換行，可貼上圖片）", "aria-label": "傳訊息給司機" });
+    const fileInput = ih("input", { type: "file", accept: "image/*", hidden: true });
+    const send = () => { if (driverChatSendText(textarea.value)) textarea.value = ""; textarea.focus(); };
+    textarea.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+      e.stopPropagation(); // 不讓 LINE 頁面的快捷鍵吃掉輸入
+    });
+    textarea.addEventListener("paste", (e) => {
+      const file = [...(e.clipboardData?.files || [])].find((f) => /^image\//.test(f.type));
+      if (file) { e.preventDefault(); driverChatSendImage(file); }
+    });
+    fileInput.addEventListener("change", () => { const f = fileInput.files && fileInput.files[0]; fileInput.value = ""; if (f) driverChatSendImage(f); });
+    host.append(head, msgs, quick,
+      ih("div", { class: "loe-dchat-composer" },
+        textarea,
+        ih("div", { class: "loe-dchat-btns" },
+          ih("button", { type: "button", class: "loe-dchat-icon-btn", html: ic("image"), title: "傳圖片", "aria-label": "傳圖片", onclick: () => fileInput.click() }),
+          ih("button", { type: "button", class: "loe-dchat-send", html: ic("send"), title: "傳送", "aria-label": "傳送", onclick: send })),
+        fileInput));
+    driverChat.el = { head, msgs, quick, textarea };
+    renderDriverChat(false);
+    setTimeout(() => textarea.focus(), 0);
+  }
+  function renderDriverChat(scrollToEnd) {
+    renderDriverChatHead();
+    renderDriverChatMsgs(scrollToEnd);
+    renderDriverChatQuick();
+  }
+  function copyChip(label, value) {
+    if (!value) return null;
+    return ih("button", { type: "button", class: "loe-dchat-chip", text: label, title: "點擊複製",
+      onclick: async (e) => { const b = e.currentTarget; try { flashCopied(b, await copyText(value)); } catch (_) { flashCopied(b, false); } } });
+  }
+  function renderDriverChatHead() {
+    const head = driverChat.el.head;
+    if (!head) return;
+    head.textContent = "";
+    const o = driverChat.order;
+    const summary = driverChat.orders.find((x) => x.id === driverChat.orderId) || {};
+    const plate = o?.carPlate ? `${o.carPlate}${o.carColor ? `(${o.carColor})` : ""}` : "";
+    head.append(...[
+      ih("div", { class: "loe-dchat-title" },
+        ih("strong", { text: "💬 司機對話" }),
+        summary.columnLabel ? ih("span", { class: `loe-dchat-col ${summary.column || ""}`, text: summary.columnLabel }) : null,
+        ih("span", { class: "loe-dchat-spacer" }),
+        ih("button", { type: "button", class: "loe-dchat-x", html: ic("x"), "aria-label": "關閉司機對話", onclick: closeDriverChat })),
+      driverChat.orders.length > 1
+        ? ih("div", { class: "loe-dchat-tabs" }, driverChat.orders.map((x) =>
+          ih("button", { type: "button", class: "loe-dchat-tab" + (x.id === driverChat.orderId ? " on" : ""),
+            onclick: () => { if (x.id !== driverChat.orderId) openDriverChat({ host: driverChat.host, orders: driverChat.orders, orderId: x.id, onClose: driverChat.onClose }); } },
+            x.shortId || "訂單", driverChatUnread(x) ? ih("span", { class: "loe-dchat-dot" }) : null)))
+        : null,
+      ih("div", { class: "loe-dchat-meta" }, // 單號／司機／車牌，點擊複製
+        copyChip(o?.shortId || summary.shortId || "", o?.shortId || summary.shortId),
+        copyChip([o?.driverNo, o?.driverName].filter(Boolean).join(" "), o?.driverNo),
+        copyChip(plate, plate)),
+    ].filter(Boolean)); // 原生 append 會把 null 印成文字
+  }
+  function driverChatBubbleBody(m) {
+    if (m.isRecalled) return ih("em", { class: "loe-dchat-recalled", text: "訊息已收回" });
+    const url = m.imageUrl || "";
+    switch (m.type) {
+      case "image":
+        return url ? ih("a", { href: url, target: "_blank", rel: "noopener" }, ih("img", { class: "loe-dchat-img", src: url, alt: "圖片", loading: "lazy" })) : "[圖片]";
+      case "audio": return url ? ih("a", { href: url, target: "_blank", rel: "noopener", text: "🎤 語音（點擊播放）" }) : "[語音]";
+      case "video": return url ? ih("a", { href: url, target: "_blank", rel: "noopener", text: "🎬 影片（點擊播放）" }) : "[影片]";
+      case "location": return "📍 " + (m.content || "位置");
+      default: return inboxLinkify(m.content || "");
+    }
+  }
+  function renderDriverChatMsgs(scrollToEnd) {
+    const box = driverChat.el.msgs;
+    if (!box) return;
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    box.textContent = "";
+    if (driverChat.error && !driverChat.messages.length) {
+      box.append(ih("div", { class: "loe-dchat-empty err", text: driverChat.error }));
+      return;
+    }
+    if (driverChat.loading) { box.append(ih("div", { class: "loe-dchat-empty", text: "讀取對話中…" })); return; }
+    if (driverChat.hasMore)
+      box.append(ih("button", { type: "button", class: "loe-dchat-older", text: driverChat.olderLoading ? "載入中…" : "載入更早訊息", disabled: driverChat.olderLoading, onclick: loadOlderDriverChat }));
+    if (!driverChat.messages.length) box.append(ih("div", { class: "loe-dchat-empty", text: "還沒有訊息，跟司機打聲招呼吧" }));
+    let prevSender = "";
+    for (const m of driverChat.messages) {
+      if (m.type === "system") { box.append(ih("div", { class: "loe-dchat-system", text: m.content || "" })); prevSender = ""; continue; }
+      const fromDriver = m.sender === "driver";
+      const mine = driverChatIsMine(m) || !!m.tempId && !m.id;
+      const who = fromDriver ? `司機 ${m.senderName || ""}`.trim() : mine ? "我" : (m.senderName || "調度");
+      const read = !fromDriver && (m.readBy || []).some((r) => r.type === "driver");
+      const meta = m.pending ? "傳送中…" : m.failed ? `傳送失敗：${m.failed}（點擊重送）` : `${inboxTime(msOf(m.timestamp))}${read ? " · 已讀" : ""}`;
+      const senderKey = `${m.sender}:${m.senderId || m.senderName}`;
+      const bubble = ih("div", { class: "loe-dchat-bubble" + (m.failed ? " failed" : ""), onclick: m.failed && m.retry ? () => m.retry() : null }, driverChatBubbleBody(m));
+      const canRecall = mine && m.id && !m.isRecalled && Date.now() - msOf(m.timestamp) < DRIVER_CHAT_RECALL_MS;
+      box.append(ih("div", { class: "loe-dchat-msg " + (fromDriver ? "in" : "out") + (mine ? " mine" : "") },
+        senderKey !== prevSender ? ih("div", { class: "loe-dchat-who", text: who }) : null,
+        bubble,
+        ih("div", { class: "loe-dchat-meta-line" },
+          ih("span", { text: meta }),
+          canRecall ? ih("button", { type: "button", class: "loe-dchat-recall", text: "收回", onclick: () => driverChatRecall(m) }) : null)));
+      prevSender = senderKey;
+    }
+    if (driverChat.error) box.append(ih("div", { class: "loe-dchat-empty err", text: "連線不穩：" + driverChat.error }));
+    if (scrollToEnd || nearBottom) box.scrollTop = box.scrollHeight;
+  }
+  function renderDriverChatQuick() {
+    const bar = driverChat.el.quick;
+    if (!bar) return;
+    bar.textContent = "";
+    const shortcuts = (driverChat.me && driverChat.me.shortcuts) || [];
+    bar.hidden = !shortcuts.length;
+    for (const text of shortcuts)
+      bar.append(ih("button", { type: "button", class: "loe-dchat-chip", text, title: "帶入輸入框（快捷文字在 admin 調度中心編輯）",
+        onclick: () => { const ta = driverChat.el.textarea; ta.value = ta.value ? `${ta.value} ${text}` : text; ta.focus(); } }));
+  }
+
+  /* ---- LINE 原生聊天頁：派單左邊的「司機對話」按鈕＋浮動面板 ---- */
+  const nativeOrders = { key: "", list: [], run: 0 };
+  async function refreshNativeOrders() {
+    if (INBOX_MODE) return;
+    const oa = getOaId(), chat = getChatId();
+    const key = chat ? `${oa}/${chat}` : "";
+    if (key !== nativeOrders.key) {
+      nativeOrders.key = key;
+      nativeOrders.list = [];
+      closeDriverChat();
+      renderDriverChatButton();
+    }
+    if (!key || !getDispatcher()) return;
+    const run = ++nativeOrders.run;
+    try {
+      const list = await fetchChatOrders(oa, chat);
+      if (run !== nativeOrders.run || key !== nativeOrders.key) return;
+      nativeOrders.list = list;
+      driverChatNotifyOrders(list);
+      syncDriverChatOrders(list);
+      renderDriverChatButton();
+    } catch (_) { /* 後端暫時查不到就維持原狀，下次再試 */ }
+  }
+  function renderDriverChatButton() {
+    const group = document.querySelector(".send-group.btn-group");
+    if (!group) return;
+    let btn = group.parentElement.querySelector(`.${DRIVER_CHAT_BUTTON_CLASS}`);
+    const withDriver = nativeOrders.list.filter((o) => o.hasDriver);
+    if (!withDriver.length) { if (btn) btn.remove(); return; }
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = DRIVER_CHAT_BUTTON_CLASS;
+      btn.title = "和這張單的司機對話（同 admin 調度中心的司機對話）";
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (driverChat.host) return closeDriverChat();
+        openNativeDriverChat();
+      });
+      const dispatchBtn = group.parentElement.querySelector(`.${DISPATCH_BUTTON_CLASS}`);
+      (dispatchBtn || group).insertAdjacentElement("beforebegin", btn);
+    }
+    // 內容有變才重畫（維護迴圈每次 DOM 變動都會呼叫，避免自己改 DOM 又觸發自己）
+    const unread = withDriver.filter(driverChatUnread).length;
+    const sig = `${unread}|${driverChat.host ? 1 : 0}`;
+    if (btn.dataset.sig === sig) return;
+    btn.dataset.sig = sig;
+    btn.classList.toggle("on", !!driverChat.host);
+    btn.textContent = "";
+    btn.insertAdjacentHTML("beforeend", ic("message-square"));
+    btn.append(ih("span", { text: "司機對話" }));
+    if (unread) btn.append(ih("span", { class: "loe-dchat-badge", text: String(unread) }));
+  }
+  function openNativeDriverChat(orderId) {
+    const withDriver = nativeOrders.list.filter((o) => o.hasDriver);
+    if (!withDriver.length) return;
+    const target = orderId || (withDriver.find(driverChatUnread) || withDriver[0]).id;
+    const host = ih("section", { class: DRIVER_CHAT_FLOAT_CLASS, "aria-label": "司機對話" });
+    host.addEventListener("click", (e) => e.stopPropagation());
+    document.body.appendChild(host);
+    openDriverChat({ host, orders: withDriver, orderId: target, onClose: () => { host.remove(); renderDriverChatButton(); } });
+    renderDriverChatButton();
+  }
+  if (!INBOX_MODE) setInterval(refreshNativeOrders, NATIVE_ORDERS_REFRESH_MS);
+
+  /* ---------------------------------------------------------------------- *
    * 多開收件匣（https://chat.line.biz/?uturnInbox=1）
    *   頁面在 document-start 就被接管（見檔尾 inboxTakeover），LINE 的 SPA 不啟動；
    *   同網域所以 fetch／EventSource 原生帶 cookie，不需要 CORS 或 GM_xmlhttpRequest。
@@ -6312,6 +6840,7 @@
     if (changed) { closeDispatchPopover(); refreshAiToggle(); }
   }
   async function inboxOpenChat(key) {
+    if (inbox.selected !== key && driverChat.host === inbox.el.dchat) closeDriverChat();
     inbox.selected = key;
     inbox.renaming = false;
     inboxDismissToast(key);
@@ -6531,6 +7060,12 @@
       const ctx = inboxAudio();
       if (!ctx) return;
       if (ctx.state !== "running") { ctx.resume().catch(() => {}); return; }
+      playTwoTone(ctx);
+    } catch (_) {}
+  }
+  // 兩個短音（收件匣新訊息、司機對話共用）
+  function playTwoTone(ctx) {
+    try {
       const t0 = ctx.currentTime;
       [[880, 0], [1175, 0.12]].forEach(([freq, delay]) => {
         const osc = ctx.createOscillator(), gain = ctx.createGain();
@@ -6722,10 +7257,22 @@
     const st = { list: prev ? prev.list : [], loading: true, error: "" };
     inbox.orders.set(chat.key, st);
     if (!prev && inbox.selected === chat.key) renderInboxOrders();
-    try { st.list = await fetchChatOrders(chat.botId, chat.chatId); }
-    catch (e) { st.error = e.message || String(e); }
+    try {
+      st.list = await fetchChatOrders(chat.botId, chat.chatId);
+      driverChatNotifyOrders(st.list);
+      if (inbox.selected === chat.key && driverChat.host === inbox.el.dchat) syncDriverChatOrders(st.list);
+    } catch (e) { st.error = e.message || String(e); }
     st.loading = false;
     if (inbox.selected === chat.key) renderInboxOrders();
+  }
+  function openInboxDriverChat(orderId) {
+    const chat = inbox.selected && inbox.chats.get(inbox.selected);
+    const host = inbox.el.dchat;
+    if (!chat || !host) return;
+    if (inbox.notesOpen) { inbox.notesOpen = false; renderInboxNotes(); renderInboxThread(); }
+    host.hidden = false;
+    openDriverChat({ host, orders: inbox.orders.get(chat.key)?.list || [], orderId, onClose: () => { host.hidden = true; renderInboxOrders(); } });
+    renderInboxOrders();
   }
   function inboxReloadSelectedOrders() {
     const chat = inbox.selected && inbox.chats.get(inbox.selected);
@@ -6767,8 +7314,14 @@
         car ? ih("span", { text: `🚗 ${car}${eta ? " · " + eta : ""}` }) : null,
         o.trackingUrl ? ih("a", { href: o.trackingUrl, target: "_blank", rel: "noopener", text: "追蹤" }) : null,
         o.isSystemNoti ? ih("span", { class: "loe-inbox-order-noti", text: "自動通知 " + (noti || "等待承接") }) : null,
+        o.hasDriver ? ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-order-chat" + (driverChat.orderId === o.id ? " on" : ""),
+          html: ic("message-square"), title: "和這張單的司機對話（同 admin 調度中心的司機對話）",
+          onclick: () => (driverChat.orderId === o.id ? closeDriverChat() : openInboxDriverChat(o.id)) },
+          ih("span", { text: "司機對話" }), driverChatUnread(o) ? ih("span", { class: "loe-dchat-badge", text: "新" }) : null) : null,
       ));
     }
+    // 司機對話面板從訂單列下方開始，不蓋住訂單列（訂單數會變，每次重畫重算）
+    if (inbox.el.dchat && !inbox.el.dchat.hidden) inbox.el.dchat.style.top = `${bar.offsetTop + bar.offsetHeight}px`;
   }
   function renderInboxThread() {
     const { thHead, thMsgs, thComposer, thEmpty } = inbox.el;
@@ -6822,7 +7375,7 @@
       ih("div", { class: "loe-inbox-spacer" }),
       inbox.el.sysNotiSlot, // 系統自動通知（renderInboxOrders 填）
       ih("button", { type: "button", class: "loe-inbox-btn" + (inbox.notesOpen ? " on" : ""), html: ic("notebook"), "aria-pressed": inbox.notesOpen ? "true" : "false", title: "這位客人的 LINE 記事本（客人看不到）",
-        onclick: () => { inbox.notesOpen = !inbox.notesOpen; if (inbox.notesOpen && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); renderInboxNotes(); renderInboxThread(); } },
+        onclick: () => { inbox.notesOpen = !inbox.notesOpen; if (inbox.notesOpen) closeDriverChat(); if (inbox.notesOpen && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); renderInboxNotes(); renderInboxThread(); } },
         ih("span", { text: "記事本" + (Number.isInteger(notesCount) ? ` ${notesCount}` : "") })),
       (() => {
         const prefix = getPrefix(); // pageContext 已指向這個帳號
@@ -6930,7 +7483,7 @@
       filters: $(".loe-inbox-filters"), rows: $(".loe-inbox-rows"), listSearch: $(".loe-inbox-list-search"),
       thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
       quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
-      orderBar: $(".loe-inbox-orders"),
+      orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"),
     };
     // 開著的對話定時重抓訂單狀態（分頁在背景就不抓）
     setInterval(() => {
@@ -7021,6 +7574,7 @@
       enhancePrefixChip();
       enhanceLineAdvancedMenu();
       addDispatchButton();
+      renderDriverChatButton();
       ensureQuickBar();
       checkSendToken();
       checkUturnOpen();
@@ -7044,6 +7598,7 @@
         // 換對話：關掉派單窗（第二道保險，見 chatIdAtOpen 快照）——面板掛在 body 不隨
         // 聊天區重繪消失，留著會讓「填的是 A 客人、人在 B 對話」有機會發生（#39435）
         closeDispatchPopover();
+        refreshNativeOrders(); // 司機對話：換對話就關面板、重抓這位客人的訂單
         // 重設成「貼底」並重新尋找捲動容器，接著幾次把它拉到底
         lastChatId = chat;
         chatScroller = null;
@@ -7234,6 +7789,9 @@
   .loe-inbox-order-col.arrived { background: #16a34a; }
   .loe-inbox-order-col.executing { background: #0d9488; }
   .loe-inbox-order-noti { color: #15803d; }
+  .loe-inbox-order-chat { height: 26px; padding: 0 10px; font-size: 12px; }
+  .loe-inbox-order-chat svg { width: 14px; height: 14px; }
+  .loe-inbox-dchat { position: absolute; top: 57px; right: 0; bottom: 0; width: min(400px, 100%); background: #fff; border-left: 1px solid #e3e7ee; box-shadow: -6px 0 18px rgba(15,23,42,.08); display: flex; flex-direction: column; z-index: 5; }
   img.loe-inbox-avatar { object-fit: cover; }
   .loe-inbox-msg.failed .loe-inbox-msg-meta { color: #b91c1c; }
   .loe-inbox-composer { flex: 0 0 auto; padding: 10px 20px 16px; background: #fff; border-top: 1px solid #e3e7ee; display: flex; flex-direction: column; gap: 8px; }
@@ -7280,6 +7838,7 @@
       <div class="loe-inbox-th-msgs" hidden></div>
       <div class="loe-inbox-th-empty">從中間選一位客人，或等通知進來</div>
       <aside class="loe-inbox-notes" hidden aria-label="記事本"></aside>
+      <aside class="loe-inbox-dchat" hidden aria-label="司機對話"></aside>
       <div class="loe-inbox-composer" hidden>
         <div class="loe-inbox-quick loe-qr-bar"></div>
         <div class="loe-inbox-composer-row">
