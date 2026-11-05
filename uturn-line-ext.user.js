@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.61.1
+// @version      1.62.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知、司機對話。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -7596,6 +7596,9 @@
       stats,
       ih("div", { class: "loe-inbox-spacer" }),
       ih("div", { class: "loe-inbox-actions" },
+        ih("button", { type: "button", class: "loe-inbox-btn" + (board.open ? " on" : ""), html: ic(board.open ? "inbox" : "truck"),
+          "aria-pressed": board.open ? "true" : "false", onclick: () => (board.open ? closeBoard() : openBoard()) },
+          ih("span", { text: board.open ? "回到對話" : "訂單看板" })),
         ih("button", { type: "button", class: "loe-inbox-btn", text: "全部開啟", onclick: () => inbox.bots.forEach((b) => { if (!inbox.enabled.has(b.botId)) inboxSetEnabled(b.botId, true); }) }),
         ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => inboxEnabledIds().forEach((id) => inboxSetEnabled(id, false)) }),
         authBtn, hint, soundBtn,
@@ -8156,6 +8159,248 @@
   }
 
   /* ---- 啟動（只在 INBOX_MODE） ---- */
+  /* ---------------------------------------------------------------------- *
+   * 訂單看板（獨立畫面，不影響收件匣）：同 admin 調度中心新版看板——預約／未派／承接／抵達／執行五欄，
+   *   範圍同調度中心權限（系統管理員全部車隊、其他人角色有調度中心頁面的車隊），「自己」模式同 admin。
+   *   GET /line-ext/dispatch-board?fleet=&mine=&version=（發送 KEY）；開著時每 15 秒抓一次（背景 60 秒），沒變只回 unchanged。
+   *   點卡片：右側抽屜看細節，可開客人對話（回收件匣）、司機對話、取消。
+   * ---------------------------------------------------------------------- */
+  const BOARD_FLEET_KEY = "loe_board_fleet_v1";
+  const BOARD_MINE_KEY = "loe_board_mine_v1";
+  const BOARD_REFRESH_MS = 15000;
+  const BOARD_HIDDEN_REFRESH_MS = 60000;
+  const BOARD_COLUMNS = [
+    { id: "booking", label: "預約" }, { id: "pending", label: "未派" }, { id: "accepted", label: "承接" },
+    { id: "arrived", label: "抵達" }, { id: "executing", label: "執行" },
+  ];
+  const BOARD_WAIT_WARN_MINS = 5; // 未派／抵達等超過這麼久標紅
+  const board = {
+    open: false, fleet: storeGet(BOARD_FLEET_KEY, "") || "", mine: storeGet(BOARD_MINE_KEY, false) === true,
+    q: "", data: null, fleets: [], version: "", loading: false, error: "", timer: 0, run: 0, selected: "", at: 0,
+  };
+  const boardChatOpen = () => !!driverChat.host && driverChat.host === inbox.el.boardChat; // 司機對話開在看板抽屜裡
+  const boardMinsSince = (iso) => { const t = msOf(iso); return t ? Math.max(0, Math.floor((Date.now() - t) / 60000)) : null; };
+  function boardSource(o) {
+    if (o.lineChatUrl) return "懶惰蟲";
+    if (o.clientLineGroup) return "群組叫車";
+    if (o.createdType === "client" || o.source === "client") return o.createdViaAi ? "AI 叫車" : "客叫";
+    return { discord: "Discord", system: "後台", store: "店家", line: "LINE" }[o.createdType || o.source] || "";
+  }
+  function boardCustomer(o) {
+    if (o.clientLineGroup) return [o.clientRequesterName, o.clientUserName].filter(Boolean).join(" / ");
+    return o.clientUserName || o.note || "";
+  }
+  // 每欄卡片右上角的時間：未派等多久、承接多久到、抵達等多久、執行上車多久、預約時間
+  function boardTime(col, o) {
+    if (col === "booking") return { text: o.scheduledAt ? inboxTime(msOf(o.scheduledAt)) : "", late: false };
+    if (col === "pending") { const m = boardMinsSince(o.createdAt); return { text: m == null ? "" : `已等 ${m} 分`, late: m >= BOARD_WAIT_WARN_MINS }; }
+    if (col === "accepted") {
+      if (o.delayMins > 0) return { text: `遲到 ${o.delayMins} 分`, late: true };
+      return { text: o.estPickupMins > 0 ? `約 ${o.estPickupMins} 分到` : o.acceptanceTime ? `接單 ${inboxTime(msOf(o.acceptanceTime))}` : "", late: false };
+    }
+    if (col === "arrived") { const m = boardMinsSince(o.arrivedAt); return { text: m == null ? "" : `已等 ${m} 分`, late: m >= BOARD_WAIT_WARN_MINS }; }
+    const m = boardMinsSince(o.pickedUpAt);
+    return { text: m == null ? "" : `上車 ${m} 分`, late: false };
+  }
+  const boardCar = (o) => [o.carPlate && `${o.carPlate}${o.carColor ? `(${o.carColor})` : ""}`, o.driverNo].filter(Boolean).join(" · ");
+  function boardMatches(o) {
+    const q = board.q.trim().toLowerCase();
+    if (!q) return true;
+    return [o.shortId, o.pickupAddress, o.destAddress, o.carPlate, o.driverNo, o.driverName, boardCustomer(o), o.oriTextDisplay || o.oriText, o.createdBy]
+      .some((v) => String(v || "").toLowerCase().includes(q));
+  }
+  function boardFind(id) {
+    for (const c of BOARD_COLUMNS) {
+      const o = (board.data?.[c.id] || []).find((x) => x.id === id);
+      if (o) return { col: c, order: o };
+    }
+    return null;
+  }
+
+  function openBoard() {
+    if (board.open) return;
+    board.open = true;
+    if (driverChat.host === inbox.el.dchat) closeDriverChat();
+    inbox.el.body.hidden = true;
+    inbox.el.board.hidden = false;
+    renderInboxHeader();
+    renderBoard();
+    loadBoard();
+  }
+  function closeBoard() {
+    if (!board.open) return;
+    board.open = false;
+    clearTimeout(board.timer);
+    board.run++;
+    if (boardChatOpen()) closeDriverChat();
+    board.selected = "";
+    inbox.el.board.hidden = true;
+    inbox.el.body.hidden = false;
+    renderInboxHeader();
+  }
+  function scheduleBoard() {
+    clearTimeout(board.timer);
+    if (!board.open) return;
+    board.timer = setTimeout(loadBoard, document.visibilityState === "visible" ? BOARD_REFRESH_MS : BOARD_HIDDEN_REFRESH_MS);
+  }
+  async function loadBoard(force) {
+    if (!board.open) return;
+    clearTimeout(board.timer);
+    if (!hasLineExtAuth()) { board.error = "請先按上方「身份授權」"; renderBoard(); return; }
+    const run = ++board.run;
+    board.loading = true;
+    renderBoardToolbar();
+    const q = `&fleet=${encodeURIComponent(board.fleet)}&mine=${board.mine}` + (force || !board.data ? "" : `&version=${encodeURIComponent(board.version)}`);
+    try {
+      const res = await lineExtApi("GET", "/line-ext/dispatch-board", undefined, q);
+      if (run !== board.run) return;
+      board.fleets = res.fleets || [];
+      board.at = Date.now();
+      board.error = "";
+      if (!res.unchanged && res.board) {
+        board.data = res.board;
+        board.version = res.version || "";
+        if (res.fleet !== board.fleet) { board.fleet = res.fleet; storeSet(BOARD_FLEET_KEY, board.fleet); }
+      }
+    } catch (e) {
+      if (run !== board.run) return;
+      board.error = e.message || String(e);
+    }
+    board.loading = false;
+    renderBoard();
+    scheduleBoard();
+  }
+  function setBoardScope(patch) {
+    Object.assign(board, patch, { data: null, version: "", selected: "" });
+    storeSet(BOARD_FLEET_KEY, board.fleet);
+    storeSet(BOARD_MINE_KEY, board.mine);
+    if (boardChatOpen()) closeDriverChat();
+    renderBoard();
+    loadBoard(true);
+  }
+
+  function renderBoard() {
+    renderBoardToolbar();
+    renderBoardColumns();
+    renderBoardDrawer();
+  }
+  // 工具列只在車隊清單／車隊／模式變了才重建（輪詢重畫不打斷搜尋框打字），更新時間與重新整理按鈕就地更新
+  function renderBoardToolbar() {
+    const bar = inbox.el.boardBar;
+    if (!bar) return;
+    const sig = JSON.stringify([board.fleets.map((f) => f.code), board.fleet, board.mine]);
+    if (bar.dataset.sig !== sig) {
+      bar.dataset.sig = sig;
+      bar.textContent = "";
+      const fleetSel = board.fleets.length > 1
+        ? ih("select", { class: "loe-board-select", "aria-label": "車隊", onchange: (e) => setBoardScope({ fleet: e.currentTarget.value }) },
+          board.fleets.map((f) => { const opt = ih("option", { value: f.code, text: f.name || f.code }); opt.selected = f.code === board.fleet; return opt; }))
+        : board.fleets.length ? ih("strong", { text: board.fleets[0].name || board.fleets[0].code }) : null;
+      const search = ih("input", { class: "loe-board-search", type: "search", value: board.q, placeholder: "搜尋單號、地址、車牌、司機、客人", "aria-label": "搜尋訂單" });
+      search.addEventListener("input", () => { board.q = search.value; renderBoardColumns(); });
+      const scopeBtn = (mine, text) => ih("button", { type: "button", class: "loe-inbox-btn" + (board.mine === mine ? " on" : ""),
+        "aria-pressed": board.mine === mine ? "true" : "false", onclick: () => board.mine !== mine && setBoardScope({ mine }) }, text);
+      bar.append(...[
+        ih("strong", { class: "loe-board-title", text: "訂單看板" }),
+        fleetSel,
+        ih("span", { class: "loe-board-seg" }, scopeBtn(false, "全部"), scopeBtn(true, "自己")),
+        search,
+        ih("span", { class: "loe-board-spacer" }),
+        ih("span", { class: "loe-inbox-muted loe-board-status" }),
+        ih("button", { type: "button", class: "loe-inbox-btn loe-board-refresh", html: ic("refresh"), onclick: () => loadBoard(true) }, ih("span", { text: "重新整理" })),
+      ].filter(Boolean));
+    }
+    bar.querySelector(".loe-board-status").textContent = board.loading ? "更新中…" : board.at ? `更新於 ${inboxTime(board.at)}` : "";
+    bar.querySelector(".loe-board-refresh").disabled = board.loading;
+  }
+  function renderBoardColumns() {
+    const host = inbox.el.boardCols;
+    if (!host) return;
+    host.textContent = "";
+    if (board.error && !board.data) { host.append(ih("div", { class: "loe-inbox-empty err", text: board.error })); return; }
+    if (!board.data) { host.append(ih("div", { class: "loe-inbox-empty", text: "讀取訂單中…" })); return; }
+    for (const c of BOARD_COLUMNS) {
+      const list = (board.data[c.id] || []).filter(boardMatches);
+      const total = board.data.counts?.[c.id] ?? list.length;
+      host.append(ih("section", { class: `loe-board-col ${c.id}`, "aria-label": c.label },
+        ih("div", { class: "loe-board-col-head" },
+          ih("span", { class: `loe-board-dot ${c.id}` }),
+          ih("strong", { text: c.label }),
+          ih("span", { class: "loe-board-count", text: board.q ? `${list.length}／${total}` : String(total) })),
+        ih("div", { class: "loe-board-cards" },
+          list.length ? list.map((o) => boardCard(c.id, o)) : ih("div", { class: "loe-board-none", text: board.q ? "沒有符合的單" : "沒有單" }))));
+    }
+  }
+  function boardCard(col, o) {
+    const t = boardTime(col, o);
+    const src = boardSource(o);
+    const car = boardCar(o);
+    return ih("button", { type: "button", class: "loe-board-card" + (board.selected === o.id ? " selected" : ""),
+      onclick: () => { board.selected = board.selected === o.id ? "" : o.id; if (boardChatOpen()) closeDriverChat(); renderBoardColumns(); renderBoardDrawer(); } },
+      ih("span", { class: "loe-board-card-top" },
+        ...[ih("strong", { text: o.shortId || "" }),
+          src ? ih("span", { class: "loe-board-src", text: src }) : null,
+          o.units > 1 ? ih("span", { class: "loe-board-src", text: `${o.units}台` }) : null,
+          ih("span", { class: "loe-board-spacer" }),
+          t.text ? ih("span", { class: "loe-board-time" + (t.late ? " late" : ""), text: t.text }) : null].filter(Boolean)),
+      ih("span", { class: "loe-board-addr", text: o.pickupAddress || o.oriTextDisplay || o.oriText || "" }),
+      ...[boardCustomer(o) ? ih("span", { class: "loe-board-sub", text: boardCustomer(o) }) : null,
+        car ? ih("span", { class: "loe-board-sub", text: car }) : col !== "pending" && col !== "booking" ? null : ih("span", { class: "loe-board-sub muted", text: "尚未派到車" })].filter(Boolean));
+  }
+
+  // 抽屜：訂單細節＋動作（開客人對話／在官方視窗開啟／司機對話／取消）
+  function renderBoardDrawer() {
+    const host = inbox.el.boardDrawer;
+    if (!host) return;
+    const found = board.selected && boardFind(board.selected);
+    host.hidden = !found;
+    if (!found) { host.textContent = ""; return; }
+    if (boardChatOpen()) return; // 司機對話開著時不重畫（輪詢不打斷打字）
+    host.textContent = "";
+    const { col, order: o } = found;
+    const chatUrl = o.lineChatUrl || o.oaChatUrl || "";
+    const [, gid, chatId] = chatUrl.match(/chat\.line\.biz\/(U[0-9a-f]{32})\/chat\/([CU][0-9a-f]{32})/i) || [];
+    const inInbox = gid && inbox.botById.has(gid);
+    const hasDriver = !!o.driverId;
+    const row = (label, value) => value ? ih("div", { class: "loe-board-kv" }, ih("span", { text: label }), ih("span", { text: value })) : null;
+    const when = (iso) => iso ? inboxTime(msOf(iso)) : "";
+    const summary = { id: o.id, shortId: o.shortId, hasDriver, column: col.id, columnLabel: col.label };
+    const chatHost = ih("div", { class: "loe-board-dchat" });
+    inbox.el.boardChat = chatHost;
+    host.append(
+      ih("div", { class: "loe-board-drawer-head" },
+        ih("span", { class: `loe-board-pill ${col.id}`, text: col.label }),
+        ih("strong", { text: o.shortId || "" }),
+        boardSource(o) ? ih("span", { class: "loe-board-src", text: boardSource(o) }) : null,
+        ih("span", { class: "loe-board-spacer" }),
+        ih("button", { type: "button", class: "loe-inbox-x", html: ic("x"), "aria-label": "關閉訂單細節", onclick: () => { board.selected = ""; renderBoardColumns(); renderBoardDrawer(); } })),
+      ih("div", { class: "loe-board-actions" },
+        ...[inInbox ? ih("button", { type: "button", class: "loe-inbox-btn primary", html: ic("message-square"), onclick: () => boardOpenChat(gid, chatId) }, ih("span", { text: "開啟客人對話" })) : null,
+          chatUrl && !inInbox ? ih("a", { class: "loe-inbox-btn", href: chatUrl, target: "_blank", rel: "noopener", html: ic("external-link") }, ih("span", { text: "在官方視窗開啟" })) : null,
+          hasDriver ? ih("button", { type: "button", class: "loe-inbox-btn", html: ic("message-square"),
+            onclick: () => openDriverChat({ host: chatHost, orders: [summary], orderId: o.id, onClose: () => { chatHost.textContent = ""; renderBoardDrawer(); } }) }, ih("span", { text: "司機對話" })) : null,
+          ih("button", { type: "button", class: "loe-inbox-btn loe-board-cancel", text: "取消",
+            onclick: () => cancelLineExtOrder(summary, (done) => { if (done) { board.selected = ""; setTimeout(() => loadBoard(true), 800); } }) }),
+        ].filter(Boolean)),
+      ih("div", { class: "loe-board-kvs" },
+        ...[row("上車", o.pickupAddress), row("下車", o.destAddress), row("客人", boardCustomer(o)),
+          row("司機", [o.driverNo, o.driverName].filter(Boolean).join(" ")), row("車輛", [boardCar(o), o.carModel].filter(Boolean).join(" · ")),
+          row("預約", when(o.scheduledAt)), row("派單", when(o.createdAt)), row("接單", when(o.acceptanceTime)),
+          row("抵達", when(o.arrivedAt)), row("上車時間", when(o.pickedUpAt)), row("建單", o.createdBy),
+          row("原文", o.oriTextDisplay || o.oriText)].filter(Boolean)),
+      ...(chatUrl ? [] : [ih("div", { class: "loe-inbox-muted loe-board-note", text: "這張單沒有對應到 LINE 對話（例如 Discord、後台派的單）。" })]),
+      chatHost,
+    ); // 原生 append 會把 null 印成文字，條件項目用展開
+  }
+  // 回收件匣打開這位客人的對話（不在清單裡就先抓進來）
+  async function boardOpenChat(botId, chatId) {
+    const key = inboxKey(botId, chatId);
+    if (!inbox.chats.has(key) && !(await inboxFetchChat(botId, chatId))) return toast("找不到這位客人的對話", "err", 3000);
+    closeBoard();
+    inboxOpenChat(key);
+  }
+  document.addEventListener("visibilitychange", () => { if (board.open && document.visibilityState === "visible") loadBoard(); });
+
   function bootInbox() {
     const root = document.getElementById("loe-inbox");
     if (!root) return;
@@ -8167,6 +8412,8 @@
       quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
       orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
       picker: $(".loe-inbox-picker"), tools: $(".loe-inbox-tools"), fileInput: $(".loe-inbox-file"), modal: $(".loe-inbox-modal"),
+      body: $(".loe-inbox-body"), board: $(".loe-board"), boardBar: $(".loe-board-bar"), boardCols: $(".loe-board-cols"),
+      boardDrawer: $(".loe-board-drawer"), boardChat: null,
     };
     // 開著的對話定時重抓訂單狀態（分頁在背景就不抓）
     setInterval(() => {
@@ -8561,6 +8808,49 @@
   .loe-inbox-x { width: 24px; height: 24px; border: 0; background: transparent; cursor: pointer; color: #6b7280; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
   .loe-inbox-x:hover { background: #f1f5f9; }
   .loe-inbox .loe-qr-bar { padding: 0; margin: 0; }
+  /* 訂單看板（獨立畫面） */
+  .loe-board { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; background: #f3f5f9; }
+  .loe-board-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 20px; background: #fff; border-bottom: 1px solid #e3e7ee; }
+  .loe-board-title { font-size: 15px; }
+  .loe-board-select { height: 32px; padding: 0 8px; border: 1px solid #d5dbe5; border-radius: 8px; background: #fff; font-size: 13px; }
+  .loe-board-seg { display: inline-flex; gap: 4px; }
+  .loe-board-search { width: 280px; max-width: 100%; height: 32px; padding: 0 10px; border: 1px solid #d5dbe5; border-radius: 8px; font-size: 13px; }
+  .loe-board-spacer { flex: 1 1 auto; }
+  .loe-board-main { flex: 1 1 auto; min-height: 0; display: flex; position: relative; }
+  .loe-board-cols { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; padding: 14px 20px; overflow-x: auto; }
+  .loe-board-col { min-height: 0; display: flex; flex-direction: column; background: #e9edf3; border-radius: 12px; padding: 10px; }
+  .loe-board-col-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 2px 4px 10px; }
+  .loe-board-dot { width: 10px; height: 10px; border-radius: 50%; background: #6b7280; }
+  .loe-board-count { min-width: 22px; height: 20px; padding: 0 6px; border-radius: 10px; background: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .loe-board-cards { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .loe-board-none { color: #6b7280; font-size: 12px; text-align: center; padding: 16px 0; }
+  .loe-board-card { text-align: left; background: #fff; border: 1px solid #e3e7ee; border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 5px; cursor: pointer; color: #1f2937; font-size: 13px; }
+  .loe-board-card:hover { border-color: #b6c2d6; }
+  .loe-board-card.selected { border-color: #1c6cf3; box-shadow: 0 0 0 2px rgba(28,108,243,.25); }
+  .loe-board-card-top { display: flex; align-items: center; gap: 6px; }
+  .loe-board-src { padding: 0 6px; height: 18px; border-radius: 4px; background: #eef1f6; color: #374151; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; }
+  .loe-board-time { font-size: 12px; font-weight: 600; color: #4b5563; white-space: nowrap; }
+  .loe-board-time.late { color: #b91c1c; }
+  .loe-board-addr { line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .loe-board-sub { font-size: 12px; color: #4b5563; }
+  .loe-board-sub.muted { color: #6b7280; }
+  .loe-board-dot.booking, .loe-board-pill.booking { background: #7c3aed; }
+  .loe-board-dot.pending, .loe-board-pill.pending { background: #b45309; }
+  .loe-board-dot.accepted, .loe-board-pill.accepted { background: #1c6cf3; }
+  .loe-board-dot.arrived, .loe-board-pill.arrived { background: #15803d; }
+  .loe-board-dot.executing, .loe-board-pill.executing { background: #0f766e; }
+  .loe-board-pill { color: #fff; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+  .loe-board-drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(440px, 100%); background: #fff; box-shadow: -10px 0 30px rgba(15,23,42,.16); display: flex; flex-direction: column; overflow-y: auto; z-index: 4; }
+  .loe-board-drawer-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #e3e7ee; }
+  .loe-board-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #f1f3f7; }
+  .loe-board-cancel { color: #b91c1c; border-color: #fecaca; }
+  .loe-board-kvs { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; }
+  .loe-board-kv { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+  .loe-board-kv > span:first-child { color: #6b7280; }
+  .loe-board-kv > span:last-child { white-space: pre-wrap; word-break: break-word; }
+  .loe-board-note { padding: 0 16px 12px; }
+  .loe-board-dchat { flex: 1 0 420px; display: flex; flex-direction: column; border-top: 1px solid #e3e7ee; min-height: 0; }
+  .loe-board-dchat:empty { display: none; }
 </style>
 </head>
 <body>
@@ -8606,6 +8896,13 @@
       </div>
     </main>
   </div>
+  <section class="loe-board" hidden aria-label="訂單看板">
+    <div class="loe-board-bar"></div>
+    <div class="loe-board-main">
+      <div class="loe-board-cols"></div>
+      <aside class="loe-board-drawer" hidden aria-label="訂單細節"></aside>
+    </div>
+  </section>
   <div class="loe-inbox-modal" hidden></div>
   <div class="loe-inbox-toasts" aria-live="polite"></div>
 </div>
