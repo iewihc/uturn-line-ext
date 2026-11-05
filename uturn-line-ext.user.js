@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.57.0
+// @version      1.58.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知、司機對話。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -72,6 +72,8 @@
   const DISPATCH_POP_CLASS = "loe-dispatch-pop";
   const DRIVER_CHAT_BUTTON_CLASS = "loe-dchat-button"; // 原生聊天頁「司機對話」按鈕（派單左邊）
   const DRIVER_CHAT_FLOAT_CLASS = "loe-dchat-float"; // 原生聊天頁的司機對話浮動面板
+  const NATIVE_ORDERS_BUTTON_CLASS = "loe-orders-button"; // 原生聊天頁「訂單」按鈕（這位客人的進行中訂單）
+  const NATIVE_ORDERS_PANEL_CLASS = "loe-orders-panel"; // 原生聊天頁的訂單浮動面板
   const ESTIMATE_BUTTON_CLASS = "loe-estimate-button"; // 估價按鈕
   const AUTOREPLY_KEY = "loe_dispatch_autoreply_v1"; // 派單後是否自動回覆客人
   const MEMO_INCLUDE_KEY = "loe_dispatch_memo_include_v1"; // 派單是否帶入筆記(note:)
@@ -704,13 +706,49 @@
     .loe-ai-toggle button:disabled { opacity: .6; cursor: progress; }
     .loe-ai-toggle .loe-ai-note { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; color: #94a3b8; font-weight: 600; cursor: help; }
 
+    /* 訂單列（收件匣訂單列、原生頁訂單面板共用） */
+    .loe-ord { display: flex; align-items: center; gap: 8px 10px; min-width: 0; flex-wrap: wrap; font-size: 13px; color: #1f2937; }
+    .loe-ord a { color: ${BLUE}; }
+    .loe-ord-text { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; min-width: 0; }
+    .loe-ord-col { padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; font-size: 12px; background: #6b7280; }
+    .loe-ord-col.booking { background: #7c3aed; }
+    .loe-ord-col.pending { background: #f59e0b; }
+    .loe-ord-col.accepted { background: ${BLUE}; }
+    .loe-ord-col.arrived { background: #16a34a; }
+    .loe-ord-col.executing { background: #0d9488; }
+    .loe-ord-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+    .loe-ord-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid #d5dbe5; background: #fff; color: #1f2937; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+    .loe-ord-btn:hover:not(:disabled) { background: #f8fafc; border-color: #b6c2d6; }
+    .loe-ord-btn:disabled { opacity: .55; cursor: progress; }
+    .loe-ord-btn.on { background: #eef4ff; border-color: ${BLUE}; color: ${BLUE}; }
+    .loe-ord-btn.noti { color: #6b7280; }
+    .loe-ord-btn.noti.on { background: #ecfdf3; border-color: #16a34a; color: #15803d; font-weight: 600; }
+    .loe-ord-btn.cancel { color: #b91c1c; border-color: #fecaca; }
+    .loe-ord-btn.cancel:hover:not(:disabled) { background: #fef2f2; border-color: #f87171; }
+    .loe-ord-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* 原生頁「訂單」按鈕＋面板（這位客人的進行中訂單） */
+    .${NATIVE_ORDERS_PANEL_CLASS} {
+      position: fixed; right: 16px; top: 72px; width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 260px);
+      z-index: 2147483000; background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(15,23,42,.25);
+      display: flex; flex-direction: column; overflow: hidden; font-size: 13px; color: #1f2937;
+    }
+    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ordp-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
+    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ordp-list { overflow-y: auto; padding: 4px 12px; }
+    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ord { padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ord:last-child { border-bottom: 0; }
+    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ordp-hint { padding: 8px 12px 10px; color: #6b7280; font-size: 12px; border-top: 1px solid #f1f5f9; }
+
     /* 司機對話：原生頁按鈕（派單左邊，藍色外框）＋浮動面板；面板內容兩種模式共用 */
+    .${NATIVE_ORDERS_BUTTON_CLASS},
     .${DRIVER_CHAT_BUTTON_CLASS} {
       position: relative; top: 4px; display: inline-flex; align-items: center; gap: 5px;
       height: 32px; margin-right: 8px; padding: 0 12px; border: 1px solid ${BLUE}; border-radius: 6px;
       background: #fff; color: ${BLUE}; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
-    .${DRIVER_CHAT_BUTTON_CLASS}.on, .${DRIVER_CHAT_BUTTON_CLASS}:hover { background: ${BLUE_SOFT}; }
+    .${DRIVER_CHAT_BUTTON_CLASS}.on, .${DRIVER_CHAT_BUTTON_CLASS}:hover,
+    .${NATIVE_ORDERS_BUTTON_CLASS}.on, .${NATIVE_ORDERS_BUTTON_CLASS}:hover { background: ${BLUE_SOFT}; }
+    .${NATIVE_ORDERS_BUTTON_CLASS} > svg,
     .${DRIVER_CHAT_BUTTON_CLASS} > svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .loe-dchat-badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
     .${DRIVER_CHAT_FLOAT_CLASS} {
@@ -5934,6 +5972,7 @@
     host: null, onClose: null, // 面板掛載點（收件匣 aside／原生頁浮動 div）與關閉時的收尾
     orders: [], orderId: "", // 可切換的訂單（有司機的）與目前這張
     order: null, me: null, messages: [], latestSeq: 0, hasMore: false,
+    syncedAt: "", readSentFor: "", // 已讀／收回變更的同步游標；已送過已讀的司機訊息 ID
     loading: false, polling: false, olderLoading: false, error: "", timer: 0, run: 0,
     el: {},
   };
@@ -5985,14 +6024,85 @@
     } catch (_) {}
   }
 
-  function driverChatApi(method, orderId, sub, body, query = "") {
+  /* 懶惰蟲訂單端點（發送 KEY＋這個後台帳號看得到這張單才放行）：
+   *   …/driver-chat…（司機對話）；PUT …/system-noti {enabled}；POST …/cancel */
+  function lineExtOrderApi(method, orderId, sub, body, query = "") {
     const account = getDispatcher();
     const key = storedSendKey(account);
     if (!account || !key)
-      return Promise.reject(new Error("請先在懶惰蟲完成「身份授權」才能和司機對話"));
+      return Promise.reject(new Error("請先在懶惰蟲完成「身份授權」"));
     return lineBackendRequest(method,
-      `/line-ext/orders/${encodeURIComponent(orderId)}/driver-chat${sub}?account=${encodeURIComponent(account)}${query}`,
+      `/line-ext/orders/${encodeURIComponent(orderId)}${sub}?account=${encodeURIComponent(account)}${query}`,
       body, undefined, { "X-Line-Send-Key": key });
+  }
+  const driverChatApi = (method, orderId, sub, body, query = "") =>
+    lineExtOrderApi(method, orderId, "/driver-chat" + sub, body, query);
+
+  /* ---- 訂單操作：系統自動通知隨時開關、取消訂單（收件匣訂單列、原生頁訂單面板共用） ---- */
+  const ORDER_NOTI_STATUS = { sent: "✓", sending: "…", failed: "✗", unknown: "?" };
+  const orderActionBusy = new Set(); // 動作進行中的 orderId（按鈕暫時停用）
+  function orderNotiSummary(order) {
+    return (order.systemNotiLogs || [])
+      .map((l) => `${l.stateLabel}${ORDER_NOTI_STATUS[l.status] || ""}${l.error ? `（${l.error}）` : ""}`)
+      .join("　");
+  }
+  // onChange(done)：開始時 done=false（重畫停用按鈕），結束時 done=true（重抓訂單）
+  async function runOrderAction(order, label, action, onChange) {
+    if (orderActionBusy.has(order.id)) return;
+    orderActionBusy.add(order.id);
+    onChange(false);
+    try { await action(); } catch (e) { toast(`${order.shortId || ""} ${label}失敗：${e.message || e}`, "err", 5000); }
+    orderActionBusy.delete(order.id);
+    onChange(true);
+  }
+  function setOrderSystemNoti(order, enabled, onChange) {
+    return runOrderAction(order, enabled ? "開啟自動通知" : "關閉自動通知", async () => {
+      const r = await lineExtOrderApi("PUT", order.id, "/system-noti", { enabled });
+      order.isSystemNoti = !!r.isSystemNoti;
+      if (r.warning) toast(`${order.shortId} 自動通知已開，但${r.warning}`, "warn", 7000);
+      else toast(`${order.shortId} 自動通知已${enabled ? "開啟" : "關閉"}`, "ok", 2500);
+    }, onChange);
+  }
+  function cancelLineExtOrder(order, onChange) {
+    const note = order.hasDriver ? "\n司機已接單：會依車隊規則判定一般／逾時取消，並通知司機。" : "";
+    if (!window.confirm(`取消訂單 ${order.shortId || ""}？${note}`)) return;
+    return runOrderAction(order, "取消訂單", async () => {
+      const r = await lineExtOrderApi("POST", order.id, "/cancel");
+      order.cancelled = true;
+      toast(`${order.shortId} 已取消（${r.status || "取消"}）`, "ok", 4000);
+    }, onChange);
+  }
+  const liveOrders = (list) => (list || []).filter((o) => !o.cancelled);
+  // 一張訂單一列：狀態、單號、上車點、車輛、追蹤、自動通知開關、司機對話、取消
+  function orderRow(o, { onChange, onChat }) {
+    const busy = orderActionBusy.has(o.id);
+    const car = o.carPlate ? `${o.carPlate}${o.carColor ? `(${o.carColor})` : ""}` : "";
+    const eta = o.column === "accepted" && o.estPickupMins > 0 ? `約${o.estPickupMins}分抵達` : "";
+    const noti = o.isSystemNoti ? orderNotiSummary(o) || "等待承接" : "";
+    return ih("div", { class: "loe-ord", title: o.oriText || "" },
+      ...[
+        ih("span", { class: `loe-ord-col ${o.column || ""}`, text: o.columnLabel || o.status }),
+        ih("strong", { text: o.shortId || "" }),
+        ih("span", { class: "loe-ord-text", text: o.pickupAddress || o.oriText || "" }),
+        car ? ih("span", { text: `🚗 ${car}${eta ? " · " + eta : ""}` }) : null,
+        o.trackingUrl ? ih("a", { href: o.trackingUrl, target: "_blank", rel: "noopener", text: "追蹤" }) : null,
+        ih("span", { class: "loe-ord-actions" },
+          ...[
+            ih("button", { type: "button", class: "loe-ord-btn noti" + (o.isSystemNoti ? " on" : ""), html: ic("bell"), disabled: busy,
+              title: o.isSystemNoti
+                ? `自動通知中：${noti}\n點擊關閉`
+                : "點擊開啟：之後司機承接／抵達，會用建單人員的懶惰蟲依車隊複製模板自動傳給客人（已過的不補送）",
+              onclick: () => setOrderSystemNoti(o, !o.isSystemNoti, onChange) },
+              ih("span", { text: o.isSystemNoti ? `自動通知 ${noti}` : "自動通知 關" })),
+            o.hasDriver && onChat
+              ? ih("button", { type: "button", class: "loe-ord-btn" + (driverChat.orderId === o.id ? " on" : ""), html: ic("message-square"),
+                title: "和這張單的司機對話（同 admin 調度中心的司機對話）", onclick: () => onChat(o.id) },
+                ih("span", { text: "司機對話" }), driverChatUnread(o) ? ih("span", { class: "loe-dchat-badge", text: "新" }) : null)
+              : null,
+            ih("button", { type: "button", class: "loe-ord-btn cancel", text: busy ? "處理中…" : "取消", disabled: busy,
+              title: "取消這張單（同 admin 調度中心取消）", onclick: () => cancelLineExtOrder(o, onChange) }),
+          ].filter(Boolean)),
+      ].filter(Boolean)); // 原生 append 會把 null 印成文字
   }
 
   // 開面板：host 由呼叫端提供（收件匣 aside 或原生頁浮動 div），onClose 負責收掉 host
@@ -6000,7 +6110,7 @@
     closeDriverChat();
     Object.assign(driverChat, {
       host, onClose, orders: orders.filter((o) => o.hasDriver), orderId,
-      order: null, me: null, messages: [], latestSeq: 0, hasMore: false, error: "", loading: true, run: driverChat.run + 1,
+      order: null, me: null, messages: [], latestSeq: 0, hasMore: false, syncedAt: "", readSentFor: "", error: "", loading: true, run: driverChat.run + 1,
     });
     buildDriverChat();
     const run = driverChat.run;
@@ -6036,21 +6146,27 @@
     }
     driverChat.messages.sort((a, b) => (a.seq && b.seq ? a.seq - b.seq : msOf(a.timestamp) - msOf(b.timestamp)));
   }
-  // 有新的司機訊息、畫面看得到時才標已讀（司機那邊才不會在你沒看時顯示已讀）
-  function driverChatAfterLoad(run, newDriverMessages) {
-    if (run !== driverChat.run) return;
-    const lastDriver = [...driverChat.messages].reverse().find((m) => m.sender === "driver");
-    if (lastDriver) driverChatMarkSeen(driverChat.orderId, lastDriver.timestamp);
-    if (newDriverMessages && document.visibilityState === "visible") {
-      const last = driverChat.messages[driverChat.messages.length - 1];
-      driverChatApi("POST", driverChat.orderId, "/read", { upToMessageId: (last && last.id) || "" }).catch(() => {});
-    }
+  // 畫面看得到、且有還沒送過已讀的司機訊息才標已讀（司機那邊才不會在你沒看時顯示已讀；切回分頁也會補標）
+  function driverChatMarkRead() {
+    if (!driverChat.host || driverChat.loading) return;
+    const lastDriver = [...driverChat.messages].reverse().find((m) => m.sender === "driver" && m.id);
+    if (!lastDriver) return;
+    driverChatMarkSeen(driverChat.orderId, lastDriver.timestamp);
+    if (document.visibilityState !== "visible" || driverChat.readSentFor === lastDriver.id) return;
+    driverChat.readSentFor = lastDriver.id;
+    const last = driverChat.messages[driverChat.messages.length - 1];
+    driverChatApi("POST", driverChat.orderId, "/read", { upToMessageId: (last && last.id) || "" })
+      .catch(() => { if (driverChat.readSentFor === lastDriver.id) driverChat.readSentFor = ""; });
   }
+  document.addEventListener("visibilitychange", driverChatMarkRead);
   function driverChatApply(data) {
     driverChat.order = data.order || driverChat.order;
     driverChat.me = data.me || driverChat.me;
     driverChat.latestSeq = Math.max(driverChat.latestSeq, data.latestSeq || 0);
+    if (data.syncedAt) driverChat.syncedAt = data.syncedAt;
   }
+  // 既有訊息的已讀／收回有沒有變（司機讀了、司機或其他調度收回）
+  const driverChatMsgState = (m) => `${m.isRecalled ? 1 : 0}|${(m.readBy || []).map((r) => r.type).sort().join(",")}`;
   async function loadDriverChat(run) {
     try {
       const data = await driverChatApi("GET", driverChat.orderId, "", undefined, "&limit=50");
@@ -6066,27 +6182,28 @@
     }
     driverChat.loading = false;
     renderDriverChat(true);
-    driverChatAfterLoad(run, driverChat.messages.some((m) => m.sender === "driver"));
+    if (run === driverChat.run) driverChatMarkRead();
   }
   async function pollDriverChat(run) {
     if (run !== driverChat.run || driverChat.loading || driverChat.polling) return;
     if (!driverChat.latestSeq) return loadDriverChat(run); // 還沒有任何訊息：重抓最新一頁
     driverChat.polling = true;
     try {
-      const data = await driverChatApi("GET", driverChat.orderId, "", undefined, `&sinceSeq=${driverChat.latestSeq}&limit=100`);
+      const since = driverChat.syncedAt ? `&updatedSince=${encodeURIComponent(driverChat.syncedAt)}` : "";
+      const data = await driverChatApi("GET", driverChat.orderId, "", undefined, `&sinceSeq=${driverChat.latestSeq}${since}&limit=100`);
       if (run !== driverChat.run) return;
-      const fresh = (data.messages || []).filter((m) => !driverChat.messages.some((x) => x.id === m.id));
+      const incoming = data.messages || [];
+      const known = new Map(driverChat.messages.filter((x) => x.id).map((x) => [x.id, x]));
+      const fresh = incoming.filter((m) => !known.has(m.id));
+      const changed = incoming.filter((m) => known.has(m.id) && driverChatMsgState(known.get(m.id)) !== driverChatMsgState(m));
       const statusChanged = data.order && driverChat.order && data.order.status !== driverChat.order.status;
       driverChatApply(data);
+      const hadError = !!driverChat.error;
       driverChat.error = "";
-      if (fresh.length) {
-        driverChatMerge(fresh);
-        renderDriverChatMsgs(false);
-        if (fresh.some((m) => m.sender === "driver")) {
-          if (document.visibilityState !== "visible") driverChatBeep();
-          driverChatAfterLoad(run, true);
-        }
-      }
+      if (fresh.length || changed.length) driverChatMerge([...fresh, ...changed]);
+      if (fresh.length || changed.length || hadError) renderDriverChatMsgs(false);
+      if (fresh.some((m) => m.sender === "driver") && document.visibilityState !== "visible") driverChatBeep();
+      driverChatMarkRead();
       if (statusChanged) renderDriverChatHead();
     } catch (e) {
       if (run === driverChat.run && !driverChat.error) { driverChat.error = e.message || String(e); renderDriverChatMsgs(false); }
@@ -6321,7 +6438,8 @@
       nativeOrders.key = key;
       nativeOrders.list = [];
       closeDriverChat();
-      renderDriverChatButton();
+      closeNativeOrdersPanel();
+      renderNativeButtons();
     }
     if (!key || !getDispatcher()) return;
     const run = ++nativeOrders.run;
@@ -6331,8 +6449,80 @@
       nativeOrders.list = list;
       driverChatNotifyOrders(list);
       syncDriverChatOrders(list);
-      renderDriverChatButton();
+      renderNativeOrdersPanel();
+      renderNativeButtons();
     } catch (_) { /* 後端暫時查不到就維持原狀，下次再試 */ }
+  }
+  function renderNativeButtons() {
+    renderNativeOrdersButton();
+    renderDriverChatButton();
+  }
+  // 「訂單 N」按鈕：這位客人有進行中訂單就出現（在司機對話／派單左邊），點開訂單面板
+  const nativeOrdersPanel = { el: null };
+  function renderNativeOrdersButton() {
+    const group = document.querySelector(".send-group.btn-group");
+    if (!group) return;
+    let btn = group.parentElement.querySelector(`.${NATIVE_ORDERS_BUTTON_CLASS}`);
+    const list = liveOrders(nativeOrders.list);
+    if (!list.length) { if (btn) btn.remove(); closeNativeOrdersPanel(); return; }
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = NATIVE_ORDERS_BUTTON_CLASS;
+      btn.title = "這位客人的進行中訂單：狀態、自動通知開關、取消";
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (nativeOrdersPanel.el) closeNativeOrdersPanel();
+        else openNativeOrdersPanel();
+      });
+      const anchor = group.parentElement.querySelector(`.${DRIVER_CHAT_BUTTON_CLASS}`) || group.parentElement.querySelector(`.${DISPATCH_BUTTON_CLASS}`);
+      (anchor || group).insertAdjacentElement("beforebegin", btn);
+    }
+    const noti = list.some((o) => o.isSystemNoti);
+    const sig = `${list.length}|${noti ? 1 : 0}|${nativeOrdersPanel.el ? 1 : 0}`;
+    if (btn.dataset.sig === sig) return;
+    btn.dataset.sig = sig;
+    btn.classList.toggle("on", !!nativeOrdersPanel.el);
+    btn.textContent = "";
+    btn.insertAdjacentHTML("beforeend", ic(noti ? "bell" : "truck"));
+    btn.append(ih("span", { text: `訂單 ${list.length}` }));
+  }
+  function openNativeOrdersPanel() {
+    closeDriverChat();
+    const host = ih("section", { class: NATIVE_ORDERS_PANEL_CLASS, "aria-label": "這位客人的訂單" });
+    host.addEventListener("click", (e) => e.stopPropagation());
+    document.body.appendChild(host);
+    nativeOrdersPanel.el = host;
+    renderNativeOrdersPanel();
+    renderNativeOrdersButton();
+  }
+  function closeNativeOrdersPanel() {
+    if (!nativeOrdersPanel.el) return;
+    nativeOrdersPanel.el.remove();
+    nativeOrdersPanel.el = null;
+    renderNativeOrdersButton();
+  }
+  function nativeOrdersChanged(done) {
+    renderNativeOrdersPanel();
+    renderNativeButtons();
+    if (done) window.setTimeout(refreshNativeOrders, 800);
+  }
+  function renderNativeOrdersPanel() {
+    const host = nativeOrdersPanel.el;
+    if (!host) return;
+    const list = liveOrders(nativeOrders.list);
+    host.textContent = "";
+    host.append(
+      ih("div", { class: "loe-ordp-head" },
+        ih("strong", { text: "這位客人的訂單" }),
+        ih("span", { class: "loe-dchat-spacer" }),
+        ih("button", { type: "button", class: "loe-dchat-x", html: ic("x"), "aria-label": "關閉訂單面板", onclick: closeNativeOrdersPanel })),
+      ih("div", { class: "loe-ordp-list" }, list.length
+        ? list.map((o) => orderRow(o, { onChange: nativeOrdersChanged,
+          onChat: (id) => { closeNativeOrdersPanel(); openNativeDriverChat(id); } }))
+        : ih("div", { class: "loe-dchat-empty", text: "目前沒有進行中的訂單" })),
+      ih("div", { class: "loe-ordp-hint", text: "自動通知開著時，司機承接／抵達會用建單人員的懶惰蟲，依車隊複製模板自動傳給客人；隨時可開關，已過的節點不補送。" }));
   }
   function renderDriverChatButton() {
     const group = document.querySelector(".send-group.btn-group");
@@ -6368,6 +6558,7 @@
   function openNativeDriverChat(orderId) {
     const withDriver = nativeOrders.list.filter((o) => o.hasDriver);
     if (!withDriver.length) return;
+    closeNativeOrdersPanel();
     const target = orderId || (withDriver.find(driverChatUnread) || withDriver[0]).id;
     const host = ih("section", { class: DRIVER_CHAT_FLOAT_CLASS, "aria-label": "司機對話" });
     host.addEventListener("click", (e) => e.stopPropagation());
@@ -7251,7 +7442,6 @@
     if (!chats.length) rows.append(ih("div", { class: "loe-inbox-empty", text: !inbox.enabled.size ? "打開左邊的帳號開關開始監聽。" : (inbox.el.listSearch?.value || "").trim() ? "沒有符合搜尋的對話。" : "沒有符合的對話。換個篩選，或等新訊息進來。" }));
   }
   /* ---- 訂單狀態／系統自動通知 ---- */
-  const INBOX_NOTI_STATUS = { sent: "✓", sending: "…", failed: "✗", unknown: "?" };
   async function inboxLoadOrders(chat) {
     const prev = inbox.orders.get(chat.key);
     const st = { list: prev ? prev.list : [], loading: true, error: "" };
@@ -7278,12 +7468,12 @@
     const chat = inbox.selected && inbox.chats.get(inbox.selected);
     if (chat) window.setTimeout(() => inboxLoadOrders(chat), 800);
   }
-  function inboxNotiSummary(order) {
-    return (order.systemNotiLogs || [])
-      .map((l) => `${l.stateLabel}${INBOX_NOTI_STATUS[l.status] || ""}${l.error ? `（${l.error}）` : ""}`)
-      .join("　");
+  // 訂單有動作（開關自動通知、取消）：先重畫停用按鈕，結束後重抓
+  function inboxOrdersChanged(done) {
+    renderInboxOrders();
+    if (done) inboxReloadSelectedOrders();
   }
-  // 標頭「自動通知」＋標頭下方訂單列；兩者都獨立於訊息串重繪（輪詢不會把捲動拉回底部）
+  // 標頭「自動通知」（點擊整批開關）＋標頭下方訂單列；兩者都獨立於訊息串重繪（輪詢不會把捲動拉回底部）
   function renderInboxOrders() {
     const slot = inbox.el.sysNotiSlot, bar = inbox.el.orderBar;
     if (!slot || !bar) return;
@@ -7293,33 +7483,23 @@
     const st = chat && inbox.orders.get(chat.key);
     bar.hidden = !chat;
     if (!chat) return;
-    const list = st ? st.list : [];
+    const list = liveOrders(st && st.list);
     const notiOn = list.some((o) => o.isSystemNoti);
-    const notiTip = list.filter((o) => o.isSystemNoti).map((o) => `${o.shortId} ${inboxNotiSummary(o) || "等待司機承接"}`).join("\n");
-    slot.append(ih("span", { class: "loe-inbox-btn loe-inbox-sysnoti" + (notiOn ? " on" : " off"), html: ic("bell"),
-      title: notiOn ? `系統自動通知中\n${notiTip}` : list.length ? "這張單沒有開系統自動通知（派單時勾選「系統自動通知」）" : "沒有進行中的訂單" },
+    const notiTip = list.filter((o) => o.isSystemNoti).map((o) => `${o.shortId} ${orderNotiSummary(o) || "等待司機承接"}`).join("\n");
+    slot.append(ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-sysnoti" + (notiOn ? " on" : " off"), html: ic("bell"),
+      disabled: !list.length || list.some((o) => orderActionBusy.has(o.id)),
+      title: !list.length ? "沒有進行中的訂單"
+        : notiOn ? `系統自動通知中（點擊全部關閉）\n${notiTip}`
+          : "點擊開啟這位客人進行中訂單的系統自動通知（之後的承接／抵達自動傳給客人）",
+      onclick: () => list.filter((o) => !!o.isSystemNoti === notiOn).forEach((o) => setOrderSystemNoti(o, !notiOn, inboxOrdersChanged)) },
       ih("span", { text: notiOn ? "自動通知" : "自動通知 關" })));
 
     if (!st || (st.loading && !list.length)) { bar.append(ih("span", { class: "loe-inbox-muted", text: "讀取訂單中…" })); return; }
     if (st.error && !list.length) { bar.append(ih("span", { class: "loe-inbox-muted err", text: "訂單讀取失敗：" + st.error })); return; }
     if (!list.length) { bar.append(ih("span", { class: "loe-inbox-muted", text: "目前沒有進行中的訂單" })); return; }
-    for (const o of list) {
-      const car = o.carPlate ? `${o.carPlate}${o.carColor ? `(${o.carColor})` : ""}` : "";
-      const eta = o.column === "accepted" && o.estPickupMins > 0 ? `約${o.estPickupMins}分抵達` : "";
-      const noti = o.isSystemNoti ? inboxNotiSummary(o) : "";
-      bar.append(ih("div", { class: "loe-inbox-order", title: o.oriText || "" },
-        ih("span", { class: `loe-inbox-order-col ${o.column || ""}`, text: o.columnLabel || o.status }),
-        ih("strong", { text: o.shortId || "" }),
-        ih("span", { class: "loe-inbox-order-text", text: o.pickupAddress || o.oriText || "" }),
-        car ? ih("span", { text: `🚗 ${car}${eta ? " · " + eta : ""}` }) : null,
-        o.trackingUrl ? ih("a", { href: o.trackingUrl, target: "_blank", rel: "noopener", text: "追蹤" }) : null,
-        o.isSystemNoti ? ih("span", { class: "loe-inbox-order-noti", text: "自動通知 " + (noti || "等待承接") }) : null,
-        o.hasDriver ? ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-order-chat" + (driverChat.orderId === o.id ? " on" : ""),
-          html: ic("message-square"), title: "和這張單的司機對話（同 admin 調度中心的司機對話）",
-          onclick: () => (driverChat.orderId === o.id ? closeDriverChat() : openInboxDriverChat(o.id)) },
-          ih("span", { text: "司機對話" }), driverChatUnread(o) ? ih("span", { class: "loe-dchat-badge", text: "新" }) : null) : null,
-      ));
-    }
+    for (const o of list)
+      bar.append(orderRow(o, { onChange: inboxOrdersChanged,
+        onChat: (id) => (driverChat.orderId === id ? closeDriverChat() : openInboxDriverChat(id)) }));
     // 司機對話面板從訂單列下方開始，不蓋住訂單列（訂單數會變，每次重畫重算）
     if (inbox.el.dchat && !inbox.el.dchat.hidden) inbox.el.dchat.style.top = `${bar.offsetTop + bar.offsetHeight}px`;
   }
@@ -7574,7 +7754,7 @@
       enhancePrefixChip();
       enhanceLineAdvancedMenu();
       addDispatchButton();
-      renderDriverChatButton();
+      renderNativeButtons();
       ensureQuickBar();
       checkSendToken();
       checkUturnOpen();
@@ -7774,23 +7954,11 @@
   .loe-inbox-msg.out .loe-copy-button, .loe-inbox-msg.out .loe-forward-button { background: rgba(255,255,255,.96); }
   .loe-inbox-bubble.loe-has-forward { min-width: 96px; }
   .loe-inbox-ai-slot { display: inline-flex; align-items: center; }
-  .loe-inbox-sysnoti { cursor: default; }
   .loe-inbox-sysnoti.on { background: #ecfdf3; border-color: #16a34a; color: #15803d; font-weight: 600; }
   .loe-inbox-sysnoti.off { color: #6b7280; }
   .loe-inbox-orders { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 8px 20px; background: #fafbfd; border-bottom: 1px solid #e3e7ee; font-size: 13px; }
   .loe-inbox-orders .err { color: #dc2626; }
-  .loe-inbox-order { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
-  .loe-inbox-order a { color: #1c6cf3; }
-  .loe-inbox-order-text { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; }
-  .loe-inbox-order-col { padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; font-size: 12px; background: #6b7280; }
-  .loe-inbox-order-col.booking { background: #7c3aed; }
-  .loe-inbox-order-col.pending { background: #f59e0b; }
-  .loe-inbox-order-col.accepted { background: #1c6cf3; }
-  .loe-inbox-order-col.arrived { background: #16a34a; }
-  .loe-inbox-order-col.executing { background: #0d9488; }
-  .loe-inbox-order-noti { color: #15803d; }
-  .loe-inbox-order-chat { height: 26px; padding: 0 10px; font-size: 12px; }
-  .loe-inbox-order-chat svg { width: 14px; height: 14px; }
+  .loe-inbox-sysnoti:disabled { opacity: 1; }
   .loe-inbox-dchat { position: absolute; top: 57px; right: 0; bottom: 0; width: min(400px, 100%); background: #fff; border-left: 1px solid #e3e7ee; box-shadow: -6px 0 18px rgba(15,23,42,.08); display: flex; flex-direction: column; z-index: 5; }
   img.loe-inbox-avatar { object-fit: cover; }
   .loe-inbox-msg.failed .loe-inbox-msg-meta { color: #b91c1c; }
