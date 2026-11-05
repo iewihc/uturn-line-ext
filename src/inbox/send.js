@@ -33,7 +33,9 @@ async function inboxOpenChat(key) {
   inboxSetContext(inbox.chats.get(key) || null);
   inboxRenderAll();
   const chat = inbox.chats.get(key);
+  if (inbox.pinNotes) inbox.notesOpen = true; // 選項：固定開啟記事本
   if (chat && inbox.notesOpen && !inbox.notes.has(key)) inboxLoadNotes(chat);
+  if (chat && chat.unread && inbox.autoRead) inboxMarkRead(chat); // 選項：開啟對話自動標已讀
   if (chat) inboxLoadOrders(chat);
   if (!chat || inbox.threads.has(key)) return;
   const th = { list: [], loading: true, error: "" };
@@ -83,7 +85,7 @@ async function inboxDeliver(chat, bubble, deliver) {
     bubble.pending = false;
     if (!bubble.message.id) bubble.message.id = firstText([resp?.id, resp?.messageId, resp?.message?.id]);
     chat.preview = inboxPreview(bubble) || chat.preview; chat.at = Date.now();
-    if (chat.unread) inboxMarkRead(chat); // 回覆了就等於看過
+    if (chat.unread && inbox.autoRead) inboxMarkRead(chat); // 選項「自動標已讀」才標；沒開一律手動按
     // 客服已接手：AI 處理中的對話自動轉人工（同 LINE 聊天室的送出手勢）
     if (aiState && aiState.status === "ready" && !aiState.handoff && !aiState.busy && aiState.bot === chat.botId && aiState.chat === chat.chatId) switchAiHandoff(true, true);
     inboxRenderAll();

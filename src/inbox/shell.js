@@ -7,12 +7,14 @@ import { UTURN_BUILD } from "../core/constants.js";
 import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
 import { inboxConnect, inboxEnabledIds, inboxLoadChats, inboxSetEnabled, inboxUnreadTotal } from "./chats.js";
-import { INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
+import { inboxLoadNotes, inboxMarkRead, renderInboxNotes } from "./chat-tools.js";
+import { INBOX_AUTO_READ_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
 import { renderInboxList } from "./list.js";
 import { inboxBeep, inboxSoundReady } from "./notify.js";
 import { inboxChatColumns, inboxLoadBoard, inboxQueueLink, inboxScheduleBoard } from "./order-status.js";
-import { inboxLoadOrders } from "./orders.js";
+import { inboxLoadOrders, renderInboxOrders } from "./orders.js";
 import { renderInboxThread, renderInboxToasts } from "./thread.js";
+import { GEAR_ICON } from "../prefix.js";
 import { getChatOverrides, getDispatcher, getPrefixForGid } from "../settings.js";
 import { toast } from "../ui/toast.js";
 
@@ -25,6 +27,41 @@ function inboxRenderAll() {
   renderInboxToasts();
   const n = inboxUnreadTotal();
   document.title = (n ? `(${n}) ` : "") + "UTurn 收件匣";
+}
+/* ---- 右上「選項」：固定開啟司機對話／記事本、自動標已讀、提示音（都記在這台電腦） ---- */
+function inboxOptionsButton() {
+  const wrap = ih("div", { class: "loe-inbox-options" });
+  const set = (key, field, value) => { inbox[field] = value; storeSet(key, value); };
+  const row = (label, checked, onChange, hint) => ih("label", { class: "loe-inbox-option" },
+    ih("span", { class: "loe-inbox-option-text" }, ih("span", { text: label }), hint ? ih("small", { text: hint }) : null),
+    ih("input", { type: "checkbox", checked, onchange: (e) => onChange(e.currentTarget.checked) }));
+  wrap.append(ih("button", { type: "button", class: "loe-inbox-btn" + (inbox.optionsOpen ? " on" : ""), html: GEAR_ICON, "aria-expanded": inbox.optionsOpen ? "true" : "false",
+    onclick: (e) => { e.stopPropagation(); inbox.optionsOpen = !inbox.optionsOpen; renderInboxHeader(); } }, ih("span", { text: "選項" })));
+  if (!inbox.optionsOpen) return wrap;
+  const chat = inbox.selected && inbox.chats.get(inbox.selected);
+  wrap.append(ih("div", { class: "loe-inbox-options-menu", role: "menu", "aria-label": "選項", onclick: (e) => e.stopPropagation() },
+    ih("div", { class: "loe-inbox-options-group", text: "右欄" }),
+    row("固定開啟司機對話", inbox.pinDchat, (v) => { set(INBOX_PIN_DCHAT_KEY, "pinDchat", v); if (v && chat) { inbox.dchatAutoFor = ""; inboxLoadOrders(chat); } renderInboxOrders(); },
+      "選到有司機的單就自動打開，多台開第一台"),
+    row("固定開啟記事本", inbox.pinNotes, (v) => {
+      set(INBOX_PIN_NOTES_KEY, "pinNotes", v);
+      if (v) { inbox.notesOpen = true; inbox.notesCollapsed = false; if (chat && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); }
+      renderInboxNotes(); renderInboxThread();
+    }, "可以收起，但不會關掉"),
+    ih("div", { class: "loe-inbox-options-group", text: "已讀" }),
+    row("開啟對話自動標已讀", inbox.autoRead, (v) => { set(INBOX_AUTO_READ_KEY, "autoRead", v); if (v && chat?.unread) inboxMarkRead(chat); },
+      "不勾＝永遠不自動標，只有按「標為已讀」才標（回覆後也不標）"),
+    ih("div", { class: "loe-inbox-options-group", text: "提示音" }),
+    row("新訊息提示音", inbox.sound, (v) => {
+      set(INBOX_SOUND_KEY, "sound", v);
+      if (v) {
+        inboxBeep(); // 使用者手勢裡建立／恢復 AudioContext
+        if (typeof Notification === "function" && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+      }
+    }),
+    ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-options-test", html: ic("bell"), onclick: () => inboxBeep() }, ih("span", { text: "試聽" })),
+  ));
+  return wrap;
 }
 function renderInboxHeader() {
   const host = inbox.el.header;
@@ -39,19 +76,7 @@ function renderInboxHeader() {
     ih("span", { class: "loe-inbox-muted", text: "未讀對話" }),
     ih("span", { class: "loe-inbox-badge", text: String(inboxUnreadTotal()) }),
   );
-  const soundBtn = ih("button", {
-    type: "button", class: "loe-inbox-btn" + (inbox.sound ? " on" : ""), "aria-pressed": inbox.sound ? "true" : "false",
-    html: ic("bell"),
-    onclick: () => {
-      inbox.sound = !inbox.sound;
-      storeSet(INBOX_SOUND_KEY, inbox.sound);
-      if (inbox.sound) {
-        inboxBeep(); // 使用者手勢裡建立／恢復 AudioContext
-        if (typeof Notification === "function" && Notification.permission === "default") Notification.requestPermission().catch(() => {});
-      }
-      renderInboxHeader();
-    },
-  }, ih("span", { text: inbox.sound ? "提示音 開" : "提示音 關" }));
+  const optionsBtn = inboxOptionsButton();
   const hint = inboxSoundReady() ? null : ih("span", { class: "loe-inbox-hint", text: "點一下頁面啟用提示音" });
   const authed = hasLineExtAuth();
   const authBtn = ih("button", {
@@ -75,7 +100,7 @@ function renderInboxHeader() {
           ih("span", { text: board.open ? "回到對話" : "訂單看板" })),
         ih("button", { type: "button", class: "loe-inbox-btn", text: "全部開啟", onclick: () => inbox.bots.forEach((b) => { if (!inbox.enabled.has(b.botId)) inboxSetEnabled(b.botId, true); }) }),
         ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => inboxEnabledIds().forEach((id) => inboxSetEnabled(id, false)) }),
-        authBtn, hint, soundBtn, backBtn)
+        authBtn, hint, optionsBtn, backBtn)
       : ih("div", { class: "loe-inbox-actions" }, authBtn, backBtn), // 沒授權：其他功能先不開
   ].filter(Boolean)); // 原生 append 會把 null 印成文字
 }

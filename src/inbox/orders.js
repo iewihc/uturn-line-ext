@@ -2,11 +2,10 @@
 import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
 import { closeDriverChat, driverChat, driverChatDock, openDriverChat, renderDriverChatHead, syncDriverChatOrders } from "../driver-chat.js";
-import { renderInboxNotes } from "./chat-tools.js";
 import { INBOX_DCHAT_DOCK_KEY, INBOX_ORDERS_COLLAPSED_KEY, ih, inbox } from "./core.js";
 import { INBOX_BOARD_AFTER_ACTION_MS, inboxLoadBoard, inboxPatchBoard } from "./order-status.js";
 import { inboxOpenChat } from "./send.js";
-import { renderInboxThread } from "./thread.js";
+import { renderInboxSide } from "./side.js";
 import { fetchChatOrders } from "../orders-lookup.js";
 import { liveOrders, orderActionBusy, orderNotiSummary, orderRow, setOrderSystemNoti } from "../orders.js";
 
@@ -24,17 +23,17 @@ async function inboxLoadOrders(chat) {
   st.loading = false;
   if (inbox.selected === chat.key) { renderInboxOrders(); inboxAutoOpenDriverChat(chat, st.list); }
 }
-// 選到有司機的訂單：自動打開司機對話（多台開第一台；司機訊息通知卡點進來的開那一台）。
-// 同一位客人手動關掉後不再自動開，換一位客人或點通知卡才會再開。
+// 選項「固定開啟司機對話」：選到有司機的訂單就自動打開（多台開第一台）；司機訊息通知卡點進來的一律開那一台。
+// 同一位客人手動關掉後不再自動開，換一位客人或點通知卡才會再開。自動打開不搶客人輸入框的游標。
 function inboxAutoOpenDriverChat(chat, list) {
   const withDriver = liveOrders(list).filter((o) => o.hasDriver);
   const want = inbox.dchatWant && withDriver.find((o) => o.id === inbox.dchatWant);
-  if (!want && (inbox.dchatAutoFor === chat.key || driverChat.host === inbox.el.dchat)) return;
+  if (!want && (!inbox.pinDchat || inbox.dchatAutoFor === chat.key || driverChat.host === inbox.el.dchat)) return;
   const target = want || withDriver[0];
   if (!target) return;
   inbox.dchatWant = "";
   inbox.dchatAutoFor = chat.key;
-  if (driverChat.orderId !== target.id) openInboxDriverChat(target.id);
+  if (driverChat.orderId !== target.id) openInboxDriverChat(target.id, !want);
 }
 // 通知卡「司機對話」：開那位客人的對話，訂單載入後開那一台的司機對話
 function inboxOpenDriverChatFor(chatKey, orderId) {
@@ -43,25 +42,27 @@ function inboxOpenDriverChatFor(chatKey, orderId) {
   const chat = inbox.chats.get(chatKey);
   if (chat) inboxLoadOrders(chat);
 }
-function openInboxDriverChat(orderId) {
+// auto：自動打開（不把游標移到司機輸入框）
+function openInboxDriverChat(orderId, auto = false) {
   const chat = inbox.selected && inbox.chats.get(inbox.selected);
   const host = inbox.el.dchat;
   if (!chat || !host) return;
-  if (inbox.notesOpen) { inbox.notesOpen = false; renderInboxNotes(); renderInboxThread(); }
   inboxPlaceDchat();
   host.hidden = false;
-  openDriverChat({ host, orders: inbox.orders.get(chat.key)?.list || [], orderId, onClose: () => { host.hidden = true; renderInboxOrders(); } });
+  openDriverChat({ host, orders: inbox.orders.get(chat.key)?.list || [], orderId, focus: !auto,
+    onClose: () => { host.hidden = true; renderInboxOrders(); } });
   renderInboxOrders();
 }
-// 收件匣司機對話兩種擺法：停靠＝放到 body 最後、成為第四欄（官方帳號｜官方訊息｜對話｜司機對話）；
+// 收件匣司機對話兩種擺法：停靠＝右欄上半（官方帳號｜官方訊息｜對話｜司機對話＋記事本）；
 // 浮動＝放回對話區、蓋在右側、可拖曳。切換只是把同一個節點搬家，內容與監聽都還在。
 function inboxPlaceDchat() {
   const host = inbox.el.dchat;
   if (!host) return;
   const dock = inbox.dchatDock;
   host.classList.toggle("dock", dock);
-  const parent = dock ? inbox.el.body : inbox.el.thread;
-  if (host.parentElement !== parent) { driverChatDock(host); parent.append(host); }
+  if (dock) { if (host.parentElement !== inbox.el.side) { driverChatDock(host); inbox.el.side.prepend(host); } }
+  else if (host.parentElement !== inbox.el.thread) { driverChatDock(host); inbox.el.thread.append(host); }
+  renderInboxSide();
 }
 function inboxToggleDchatDock() {
   inbox.dchatDock = !inbox.dchatDock;
@@ -85,6 +86,7 @@ function inboxOrdersChanged(done) {
 }
 // 標頭「自動通知」（點擊整批開關）＋標頭下方訂單列；兩者都獨立於訊息串重繪（輪詢不會把捲動拉回底部）
 function renderInboxOrders() {
+  renderInboxSide(); // 右欄（司機對話／記事本／沒有單的說明）跟著訂單狀態
   const slot = inbox.el.sysNotiSlot, bar = inbox.el.orderBar;
   if (!slot || !bar) return;
   slot.textContent = "";

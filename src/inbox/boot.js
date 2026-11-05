@@ -1,4 +1,5 @@
 // 收件匣啟動：條款 → 綁定畫面事件 → 讀官方帳號 → 授權閘門 → 連線與輪詢。
+import { initInboxSide } from "./side.js";
 import { initInboxRelay } from "./relay.js";
 import { openDispatchPopover } from "../dispatch.js";
 import { inboxConnect, inboxEnabledIds, inboxLoadBots, inboxLoadChats } from "./chats.js";
@@ -28,6 +29,7 @@ function bootInbox() {
     thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
     quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
     orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
+    side: $(".loe-inbox-side"), sideSplit: $(".loe-inbox-side-split"), sideEmpty: $(".loe-inbox-side-empty"),
     picker: $(".loe-inbox-picker"), tools: $(".loe-inbox-tools"), toolsRight: $(".loe-inbox-tools-right"), fileInput: $(".loe-inbox-file"), modal: $(".loe-inbox-modal"),
     gate: $(".loe-inbox-gate"),
     body: $(".loe-inbox-body"), thread: $(".loe-inbox-thread"), board: $(".loe-board"), boardBar: $(".loe-board-bar"), boardCols: $(".loe-board-cols"),
@@ -38,12 +40,16 @@ function bootInbox() {
     const chat = inbox.selected && inbox.chats.get(inbox.selected);
     if (chat && document.visibilityState === "visible") inboxLoadOrders(chat);
   }, INBOX_ORDERS_REFRESH_MS);
+  initInboxSide();
   inbox.el.search.addEventListener("input", renderInboxRail);
   inbox.el.railToggle.addEventListener("click", inboxToggleRail);
   inbox.el.railStrip.addEventListener("click", inboxToggleRail);
   inboxApplyRail();
   inbox.el.listSearch.addEventListener("input", renderInboxList);
-  document.addEventListener("click", () => closePrefixPopover());
+  document.addEventListener("click", () => {
+    closePrefixPopover();
+    if (inbox.optionsOpen) { inbox.optionsOpen = false; renderInboxHeader(); } // 點選單外面收起「選項」
+  });
   const sendBtn = $(".loe-inbox-send");
   const doSend = async () => {
     const ta = inbox.el.textarea;

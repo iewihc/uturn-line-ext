@@ -1,4 +1,5 @@
 // 收件匣對話的工具：待處理／處理完畢、改暱稱、記事本、標為已讀。
+import { renderInboxSide } from "./side.js";
 import { ic } from "../core/icons.js";
 import { pageContext } from "../core/page-context.js";
 import { ih, inbox, inboxApi, inboxChatUrl, inboxTime } from "./core.js";
@@ -105,15 +106,23 @@ function renderInboxNotes() {
   if (!host) return;
   const chat = inbox.selected && inbox.chats.get(inbox.selected);
   host.hidden = !inbox.notesOpen || !chat;
+  renderInboxSide();
   if (host.hidden) return;
   host.textContent = "";
   const st = inbox.notes.get(chat.key);
   const owners = inbox.owners.get(chat.botId) || new Map();
+  const collapsed = inbox.notesCollapsed;
+  const toggle = () => { inbox.notesCollapsed = !collapsed; renderInboxNotes(); };
+  // 標題列點一下收起／展開（固定開啟也能收）；固定開啟時不能關，只能收
   host.append(ih("div", { class: "loe-inbox-notes-head" },
-    ih("strong", { text: `記事本 ${st ? st.total : ""}` }),
+    ih("button", { type: "button", class: "loe-inbox-x", html: ic(collapsed ? "chevron-right" : "chevron-down"), "aria-expanded": collapsed ? "false" : "true",
+      "aria-label": collapsed ? "展開記事本" : "收起記事本", onclick: toggle }),
+    ih("strong", { class: "loe-inbox-notes-title", text: `記事本 ${st ? st.total : ""}`, onclick: toggle }),
+    ih("span", { class: "loe-inbox-muted", text: "客人看不到" }),
     ih("span", { class: "loe-inbox-spacer" }),
-    ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉記事本", html: ic("x"), onclick: () => { inbox.notesOpen = false; renderInboxNotes(); } }),
+    inbox.pinNotes ? null : ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉記事本", html: ic("x"), onclick: () => { inbox.notesOpen = false; renderInboxNotes(); renderInboxThread(); } }),
   ));
+  if (collapsed) return;
   const ta = ih("textarea", { class: "loe-inbox-note-input", rows: "3", placeholder: "新增筆記（客人看不到，只有客服看得到）", "aria-label": "新增筆記" });
   const addBtn = ih("button", { type: "button", class: "loe-inbox-btn primary", text: "新增筆記", onclick: async () => {
     addBtn.disabled = true;

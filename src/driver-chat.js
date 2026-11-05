@@ -124,10 +124,11 @@ function driverChatDraggable(host, head) {
   });
 }
 // 開面板：host 由呼叫端提供（收件匣 aside 或原生頁浮動 div），onClose 負責收掉 host
-function openDriverChat({ host, orders, orderId, onClose }) {
+// focus：手動打開才把游標移到司機輸入框（自動打開不搶客人輸入框的游標）
+function openDriverChat({ host, orders, orderId, onClose, focus = true }) {
   closeDriverChat();
   Object.assign(driverChat, {
-    host, onClose, orders: orders.filter((o) => o.hasDriver), orderId,
+    host, onClose, focus, orders: orders.filter((o) => o.hasDriver), orderId,
     order: null, me: null, messages: [], latestSeq: 0, hasMore: false, syncedAt: "", readSentFor: "", error: "", loading: true, run: driverChat.run + 1,
   });
   buildDriverChat();
@@ -145,10 +146,14 @@ function closeDriverChat() {
   if (onClose) onClose();
 }
 // 訂單列表更新時同步面板的訂單分頁（目前這張不見了就關掉）
+// 這台結束了：還有別台就換到第一台，沒有才關掉（以當前進行中的為主）
 function syncDriverChatOrders(orders) {
   if (!driverChat.host) return;
-  const withDriver = orders.filter((o) => o.hasDriver);
-  if (!withDriver.some((o) => o.id === driverChat.orderId)) return closeDriverChat();
+  const withDriver = orders.filter((o) => o.hasDriver && !o.cancelled);
+  if (!withDriver.some((o) => o.id === driverChat.orderId)) {
+    if (!withDriver.length) return closeDriverChat();
+    return openDriverChat({ host: driverChat.host, orders: withDriver, orderId: withDriver[0].id, onClose: driverChat.onClose, focus: false });
+  }
   driverChat.orders = withDriver;
   renderDriverChatHead();
 }
@@ -348,17 +353,12 @@ function buildDriverChat() {
   driverChat.el = { head, msgs, quick, textarea };
   driverChatDraggable(host, head);
   renderDriverChat(false);
-  setTimeout(() => textarea.focus(), 0);
+  if (driverChat.focus) setTimeout(() => textarea.focus(), 0);
 }
 function renderDriverChat(scrollToEnd) {
   renderDriverChatHead();
   renderDriverChatMsgs(scrollToEnd);
   renderDriverChatQuick();
-}
-function copyChip(label, value) {
-  if (!value) return null;
-  return ih("button", { type: "button", class: "loe-dchat-chip", text: label, title: "點擊複製",
-    onclick: async (e) => { const b = e.currentTarget; try { flashCopied(b, await copyText(value)); } catch (_) { flashCopied(b, false); } } });
 }
 function renderDriverChatHead() {
   const head = driverChat.el.head;
@@ -366,7 +366,7 @@ function renderDriverChatHead() {
   head.textContent = "";
   const o = driverChat.order;
   const summary = driverChat.orders.find((x) => x.id === driverChat.orderId) || {};
-  const plate = o?.carPlate ? `${o.carPlate}${o.carColor ? `(${o.carColor})` : ""}` : "";
+  const plate = [o?.carPlate, o?.carColor].filter(Boolean).join(" ");
   head.append(...[
     ih("div", { class: "loe-dchat-title", title: driverChat.host?.classList.contains("dock") ? "" : "拖曳可移動面板，雙擊回原位" },
       ih("span", { class: "loe-dchat-grip", html: ic("grip"), "aria-hidden": "true" }),
@@ -379,17 +379,35 @@ function renderDriverChatHead() {
         : null,
       driverChat.host?.dataset.dragged ? ih("button", { type: "button", class: "loe-dchat-x", html: ic("chevron-down"), title: "回原位", "aria-label": "面板回原位", onclick: () => driverChat.dock && driverChat.dock() }) : null,
       ih("button", { type: "button", class: "loe-dchat-x", html: ic("x"), "aria-label": "關閉司機對話", onclick: closeDriverChat })),
+    // 多台：每台一個分頁（車號、車牌車色、狀態、未讀）；結束的單直接拿掉，以當前進行中的為主
     driverChat.orders.length > 1
-      ? ih("div", { class: "loe-dchat-tabs" }, driverChat.orders.map((x) =>
-        ih("button", { type: "button", class: "loe-dchat-tab" + (x.id === driverChat.orderId ? " on" : ""),
+      ? ih("div", { class: "loe-dchat-tabs", role: "tablist", "aria-label": "選哪一台" }, driverChat.orders.map((x, i) =>
+        ih("button", { type: "button", role: "tab", class: "loe-dchat-tab" + (x.id === driverChat.orderId ? " on" : ""), "aria-selected": x.id === driverChat.orderId ? "true" : "false",
           onclick: () => { if (x.id !== driverChat.orderId) openDriverChat({ host: driverChat.host, orders: driverChat.orders, orderId: x.id, onClose: driverChat.onClose }); } },
-          x.shortId || "訂單", driverChatUnread(x) ? ih("span", { class: "loe-dchat-dot" }) : null)))
+          ih("span", { class: "loe-dchat-tab-no", text: String(i + 1) }),
+          ih("span", { class: "loe-dchat-tab-text" },
+            ih("strong", { text: [x.carPlate || x.driverNo, x.carColor].filter(Boolean).join(" ") || x.shortId || "訂單" }),
+            ih("span", { class: `loe-dchat-tab-status ${x.column || ""}`, text: x.columnLabel || x.status || "" })),
+          driverChatUnread(x) ? ih("span", { class: "loe-dchat-dot", "aria-label": "有新訊息" }) : null)))
       : null,
-    ih("div", { class: "loe-dchat-meta" }, // 單號／司機／車牌，點擊複製
-      copyChip(o?.shortId || summary.shortId || "", o?.shortId || summary.shortId),
-      copyChip([o?.driverNo, o?.driverName].filter(Boolean).join(" "), o?.driverNo),
-      copyChip(plate, plate)),
+    // 單號・司機・車牌：一行文字，點哪段複製哪段
+    ih("div", { class: "loe-dchat-info" }, ...[
+      [o?.shortId || summary.shortId, o?.shortId || summary.shortId],
+      [[o?.driverNo, o?.driverName].filter(Boolean).join(" "), o?.driverNo],
+      [plate, o?.carPlate],
+    ].filter(([label, value]) => label && value).flatMap(([label, value], i) => [
+      i ? ih("span", { class: "loe-dchat-info-sep", text: "·", "aria-hidden": "true" }) : null,
+      ih("button", { type: "button", class: "loe-dchat-info-item", text: label, title: "點擊複製",
+        onclick: async (e) => { const b = e.currentTarget; try { flashCopied(b, await copyText(value)); } catch (_) { flashCopied(b, false); } } }),
+    ]).filter(Boolean)),
   ].filter(Boolean)); // 原生 append 會把 null 印成文字
+  // 多台：輸入框提示寫明傳給哪一台
+  if (driverChat.el.textarea) {
+    const no = driverChat.orders.findIndex((x) => x.id === driverChat.orderId) + 1;
+    driverChat.el.textarea.placeholder = driverChat.orders.length > 1 && no
+      ? `傳給第 ${no} 台 ${summary.carPlate || summary.driverNo || ""}…（Enter 送出）`
+      : "傳送訊息給司機 (Enter送出，Shift+Enter可換行)";
+  }
 }
 function driverChatBubbleBody(m) {
   if (m.isRecalled) return ih("em", { class: "loe-dchat-recalled", text: "訊息已收回" });

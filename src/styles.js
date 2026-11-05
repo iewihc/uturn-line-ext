@@ -622,11 +622,21 @@ const STYLE_CSS = `
     .loe-dchat-col { padding: 1px 8px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 600; background: #6b7280; }
     .loe-dchat-col.booking { background: #7c3aed; } .loe-dchat-col.pending { background: #f59e0b; }
     .loe-dchat-col.accepted { background: #1c6cf3; } .loe-dchat-col.arrived { background: #16a34a; } .loe-dchat-col.executing { background: #0d9488; }
-    .loe-dchat-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
-    .loe-dchat-tab { position: relative; height: 26px; padding: 0 10px; border: 1px solid #d5dbe5; border-radius: 999px; background: #fff; font: inherit; font-size: 12px; cursor: pointer; }
-    .loe-dchat-tab.on { border-color: ${BLUE}; background: ${BLUE_SOFT}; color: ${BLUE}; font-weight: 700; }
-    .loe-dchat-dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
-    .loe-dchat-meta, .loe-dchat-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+    .loe-dchat-tabs { display: flex; gap: 6px; overflow-x: auto; padding-top: 4px; }
+    .loe-dchat-tab { position: relative; flex: 1 1 0; min-width: 120px; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid #d5dbe5; border-radius: 10px; background: #fff; font: inherit; text-align: left; cursor: pointer; }
+    .loe-dchat-tab.on { border: 2px solid ${BLUE}; background: ${BLUE_SOFT}; }
+    .loe-dchat-tab-no { width: 22px; height: 22px; border-radius: 50%; background: #334155; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex: none; }
+    .loe-dchat-tab.on .loe-dchat-tab-no { background: ${BLUE}; }
+    .loe-dchat-tab-text { display: flex; flex-direction: column; min-width: 0; }
+    .loe-dchat-tab-text strong { font-size: 13px; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .loe-dchat-tab-status { font-size: 12px; color: #64748b; }
+    .loe-dchat-tab-status.arrived { color: #15803d; font-weight: 700; }
+    .loe-dchat-dot { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: #ef4444; border: 2px solid #fff; }
+    .loe-dchat-info { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; font-size: 12px; color: #64748b; }
+    .loe-dchat-info-item { border: 0; background: none; padding: 2px 0; font: inherit; color: #334155; cursor: pointer; }
+    .loe-dchat-info-item:hover { color: ${BLUE}; text-decoration: underline; }
+    .loe-dchat-info-sep { color: #cbd5e1; }
+    .loe-dchat-quick { display: flex; gap: 6px; flex-wrap: wrap; }
     .loe-dchat-chip { height: 24px; padding: 0 8px; border: 1px solid #e3e7ee; border-radius: 6px; background: #f8fafc; color: #334155; font: inherit; font-size: 12px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .loe-dchat-chip:hover { border-color: ${BLUE}; color: ${BLUE}; }
     .loe-dchat-msgs { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; background: #f3f5f9; display: flex; flex-direction: column; gap: 4px; }

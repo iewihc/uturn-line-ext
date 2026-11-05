@@ -1,6 +1,7 @@
 // 收件匣資料層：對話模型、官方帳號清單、SSE 連線與重連、對話載入與事件更新。
 import { storeSet } from "../core/store.js";
 import { inboxProbeAi } from "./ai.js";
+import { inboxMarkRead } from "./chat-tools.js";
 import { INBOX_ENABLED_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_PAGES_PER_BOT, inbox, inboxApi, inboxBotName, inboxKey } from "./core.js";
 import { inboxDismissToast, inboxNotify } from "./notify.js";
 import { inboxLoadBoard, inboxQueueLink } from "./order-status.js";
@@ -223,8 +224,10 @@ async function inboxOnChatEvent(botId, raw) {
       chat.preview = inboxPreview(payload) || chat.preview;
       chat.at = payload.timestamp || Date.now();
       inboxAppendToThread(key, payload);
-      inboxNotify(chat, payload);
       inboxNoteMessageIds(chat, lineMessageIds([payload]));
+      // 選項「自動標已讀」：正在看的這位客人又傳來，畫面在前景就直接標已讀、不跳通知
+      if (inbox.autoRead && inbox.selected === key && document.visibilityState === "visible") inboxMarkRead(chat);
+      else inboxNotify(chat, payload);
       break;
     case "messageSent":
       chat.preview = inboxPreview(payload) || chat.preview;

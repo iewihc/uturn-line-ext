@@ -2,7 +2,6 @@
 import { BUBBLE_CLASS, BUTTON_CLASS, FORWARD_BUTTON_CLASS, TEXT_PAD_CLASS } from "../core/constants.js";
 import { COPY_ICON, FORWARD_ICON, ic } from "../core/icons.js";
 import { openDispatchPopover } from "../dispatch.js";
-import { closeDriverChat } from "../driver-chat.js";
 import { inboxLoadNotes, inboxMarkRead, inboxRename, renderInboxNotes, renderInboxToolsRight } from "./chat-tools.js";
 import { inboxAssigneeLabel, inboxPreview } from "./chats.js";
 import { INBOX_CONTENT_TABS, closeInboxContents, inboxLoadContents, inboxLoadPacks, inboxUseContent } from "./contents.js";
@@ -73,7 +72,7 @@ function renderInboxThread() {
     ih("div", { class: "loe-inbox-spacer" }),
     inbox.el.sysNotiSlot, // 系統自動通知（renderInboxOrders 填）
     ih("button", { type: "button", class: "loe-inbox-btn" + (inbox.notesOpen ? " on" : ""), html: ic("notebook"), "aria-pressed": inbox.notesOpen ? "true" : "false", title: "這位客人的 LINE 記事本（客人看不到）",
-      onclick: () => { inbox.notesOpen = !inbox.notesOpen; if (inbox.notesOpen) closeDriverChat(); if (inbox.notesOpen && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); renderInboxNotes(); renderInboxThread(); } },
+      onclick: () => { inbox.notesOpen = !inbox.notesOpen; inbox.notesCollapsed = false; if (inbox.notesOpen && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); renderInboxNotes(); renderInboxThread(); } },
       ih("span", { text: "記事本" + (Number.isInteger(notesCount) ? ` ${notesCount}` : "") })),
     (() => {
       const prefix = getPrefix(); // pageContext 已指向這個帳號
