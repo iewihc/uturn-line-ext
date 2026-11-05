@@ -190,7 +190,8 @@ function inboxToggleRail() {
   storeSet(INBOX_RAIL_COLLAPSED_KEY, inbox.railCollapsed);
   inboxApplyRail();
 }
-function inboxVisibleChats() {
+// orderFilter：依訂單狀態篩選（預設目前選的；算各狀態數量時帶別的欄位）
+function inboxVisibleChats(orderFilter = inbox.orderFilter) {
   const f = inbox.filter;
   const q = (inbox.el.listSearch?.value || "").trim().toLowerCase();
   const overrides = q ? getChatOverrides() : {};
@@ -204,7 +205,7 @@ function inboxVisibleChats() {
       if (f === "mine") return inbox.me && c.assignedBizId === inbox.me.bizId;
       return true;
     })
-    .filter((c) => !inbox.orderFilter || inboxChatColumns(c).includes(inbox.orderFilter))
+    .filter((c) => !orderFilter || inboxChatColumns(c).includes(orderFilter))
     .sort((a, b) => b.at - a.at);
 }
 // 客人頭像：LINE 的 preview 圖；沒有或載入失敗就退回名字第一個字

@@ -4,6 +4,7 @@ import { inboxEnabledIds, inboxFetchChat } from "./chats.js";
 import { ih, inbox, inboxKey } from "./core.js";
 import { renderInboxList } from "./list.js";
 import { inboxLoadOrders } from "./orders.js";
+import { inboxVisibleChats } from "./shell.js";
 import { LINE_CHAT_RESOLVE_BATCH, liveOrders, resolveLineChats } from "../orders.js";
 
 /* ---- 依訂單狀態篩選：每個啟用的官方帳號一次抓齊「每個聊天室進行中訂單的狀態」 ----
@@ -27,22 +28,20 @@ async function inboxLoadBoard(botId) {
     prev ? `&version=${encodeURIComponent(prev.version)}` : "").catch(() => null);
   if (!data || !inbox.enabled.has(botId) || (data.unchanged && prev)) return;
   const chats = new Map((data.chats || []).map((c) => [c.chatId, c.columns || []]));
-  inbox.board.set(botId, { version: data.version || "", chats, counts: data.counts || {} });
+  inbox.board.set(botId, { version: data.version || "", chats });
   for (const chatId of chats.keys()) inbox.linked.add(inboxKey(botId, chatId));
   // 有進行中訂單、但不在已載入對話裡的客人補抓進清單（依訂單狀態篩選才不會漏）
   const missing = [...chats.keys()].filter((id) => !id.startsWith("C") && !inbox.chats.has(inboxKey(botId, id))).slice(0, INBOX_BOARD_FETCH_MISSING);
   await Promise.all(missing.map((id) => inboxFetchChat(botId, id)));
   renderInboxList();
 }
-// 用剛查到的這位客人訂單（同一批、同欄位口徑）直接修正看板與計數：完成／取消後計數立刻歸零
+// 用剛查到的這位客人訂單（同一批、同欄位口徑）直接修正看板：完成／取消後計數立刻歸零
 function inboxPatchBoard(chat, list) {
   const board = inbox.board.get(chat.botId);
   if (!board) return;
   const cols = [...new Set(liveOrders(list).map((o) => o.column))].filter((c) => ORDER_COLUMNS.some((x) => x.id === c));
   const prev = board.chats.get(chat.chatId) || [];
   if (prev.length === cols.length && prev.every((c) => cols.includes(c))) return;
-  for (const c of prev) board.counts[c] = Math.max(0, (board.counts[c] || 0) - 1);
-  for (const c of cols) board.counts[c] = (board.counts[c] || 0) + 1;
   if (cols.length) board.chats.set(chat.chatId, cols); else board.chats.delete(chat.chatId);
   board.version = ""; // 下一輪整份重抓，跟後端對齊
   renderInboxList();
@@ -62,7 +61,8 @@ function renderInboxOrderFilters() {
   const boards = inboxEnabledIds().map((id) => inbox.board.get(id)).filter(Boolean);
   host.hidden = !boards.length;
   if (!boards.length) return;
-  const count = (col) => boards.reduce((n, b) => n + (b.counts[col] || 0), 0);
+  // 只算收件匣列得出來的官方對話（同上方篩選與搜尋）：數字＝點下去看到的列數；沒有對應對話的訂單不算
+  const count = (col) => inboxVisibleChats(col).length;
   const chip = (id, label, n) => ih("button", {
     type: "button", class: "loe-inbox-chip" + (inbox.orderFilter === id ? " on" : ""), "aria-pressed": inbox.orderFilter === id ? "true" : "false",
     onclick: () => { inbox.orderFilter = id; renderInboxList(); },
