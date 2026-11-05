@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.62.0
-// @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知、司機對話。
+// @version      1.64.4
+// @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、收件匣、系統自動通知、司機對話。
 // @author       iewihc
 // @match        https://manager.line.biz/*
 // @match        https://chat.line.biz/*
@@ -92,6 +92,13 @@
     copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
     check: '<path d="M20 6 9 17l-5-5"></path>',
     x: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
+    "chevron-up": '<path d="m18 15-6-6-6 6"></path>',
+    "chevron-down": '<path d="m6 9 6 6 6-6"></path>',
+    grip: '<circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle>',
+    "circle-check": '<circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path>',
+    "message-circle": '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path>',
+    "panel-right": '<rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M15 3v18"></path>',
+    "pop-out": '<path d="M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4"></path><rect width="10" height="7" x="12" y="13" rx="2"></rect>',
     "message-square":
       '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
     forward:
@@ -758,7 +765,9 @@
       display: flex; flex-direction: column; overflow: hidden; font-size: 13px; color: #1f2937;
     }
     .loe-dchat-head { flex: 0 0 auto; padding: 10px 12px 8px; border-bottom: 1px solid #e3e7ee; display: flex; flex-direction: column; gap: 6px; background: #fff; }
-    .loe-dchat-title { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .loe-dchat-title { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: move; touch-action: none; user-select: none; }
+    .loe-dchat-grip { display: inline-flex; color: #cbd5e1; }
+    .loe-dchat-grip svg { width: 14px; height: 14px; fill: currentColor; stroke: currentColor; }
     .loe-dchat-spacer { flex: 1 1 auto; }
     .loe-dchat-x { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
     .loe-dchat-x:hover { background: #f1f5f9; }
@@ -4323,7 +4332,7 @@
     inboxLink.target = "_blank";
     inboxLink.rel = "noopener";
     inboxLink.style.textDecoration = "none";
-    inboxLink.title = "多開收件匣：同時監聽多個官方帳號的新訊息並直接回覆";
+    inboxLink.title = "收件匣：同時監聽多個官方帳號的新訊息並直接回覆（需身份授權）";
     inboxLink.insertAdjacentHTML("beforeend", ic("inbox"));
     const inboxLabel = document.createElement("span");
     inboxLabel.textContent = "收件匣";
@@ -6091,18 +6100,20 @@
     }, onChange);
   }
   const liveOrders = (list) => (list || []).filter((o) => !o.cancelled);
-  // 一張訂單一列：狀態、單號、上車點、車輛、追蹤、自動通知開關、司機對話、取消
+  // 一張訂單一列：狀態、單號、派單原文（滑過看解析出的地址）、車輛、追蹤、自動通知開關、司機對話、取消
   function orderRow(o, { onChange, onChat }) {
     const busy = orderActionBusy.has(o.id);
     const car = o.carPlate ? `${o.carPlate}${o.carColor ? `(${o.carColor})` : ""}` : "";
     const eta = o.column === "accepted" && o.estPickupMins > 0 ? `約${o.estPickupMins}分抵達` : "";
     const noti = o.isSystemNoti ? orderNotiSummary(o) || "等待承接" : "";
-    return ih("div", { class: "loe-ord", title: o.oriText || "" },
+    const ori = o.oriTextDisplay || o.oriText || "";
+    const addrTip = o.pickupAddress && o.pickupAddress !== ori ? `地址：${o.pickupAddress}` : "";
+    return ih("div", { class: "loe-ord", title: addrTip },
       ...[
         ih("span", { class: `loe-ord-col ${o.column || ""}`, text: o.columnLabel || o.status }),
         ih("strong", { text: o.shortId || "" }),
         o.sourceLabel ? ih("span", { class: "loe-ord-src", text: o.sourceLabel }) : null,
-        ih("span", { class: "loe-ord-text", text: o.pickupAddress || o.oriText || "" }),
+        ih("span", { class: "loe-ord-text", text: ori || o.pickupAddress || "", title: addrTip }),
         car ? ih("span", { text: `🚗 ${car}${eta ? " · " + eta : ""}` }) : null,
         o.trackingUrl ? ih("a", { href: o.trackingUrl, target: "_blank", rel: "noopener", text: "追蹤" }) : null,
         ih("span", { class: "loe-ord-actions" },
@@ -6124,6 +6135,48 @@
       ].filter(Boolean)); // 原生 append 會把 null 印成文字
   }
 
+  // 面板可拖曳：抓標題列拖，拖了就改成固定定位跟著滑鼠走（三種 host 都適用）；雙擊標題列或關閉就回原位
+  function driverChatDock(host) {
+    host.style.cssText = "";
+    delete host.dataset.dragged;
+  }
+  function driverChatDraggable(host, head) {
+    const dock = () => {
+      driverChatDock(host);
+      renderDriverChatHead();
+      if (host === inbox.el?.dchat) renderInboxOrders(); // 停靠位置由訂單列高度決定
+    };
+    driverChat.dock = dock;
+    head.addEventListener("dblclick", (e) => {
+      if (!e.target.closest(".loe-dchat-title") || e.target.closest("button, a")) return;
+      dock();
+    });
+    head.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || host.classList.contains("dock") || !e.target.closest(".loe-dchat-title") || e.target.closest("button, a, input")) return;
+      const r = host.getBoundingClientRect();
+      const sx = e.clientX, sy = e.clientY;
+      let moved = false;
+      const move = (ev) => {
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        if (!moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+        if (!moved) {
+          moved = true;
+          host.dataset.dragged = "1";
+          Object.assign(host.style, { position: "fixed", width: `${r.width}px`, height: `${r.height}px`, right: "auto", bottom: "auto", margin: "0", flex: "none", zIndex: "2147483000" });
+          renderDriverChatHead(); // 多出「回原位」鈕（head 本身不換，拖曳監聽還在）
+        }
+        host.style.left = `${Math.min(Math.max(r.left + dx, 0), window.innerWidth - 80)}px`;
+        host.style.top = `${Math.min(Math.max(r.top + dy, 0), window.innerHeight - 40)}px`;
+        ev.preventDefault();
+      };
+      const up = () => {
+        head.removeEventListener("pointermove", move); head.removeEventListener("pointerup", up); head.removeEventListener("pointercancel", up);
+        try { head.releasePointerCapture(e.pointerId); } catch (_) {}
+      };
+      try { head.setPointerCapture(e.pointerId); } catch (_) {}
+      head.addEventListener("pointermove", move); head.addEventListener("pointerup", up); head.addEventListener("pointercancel", up);
+    });
+  }
   // 開面板：host 由呼叫端提供（收件匣 aside 或原生頁浮動 div），onClose 負責收掉 host
   function openDriverChat({ host, orders, orderId, onClose }) {
     closeDriverChat();
@@ -6141,8 +6194,8 @@
     driverChat.timer = 0;
     driverChat.run++;
     const onClose = driverChat.onClose;
-    if (driverChat.host) driverChat.host.textContent = "";
-    Object.assign(driverChat, { host: null, onClose: null, orderId: "", el: {} });
+    if (driverChat.host) { driverChat.host.textContent = ""; driverChatDock(driverChat.host); }
+    Object.assign(driverChat, { host: null, onClose: null, orderId: "", el: {}, dock: null });
     if (onClose) onClose();
   }
   // 訂單列表更新時同步面板的訂單分頁（目前這張不見了就關掉）
@@ -6331,7 +6384,7 @@
     const head = ih("div", { class: "loe-dchat-head" });
     const msgs = ih("div", { class: "loe-dchat-msgs" });
     const quick = ih("div", { class: "loe-dchat-quick" });
-    const textarea = ih("textarea", { class: "loe-dchat-input", rows: "2", placeholder: "傳訊息給司機（Enter 送出，Shift＋Enter 換行，可貼上圖片）", "aria-label": "傳訊息給司機" });
+    const textarea = ih("textarea", { class: "loe-dchat-input", rows: "2", placeholder: "傳送訊息給司機 (Enter送出，Shift+Enter可換行)", "aria-label": "傳訊息給司機" });
     const fileInput = ih("input", { type: "file", accept: "image/*", hidden: true });
     const send = () => { if (driverChatSendText(textarea.value)) textarea.value = ""; textarea.focus(); };
     textarea.addEventListener("keydown", (e) => {
@@ -6351,6 +6404,7 @@
           ih("button", { type: "button", class: "loe-dchat-send", html: ic("send"), title: "傳送", "aria-label": "傳送", onclick: send })),
         fileInput));
     driverChat.el = { head, msgs, quick, textarea };
+    driverChatDraggable(host, head);
     renderDriverChat(false);
     setTimeout(() => textarea.focus(), 0);
   }
@@ -6372,10 +6426,16 @@
     const summary = driverChat.orders.find((x) => x.id === driverChat.orderId) || {};
     const plate = o?.carPlate ? `${o.carPlate}${o.carColor ? `(${o.carColor})` : ""}` : "";
     head.append(...[
-      ih("div", { class: "loe-dchat-title" },
+      ih("div", { class: "loe-dchat-title", title: driverChat.host?.classList.contains("dock") ? "" : "拖曳可移動面板，雙擊回原位" },
+        ih("span", { class: "loe-dchat-grip", html: ic("grip"), "aria-hidden": "true" }),
         ih("strong", { text: "💬 司機對話" }),
         summary.columnLabel ? ih("span", { class: `loe-dchat-col ${summary.column || ""}`, text: summary.columnLabel }) : null,
         ih("span", { class: "loe-dchat-spacer" }),
+        driverChat.host && driverChat.host === inbox.el?.dchat
+          ? ih("button", { type: "button", class: "loe-dchat-x", html: ic(inbox.dchatDock ? "pop-out" : "panel-right"), "aria-pressed": inbox.dchatDock ? "true" : "false",
+            title: inbox.dchatDock ? "改成浮動視窗（可拖曳）" : "停靠在最右邊（官方帳號｜官方訊息｜對話｜司機對話）", "aria-label": inbox.dchatDock ? "改成浮動視窗" : "停靠在最右邊", onclick: inboxToggleDchatDock })
+          : null,
+        driverChat.host?.dataset.dragged ? ih("button", { type: "button", class: "loe-dchat-x", html: ic("chevron-down"), title: "回原位", "aria-label": "面板回原位", onclick: () => driverChat.dock && driverChat.dock() }) : null,
         ih("button", { type: "button", class: "loe-dchat-x", html: ic("x"), "aria-label": "關閉司機對話", onclick: closeDriverChat })),
       driverChat.orders.length > 1
         ? ih("div", { class: "loe-dchat-tabs" }, driverChat.orders.map((x) =>
@@ -6625,6 +6685,10 @@
    * ---------------------------------------------------------------------- */
   const INBOX_ENABLED_KEY = "loe_inbox_enabled_bots_v1"; // 啟用監聽的官方帳號 botId 陣列
   const INBOX_SOUND_KEY = "loe_inbox_sound_v1"; // 新訊息提示音（預設開）
+  const INBOX_ORDERS_COLLAPSED_KEY = "loe_inbox_orders_collapsed_v1";
+  const INBOX_DCHAT_DOCK_KEY = "loe_inbox_dchat_dock_v1"; // 司機對話停靠在最右邊一欄（false＝浮動可拖曳）
+  const INBOX_TERMS_VERSION = "2026-11-05.5"; // 條款內容變更時更新，與腳本版本分開，避免一般更新重複要求同意
+  const INBOX_TERMS_KEY_PREFIX = "loe_inbox_terms_acceptance_v1::"; // 本機依後台帳號記錄版本與同意時間
   const INBOX_PAGES_PER_BOT = 2; // 每個帳號初始掃幾頁對話（25 位/頁）
   const INBOX_TOAST_MS = 20000; // 通知卡片停留時間；同一位客人再來訊會重新計時
   const INBOX_BOTS_REFRESH_MS = 60000; // 未啟用帳號的未讀數靠 /api/v1/bots 每分鐘更新
@@ -6660,6 +6724,11 @@
     owners: new Map(), // botId → Map(bizId → name)
     renaming: false,
     picker: null, // 貼圖／表情貼面板：{ kind: "sticker"|"emoji", pkg }（null＝收起）
+    ordersCollapsed: storeGet(INBOX_ORDERS_COLLAPSED_KEY, false) === true, // 標頭下方訂單列收起（只剩狀態＋單號）
+    dchatDock: storeGet(INBOX_DCHAT_DOCK_KEY, true) !== false, // 司機對話：true＝對話右邊再開一欄，false＝浮動蓋在對話上、可拖曳
+    flagBusy: "", // 正在改「待處理／處理完畢」的對話 key
+    boardRefreshing: false, // 「官方訊息」訂單狀態數量手動重新整理中
+    botsLoaded: false, started: false, // 官方帳號清單讀完／已通過身份授權開始連線
     packs: new Map(), // "botId/sticker"｜"botId/emoji" → { list: [{ id, items }], loading, error }
     emojiTokens: new Map(), // 輸入框裡 [表情貼N] 的 N → { productId, emojiId }（送出時換成 textV2 的 substitution）
     contents: null, // 選擇內容視窗：{ tab: "saved"|"card"|"coupon", selected }（null＝關閉）
@@ -6884,7 +6953,8 @@
   function inboxSetEnabled(botId, on) {
     if (on) inbox.enabled.add(botId); else inbox.enabled.delete(botId);
     storeSet(INBOX_ENABLED_KEY, [...inbox.enabled]);
-    if (on) {
+    if (on && !inbox.started) { /* 還沒授權：只記住，授權後 inboxStart 一起接上 */ }
+    else if (on) {
       inboxConnect(botId);
       inboxLoadChats(botId).catch((e) => toast(`${inboxBotName(botId)}：讀取對話失敗，${e.message}`, "err", 4000));
       inboxLoadBoard(botId);
@@ -7370,12 +7440,37 @@
   // 派單後「標記待處理」：LINE 的 followUp API（LINE 頁面是點它自己的按鈕）
   async function inboxFollowUp() {
     const chat = inbox.selected && inbox.chats.get(inbox.selected);
-    if (!chat) return;
+    if (chat) await inboxSetChatFlag(chat, "followUp", true);
+  }
+  // LINE 的對話狀態（同 LINE 聊天室頂端那兩顆）：PUT／DELETE …/followUp（待處理）、…/done（處理完畢）
+  const INBOX_FLAG_LABEL = { followUp: "待處理", done: "處理完畢" };
+  async function inboxSetChatFlag(chat, flag, on) {
+    if (inbox.flagBusy) return;
+    inbox.flagBusy = chat.key;
+    renderInboxToolsRight(chat);
     try {
-      await inboxApi("PUT", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/followUp`, {});
-      chat.followedUp = true;
-      inboxRenderAll();
-    } catch (e) { toast("標記待處理失敗：" + e.message, "err", 3000); }
+      await inboxApi(on ? "PUT" : "DELETE", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/${flag}`, on ? {} : undefined);
+      if (flag === "followUp") chat.followedUp = on; else chat.done = on;
+    } catch (e) { toast(`${on ? "設為" : "取消"}「${INBOX_FLAG_LABEL[flag]}」失敗：${e.message}`, "err", 3000); }
+    inbox.flagBusy = "";
+    inboxRenderAll();
+  }
+  // 輸入框下方右側：待處理／處理完畢（LINE 的對話狀態）＋在官方視窗開啟
+  function renderInboxToolsRight(chat) {
+    const host = inbox.el.toolsRight;
+    if (!host) return;
+    host.textContent = "";
+    if (!chat) return;
+    const busy = inbox.flagBusy === chat.key;
+    const flagBtn = (flag, on, icon) => ih("button", {
+      type: "button", class: "loe-inbox-btn loe-inbox-flag" + (on ? " on" : ""), html: ic(icon), disabled: busy, "aria-pressed": on ? "true" : "false",
+      title: on ? `取消「${INBOX_FLAG_LABEL[flag]}」` : `設為「${INBOX_FLAG_LABEL[flag]}」（同 LINE 聊天室的對話狀態）`,
+      onclick: () => inboxSetChatFlag(chat, flag, !on),
+    }, ih("span", { text: INBOX_FLAG_LABEL[flag] }));
+    host.append(
+      flagBtn("followUp", !!chat.followedUp, "message-circle"),
+      flagBtn("done", !!chat.done, "circle-check"),
+      ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", html: ic("external-link"), title: "在 LINE 官方聊天室開啟這位客人（新分頁）" }, ih("span", { text: "在官方視窗開啟" })));
   }
   // 改客人暱稱：LINE 的 nickname API；空字串＝清掉暱稱、恢復顯示原名
   async function inboxRename(chat, nickname) {
@@ -7582,29 +7677,58 @@
     const authed = hasLineExtAuth();
     const authBtn = ih("button", {
       type: "button", class: "loe-inbox-btn" + (authed ? " on" : " warn"), html: ic("shield-check"),
-      title: authed
-        ? `已授權：${getDispatcher()}（點擊可重新授權）`
-        : "授權後才能用：司機對話、取消訂單、依訂單狀態篩選、找客叫／AI 單、系統自動通知",
+      title: authed ? `已授權：${getDispatcher()}（點擊可重新授權）` : "收件匣需要身份授權才能使用",
       onclick: inboxAuthorize,
     }, ih("span", { text: authed ? "已授權" : "身份授權" }));
-    host.append(
+    const backBtn = ih("a", { class: "loe-inbox-btn", href: "https://chat.line.biz/", html: ic("external-link") }, ih("span", { text: "回 LINE 後台" }));
+    host.append(...[
       ih("div", { class: "loe-inbox-brand" },
         ih("span", { class: "loe-inbox-logo", html: ic("inbox") }),
-        ih("strong", { text: "UTurn 多開收件匣" }),
+        ih("strong", { text: "UTurn 收件匣" }),
         ih("span", { class: "loe-inbox-muted", text: "懶惰蟲 v" + UTURN_BUILD }),
       ),
-      stats,
+      authed ? stats : null,
       ih("div", { class: "loe-inbox-spacer" }),
-      ih("div", { class: "loe-inbox-actions" },
-        ih("button", { type: "button", class: "loe-inbox-btn" + (board.open ? " on" : ""), html: ic(board.open ? "inbox" : "truck"),
-          "aria-pressed": board.open ? "true" : "false", onclick: () => (board.open ? closeBoard() : openBoard()) },
-          ih("span", { text: board.open ? "回到對話" : "訂單看板" })),
-        ih("button", { type: "button", class: "loe-inbox-btn", text: "全部開啟", onclick: () => inbox.bots.forEach((b) => { if (!inbox.enabled.has(b.botId)) inboxSetEnabled(b.botId, true); }) }),
-        ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => inboxEnabledIds().forEach((id) => inboxSetEnabled(id, false)) }),
-        authBtn, hint, soundBtn,
-        ih("a", { class: "loe-inbox-btn", href: "https://chat.line.biz/", html: ic("external-link") }, ih("span", { text: "回 LINE 後台" })),
-      ),
-    );
+      authed
+        ? ih("div", { class: "loe-inbox-actions" },
+          ih("button", { type: "button", class: "loe-inbox-btn" + (board.open ? " on" : ""), html: ic(board.open ? "inbox" : "truck"),
+            "aria-pressed": board.open ? "true" : "false", onclick: () => (board.open ? closeBoard() : openBoard()) },
+            ih("span", { text: board.open ? "回到對話" : "訂單看板" })),
+          ih("button", { type: "button", class: "loe-inbox-btn", text: "全部開啟", onclick: () => inbox.bots.forEach((b) => { if (!inbox.enabled.has(b.botId)) inboxSetEnabled(b.botId, true); }) }),
+          ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => inboxEnabledIds().forEach((id) => inboxSetEnabled(id, false)) }),
+          authBtn, hint, soundBtn, backBtn)
+        : ih("div", { class: "loe-inbox-actions" }, authBtn, backBtn), // 沒授權：其他功能先不開
+    ].filter(Boolean)); // 原生 append 會把 null 印成文字
+  }
+  // 沒有身份授權不得進收件匣：整頁蓋住只留「身份授權」；通過後才開始連線、讀對話、抓訂單狀態
+  function renderInboxGate() {
+    const gate = inbox.el.gate;
+    if (!gate) return;
+    const locked = !hasLineExtAuth();
+    gate.hidden = !locked;
+    gate.textContent = "";
+    if (!locked) { inboxStart(); return; }
+    const account = getDispatcher();
+    gate.append(ih("div", { class: "loe-inbox-gate-box" },
+      ih("span", { class: "loe-inbox-gate-icon", html: ic("shield-check") }),
+      ih("strong", { text: "需要身份授權才能使用收件匣" }),
+      ih("p", { text: account
+        ? `請輸入後台帳號 ${account} 的發送 KEY（後台發放，有效期一個月）。授權後才會開始監聽官方帳號、讀對話與訂單。`
+        : "還沒設定後台帳號：請先到 LINE 聊天室的「轉發設定」填寫 UTurn 後台帳號（Email），再回到這裡授權。" }),
+      ih("div", { class: "loe-inbox-gate-actions" },
+        account ? ih("button", { type: "button", class: "loe-inbox-btn primary", html: ic("shield-check"), onclick: inboxAuthorize }, ih("span", { text: "身份授權" })) : null,
+        ih("a", { class: "loe-inbox-btn", href: "https://chat.line.biz/", html: ic("external-link") }, ih("span", { text: account ? "回 LINE 後台" : "去 LINE 聊天室設定" })))));
+  }
+  // 授權通過且官方帳號清單讀完：接上已開帳號（只做一次）
+  function inboxStart() {
+    if (inbox.started || !inbox.botsLoaded || !hasLineExtAuth()) return;
+    inbox.started = true;
+    for (const id of inboxEnabledIds()) {
+      inboxConnect(id);
+      inboxLoadChats(id).catch((e) => toast(`${inboxBotName(id)}：讀取對話失敗，${e.message}`, "err", 4000));
+      inboxLoadBoard(id);
+    }
+    inboxScheduleBoard();
   }
   // 收件匣的身份授權：同 LINE 後台選單的「身份授權」，用任一官方帳號讀目前的 LINE 登入；授權後馬上重抓需要 KEY 的資料
   async function inboxAuthorize(e) {
@@ -7617,6 +7741,10 @@
       if (result.cancelled) return;
       toast(lineAuthDoneText(result), "ok", 4000);
       inbox.linkProbed.clear();
+      const first = !inbox.started;
+      renderInboxGate(); // 第一次授權：這裡才開始連線、讀對話、抓訂單狀態
+      renderInboxHeader();
+      if (first) return;
       for (const id of inboxEnabledIds()) inboxLoadBoard(id);
       for (const c of inbox.chats.values()) inboxQueueLink(c);
       const sel = inbox.selected && inbox.chats.get(inbox.selected);
@@ -7651,7 +7779,7 @@
         ih("div", { class: "loe-inbox-oa-main" },
           ih("div", { class: "loe-inbox-oa-name" },
             ih("span", { class: "loe-inbox-oa-title", text: b.name, title: b.name }),
-            inboxGroupLabel(getPrefixForGid(b.botId)) ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(getPrefixForGid(b.botId)), title: `此帳號的派單預設群編：${getPrefixForGid(b.botId)}` }) : null,
+            getPrefixForGid(b.botId) ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(getPrefixForGid(b.botId)) || getPrefixForGid(b.botId), title: `此帳號的派單預設群編：${getPrefixForGid(b.botId)}` }) : null,
           ),
           ih("div", { class: `loe-inbox-oa-status ${status}` },
             ih("span", { class: "loe-inbox-dot" }), ih("span", { text: label }),
@@ -7761,7 +7889,20 @@
       type: "button", class: "loe-inbox-chip" + (inbox.orderFilter === id ? " on" : ""), "aria-pressed": inbox.orderFilter === id ? "true" : "false",
       onclick: () => { inbox.orderFilter = id; renderInboxList(); },
     }, label, n ? ih("span", { class: "n", text: String(n) }) : null);
-    host.append(chip("", "全部狀態", 0), ...ORDER_COLUMNS.map((c) => chip(c.id, c.label, count(c.id))));
+    host.append(chip("", "全部", 0), ...ORDER_COLUMNS.map((c) => chip(c.id, c.label, count(c.id))));
+  }
+  // 手動重新整理：所有已開帳號的訂單狀態整份重抓（不管版本），後端快取 5 秒內會回同一份
+  async function inboxRefreshBoards() {
+    if (inbox.boardRefreshing) return;
+    inbox.boardRefreshing = true;
+    renderInboxList();
+    try {
+      for (const b of inbox.board.values()) b.version = "";
+      await Promise.all(inboxEnabledIds().map((id) => inboxLoadBoard(id)));
+    } finally {
+      inbox.boardRefreshing = false;
+      renderInboxList();
+    }
   }
 
   // 還沒對應到乘客的聊天室排進佇列，攢一下整批送後端比對（大頭貼＋訊息編號沒變的不重問）
@@ -7814,6 +7955,9 @@
         text: f.label, onclick: () => { inbox.filter = f.id; renderInboxList(); },
       }));
     }
+    if (hasLineExtAuth())
+      filters.append(ih("button", { type: "button", class: "loe-inbox-chip loe-inbox-chip-refresh", html: ic("refresh"), disabled: inbox.boardRefreshing,
+        title: "重新整理預約／未派／承接／抵達／執行的數量", "aria-label": "重新整理訂單狀態數量", onclick: inboxRefreshBoards }));
     renderInboxOrderFilters();
     rows.textContent = "";
     const chats = inboxVisibleChats();
@@ -7828,7 +7972,7 @@
         ih("span", { class: "loe-inbox-row-main" },
           ih("span", { class: "loe-inbox-row-top" },
             ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(c.botId).slice(0, 6), title: inboxBotName(c.botId) }),
-            inboxGroupLabel(group) ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group), title: `派單預設群編：${group}` }) : null,
+            group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `派單預設群編：${group}` }) : null,
             ih("span", { class: "loe-inbox-row-name", text: c.name }),
             ih("span", { class: "loe-inbox-row-time", text: inboxTime(c.at) }),
           ),
@@ -7871,9 +8015,27 @@
     const host = inbox.el.dchat;
     if (!chat || !host) return;
     if (inbox.notesOpen) { inbox.notesOpen = false; renderInboxNotes(); renderInboxThread(); }
+    inboxPlaceDchat();
     host.hidden = false;
     openDriverChat({ host, orders: inbox.orders.get(chat.key)?.list || [], orderId, onClose: () => { host.hidden = true; renderInboxOrders(); } });
     renderInboxOrders();
+  }
+  // 收件匣司機對話兩種擺法：停靠＝放到 body 最後、成為第四欄（官方帳號｜官方訊息｜對話｜司機對話）；
+  // 浮動＝放回對話區、蓋在右側、可拖曳。切換只是把同一個節點搬家，內容與監聽都還在。
+  function inboxPlaceDchat() {
+    const host = inbox.el.dchat;
+    if (!host) return;
+    const dock = inbox.dchatDock;
+    host.classList.toggle("dock", dock);
+    const parent = dock ? inbox.el.body : inbox.el.thread;
+    if (host.parentElement !== parent) { driverChatDock(host); parent.append(host); }
+  }
+  function inboxToggleDchatDock() {
+    inbox.dchatDock = !inbox.dchatDock;
+    storeSet(INBOX_DCHAT_DOCK_KEY, inbox.dchatDock);
+    inboxPlaceDchat();
+    renderDriverChatHead();
+    renderInboxOrders(); // 浮動時 top 由訂單列高度決定
   }
   function inboxReloadSelectedOrders() {
     const chat = inbox.selected && inbox.chats.get(inbox.selected);
@@ -7894,6 +8056,7 @@
     if (!slot || !bar) return;
     slot.textContent = "";
     bar.textContent = "";
+    bar.classList.remove("collapsed");
     const chat = inbox.selected && inbox.chats.get(inbox.selected);
     const st = chat && inbox.orders.get(chat.key);
     bar.hidden = !chat;
@@ -7913,11 +8076,22 @@
     if (!st || (st.loading && !list.length)) { bar.append(ih("span", { class: "loe-inbox-muted", text: "讀取訂單中…" })); return; }
     if (st.error && !list.length) { bar.append(ih("span", { class: "loe-inbox-muted err", text: "訂單讀取失敗：" + st.error })); return; }
     if (!list.length) { bar.append(ih("span", { class: "loe-inbox-muted", text: "目前沒有進行中的訂單" })); return; }
-    for (const o of list)
-      bar.append(orderRow(o, { onChange: inboxOrdersChanged,
-        onChat: (id) => (driverChat.orderId === id ? closeDriverChat() : openInboxDriverChat(id)) }));
+    // 右上角 ^ 收起：只剩每張單的狀態＋單號一行，記住選擇
+    const collapsed = inbox.ordersCollapsed;
+    bar.classList.toggle("collapsed", collapsed);
+    bar.append(ih("button", { type: "button", class: "loe-inbox-x loe-inbox-orders-toggle", html: ic(collapsed ? "chevron-down" : "chevron-up"),
+      title: collapsed ? "展開訂單列" : "收起訂單列", "aria-label": collapsed ? "展開訂單列" : "收起訂單列", "aria-expanded": collapsed ? "false" : "true",
+      onclick: () => { inbox.ordersCollapsed = !collapsed; storeSet(INBOX_ORDERS_COLLAPSED_KEY, inbox.ordersCollapsed); renderInboxOrders(); } }));
+    if (collapsed)
+      bar.append(ih("div", { class: "loe-ord loe-ord-summary" }, ...list.map((o) =>
+        ih("span", { class: "loe-ord-mini", title: o.oriTextDisplay || o.oriText || o.pickupAddress || "" },
+          ih("span", { class: `loe-ord-col ${o.column || ""}`, text: o.columnLabel || o.status }), ih("strong", { text: o.shortId || "" })))));
+    else
+      for (const o of list)
+        bar.append(orderRow(o, { onChange: inboxOrdersChanged,
+          onChat: (id) => (driverChat.orderId === id ? closeDriverChat() : openInboxDriverChat(id)) }));
     // 司機對話面板從訂單列下方開始，不蓋住訂單列（訂單數會變，每次重畫重算）
-    if (inbox.el.dchat && !inbox.el.dchat.hidden) inbox.el.dchat.style.top = `${bar.offsetTop + bar.offsetHeight}px`;
+    if (inbox.el.dchat && !inbox.el.dchat.hidden && !inbox.el.dchat.dataset.dragged && !inbox.el.dchat.classList.contains("dock")) inbox.el.dchat.style.top = `${bar.offsetTop + bar.offsetHeight}px`;
   }
   function renderInboxThread() {
     const { thHead, thMsgs, thComposer, thEmpty } = inbox.el;
@@ -7984,8 +8158,8 @@
       })(),
       inbox.el.aiSlot, // AI處理／轉人工（renderAiToggle 掛進來；沒有 AI 的帳號是空的）
       ih("button", { type: "button", class: "loe-inbox-btn", text: "標為已讀", disabled: !chat.unread, onclick: () => inboxMarkRead(chat) }),
-      ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", html: ic("external-link"), title: "在 LINE 官方聊天室開啟這位客人（新分頁）" }, ih("span", { text: "在官方視窗開啟" })),
     );
+    renderInboxToolsRight(chat);
     const th = inbox.threads.get(chat.key);
     if (!th || th.loading) thMsgs.append(ih("div", { class: "loe-inbox-empty", text: "讀取訊息中…" }));
     else if (th.error) thMsgs.append(ih("div", { class: "loe-inbox-empty err", text: "讀取失敗：" + th.error }));
@@ -8401,9 +8575,121 @@
   }
   document.addEventListener("visibilitychange", () => { if (board.open && document.visibilityState === "visible") loadBoard(); });
 
+  function inboxTermsKey(account) {
+    return INBOX_TERMS_KEY_PREFIX + encodeURIComponent(account);
+  }
+  function hasAcceptedInboxTerms(account = getDispatcher()) {
+    const consent = storeGet(inboxTermsKey(account), null);
+    return consent?.version === INBOX_TERMS_VERSION && consent.account === account &&
+      Number.isFinite(consent.acceptedAt) && consent.acceptedAt > 0;
+  }
+  function showInboxTerms(root) {
+    if (document.querySelector(".loe-inbox-terms")) return;
+    // 啟動前就擋住：未同意不綁操作、不讀取帳號／對話、不啟動輪詢或身份授權。
+    root.inert = true;
+    const account = getDispatcher();
+    const dialog = ih("dialog", { class: "loe-inbox-terms", "aria-labelledby": "loe-inbox-terms-title" });
+    // 以下只含經確認的固定條款文字，不插入任何帳號或外部資料。
+    dialog.innerHTML = `
+      <header class="loe-inbox-terms-head">
+        <h1 id="loe-inbox-terms-title" tabindex="-1">懶惰蟲收件匣版本（UTurn 收件匣）使用條款</h1>
+        <p>請詳閱以下條款，勾選「我同意」後再繼續使用。</p>
+      </header>
+      <article class="loe-inbox-terms-body" tabindex="0" aria-label="使用條款全文">
+        <p>本服務由懶惰蟲提供，包含收件匣、訊息管理、派單、訂單追蹤、自動通知及其他相關輔助功能。使用者應詳閱本條款，確認理解並同意後再啟用服務。代表車隊申請或同意本條款者，應具備代表該車隊營運主體的合法授權。</p>
+        <section>
+          <h2>1. 使用授權與保密義務</h2>
+          <p>本服務為 U-TURN 投入開發及維護資源所提供之工具，僅限經授權之使用者及車隊，於約定業務範圍內使用，不得擅自轉售、轉授權、出借或提供予未經授權之第三人。</p>
+          <p>未經 U-TURN 事前書面同意，不得向競爭對手揭露、展示或提供本服務之非公開資訊。競爭對手包括從事相同或類似車隊管理、叫車、派單、調度或相關軟體服務之公司、團隊及個人開發者。</p>
+          <p><mark class="loe-inbox-terms-highlight">禁止提供的內容</mark>包括非公開操作畫面、功能流程、安裝檔案、安裝及更新連結、教學文件、原始碼、系統設定、授權資料、技術細節，以及本條款中尚未公開之內容。揭露方式包括截圖、錄影、直播、遠端操控、螢幕分享、現場展示、文章、訊息轉傳及其他足以使第三人取得資訊之方式。</p>
+          <p>車隊應將接觸權限限於業務所需人員，並確保其知悉及遵守保密要求。依法必須揭露、向主管機關申訴或檢舉、為維護合法權益提出證據，或向負有保密義務之律師等專業顧問諮詢所必要之揭露，不受本條限制。已合法公開且非因違約而公開之資訊，亦不在保密範圍內。</p>
+        </section>
+        <section>
+          <h2>2. 違約處理及違約金</h2>
+          <p>使用者<mark class="loe-inbox-terms-highlight">違反前條保密或使用授權義務</mark>，經 U-TURN 依合法取得之截圖、錄影、操作紀錄、往來訊息或其他證據查證，且具有可歸責事由者，應依約支付<mark class="loe-inbox-terms-highlight">新臺幣十萬元違約金</mark>。責任由締約之個人或車隊營運主體，依其可歸責事由及法律規定承擔。</p>
+          <p>U-TURN 得依違約情節，暫停本服務、撤銷使用授權，或終止與違約行為相關之 U-TURN 後台帳號使用權限。</p>
+          <p>檢舉或截圖可作為調查依據，但不單憑檢舉即認定違約。U-TURN 應告知違約事由，並提供合理說明機會。</p>
+          <p>保密義務不因停止使用、帳號停權或契約終止而當然消滅。</p>
+        </section>
+        <section>
+          <h2>3. 服務用途與功能限制</h2>
+          <p>本服務以 LINE 官方帳號客服及車隊調度作業為主要使用情境，透過整合多個官方帳號的訊息與操作介面，減少重複開啟完整頁面的需求，協助使用者在有限電腦資源下處理更多工作。</p>
+          <p>實際效能及可同時管理的帳號數量，仍受電腦規格、瀏覽器、網路、對話量及 LINE 平台限制影響，不保證特定記憶體用量、開啟數量或處理速度。</p>
+        </section>
+        <section>
+          <h2>4. 派單、訂單追蹤與自動通知</h2>
+          <p>欲使用本服務提供之訂單追蹤及自動通知，原則上應透過懶惰蟲完成派單，並成功建立訂單與客戶聊天室的關聯。</p>
+          <p>經手機、Discord（DC）或其他管道建立之訂單，如未成功建立上述關聯，可能無法顯示對應訂單、追蹤狀態或傳送自動通知。系統另有支援之客叫、AI 叫車等訂單，則依實際關聯結果及可用功能處理。</p>
+          <p>「派單後自動回覆」與「司機承接、抵達等系統自動通知」為不同設定。派單成功不代表所有通知均已啟用或送達；使用者應確認設定、訂單狀態及通知結果。</p>
+          <p>使用者仍應核對乘客、上車地址、時間、派單群組及承接情形。遇有訊息延遲、通知失敗或狀態異常時，應透過人工方式確認，避免影響乘客接送。</p>
+        </section>
+        <section>
+          <h2>5. 身份授權、帳號及資料使用</h2>
+          <p>使用者須具有相關 LINE 官方帳號及 U-TURN 後台帳號之合法操作權限，並依服務要求完成身份授權，不得冒用他人帳號或提供不實資料。</p>
+          <p>本服務會依啟用功能處理必要的客戶、聊天室、訊息及訂單資料；執行「同步客戶與記事本」時，會將相關客戶資料與記事本內容傳送至 U-TURN 後端。使用者應確保資料之蒐集、提供及利用具有合法依據，並完成必要告知。</p>
+          <p>U-TURN 應於提供服務所必要之範圍內處理資料，採取適當保護措施，並依法履行其個人資料保護責任。資料保存期限、利用範圍及刪除申請方式，應另行向使用者清楚告知。</p>
+        </section>
+        <section>
+          <h2>6. 訊息發送與 LINE 平台風險</h2>
+          <p>本服務為第三方輔助工具，使用者完成 U-TURN 身份授權，不代表取得 LINE 對本工具或其操作方式的認可。使用者仍須遵守 LINE 適用條款，不得濫發、騷擾、違法蒐集資料或以其他不當方式使用服務。</p>
+          <p>依 LINE 目前公告，單一官方帳號於一小時內，透過後台一對一聊天向<strong>超過 200 個不同聊天室（用戶）</strong>發送訊息，會觸發一對一聊天功能的暫時限制。此處計算的是不同聊天室，並非訊息則數；其他限制及恢復時間仍以 LINE 實際規則為準。<a href="https://tw.linebiz.com/faq/oa-chat/chattinglimit/" target="_blank" rel="noopener noreferrer">LINE 官方說明</a></p>
+          <p>本服務提供的分批傳送、發送間隔或限速設定，僅用於協助控管操作量，不保證免於限制或停權。人工回覆、自動通知、群發及其他工具對同一帳號的使用，均可能影響平台判斷。</p>
+          <p>使用者應自行評估營運需求及可承受風險。違反平台規則或觸發風控，可能導致訊息發送受限、功能暫停或官方帳號遭停用；U-TURN 無法承諾解除 LINE 所採取的限制。也沒有賠償義務。<a href="https://terms2.line.me/official_account_terms_tw?lang=zh-Hant" target="_blank" rel="noopener noreferrer">LINE 官方帳號使用條款</a></p>
+        </section>
+        <section>
+          <h2>7. 服務中斷、更新與責任範圍</h2>
+          <p>本服務依賴 LINE、瀏覽器、擴充套件、網路及相關後端服務運作。上述服務發生改版、故障、政策調整、登入失效或連線限制時，本服務可能部分或全部無法使用，並可能需要等待更新、重新授權或調整功能。</p>
+          <p>U-TURN 將於合理可行範圍內處理問題並說明服務狀態，但不保證第三方異動後一定能恢復原功能，或於固定期限內完成修復。使用者應保留必要的人工客服、調度及聯絡方式。</p>
+          <p>因使用者錯誤設定、未經授權操作、違法發送，或不可歸責於 U-TURN 的第三方服務異常所生損害，依實際原因、雙方可歸責程度及適用法律認定責任。</p>
+          <p>本條款不免除 U-TURN 因故意、重大過失或其他依法不得免除之責任，亦不排除使用者依法享有之權利。</p>
+        </section>
+        <section>
+          <h2>8. 條款變更與同意</h2>
+          <p>U-TURN 調整本條款時，應告知變更內容及生效日期。涉及新增資料用途、費用或重大權利義務變更者，應依法取得必要同意。</p>
+          <p>使用者確認已理解本服務之功能限制、授權及資料處理方式、保密義務、違約責任與 LINE 平台風險後，始得同意啟用。</p>
+        </section>
+      </article>
+      <footer class="loe-inbox-terms-foot">
+        <label class="loe-inbox-terms-agree"><input type="checkbox" data-terms="agree">我同意</label>
+        <p class="loe-inbox-terms-error" role="alert" hidden></p>
+        <div class="loe-inbox-terms-actions">
+          <a class="loe-inbox-btn" href="https://chat.line.biz/">返回 LINE 後台</a>
+          <button class="loe-inbox-btn primary" type="button" data-terms="continue" disabled>繼續使用</button>
+        </div>
+      </footer>`;
+    const checkbox = dialog.querySelector('[data-terms="agree"]');
+    const next = dialog.querySelector('[data-terms="continue"]');
+    checkbox.addEventListener("change", () => { next.disabled = !checkbox.checked; });
+    dialog.addEventListener("cancel", (event) => event.preventDefault()); // Esc 不代表同意，不能關閉後操作收件匣
+    next.addEventListener("click", () => {
+      if (!checkbox.checked || next.disabled) return;
+      if (getDispatcher() !== account) { // 讀條款期間在別的分頁切換後台帳號，重新確認目前帳號
+        dialog.close();
+        dialog.remove();
+        bootInbox();
+        return;
+      }
+      storeSet(inboxTermsKey(account), { version: INBOX_TERMS_VERSION, account, acceptedAt: Date.now() });
+      if (!hasAcceptedInboxTerms(account)) {
+        const error = dialog.querySelector(".loe-inbox-terms-error");
+        error.textContent = "無法儲存同意紀錄，請確認瀏覽器允許儲存資料後再試。";
+        error.hidden = false;
+        return;
+      }
+      dialog.close();
+      dialog.remove();
+      bootInbox();
+    });
+    document.body.appendChild(dialog);
+    dialog.showModal();
+    dialog.querySelector("h1").focus();
+  }
+
   function bootInbox() {
     const root = document.getElementById("loe-inbox");
     if (!root) return;
+    if (!hasAcceptedInboxTerms()) { showInboxTerms(root); return; }
+    root.inert = false;
     const $ = (sel) => root.querySelector(sel);
     inbox.el = {
       header: $(".loe-inbox-top"), rail: $(".loe-inbox-rail-list"), search: $(".loe-inbox-search"), foot: $(".loe-inbox-rail-foot"),
@@ -8411,8 +8697,9 @@
       thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
       quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
       orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
-      picker: $(".loe-inbox-picker"), tools: $(".loe-inbox-tools"), fileInput: $(".loe-inbox-file"), modal: $(".loe-inbox-modal"),
-      body: $(".loe-inbox-body"), board: $(".loe-board"), boardBar: $(".loe-board-bar"), boardCols: $(".loe-board-cols"),
+      picker: $(".loe-inbox-picker"), tools: $(".loe-inbox-tools"), toolsRight: $(".loe-inbox-tools-right"), fileInput: $(".loe-inbox-file"), modal: $(".loe-inbox-modal"),
+      gate: $(".loe-inbox-gate"),
+      body: $(".loe-inbox-body"), thread: $(".loe-inbox-thread"), board: $(".loe-board"), boardBar: $(".loe-board-bar"), boardCols: $(".loe-board-cols"),
       boardDrawer: $(".loe-board-drawer"), boardChat: null,
     };
     // 開著的對話定時重抓訂單狀態（分頁在背景就不抓）
@@ -8468,6 +8755,7 @@
     ["pointerdown", "keydown"].forEach((ev) => document.addEventListener(ev, unlock, { once: true, capture: true }));
     setInterval(() => { if (inbox.el.foot) renderInboxRail(); }, 10000); // 「最後事件 n 秒前」
     inboxRenderAll();
+    renderInboxGate();
     (async () => {
       try {
         inbox.me = await inboxApi("GET", "/api/v1/me").catch(() => null);
@@ -8477,16 +8765,12 @@
         inbox.el.rail.append(ih("div", { class: "loe-inbox-empty err", text: `讀取官方帳號失敗：${e.message}` }));
         return;
       }
+      inbox.botsLoaded = true;
       inboxRenderAll();
-      for (const id of inboxEnabledIds()) {
-        inboxConnect(id);
-        inboxLoadChats(id).catch((e) => toast(`${inboxBotName(id)}：讀取對話失敗，${e.message}`, "err", 4000));
-        inboxLoadBoard(id);
-      }
-      inboxScheduleBoard();
+      renderInboxGate(); // 有授權才 inboxStart；沒有就停在閘門，按「身份授權」通過後再開始
       setInterval(() => inboxLoadBots().then(() => {
         // 之前不在清單（沒權限）的已開帳號回來了：接上（已在連線／重試中的不動，照原本退避）
-        for (const id of inboxEnabledIds()) if (!inbox.conns.has(id)) { inboxConnect(id); inboxLoadChats(id).catch(() => {}); inboxLoadBoard(id); }
+        if (inbox.started) for (const id of inboxEnabledIds()) if (!inbox.conns.has(id)) { inboxConnect(id); inboxLoadChats(id).catch(() => {}); inboxLoadBoard(id); }
         renderInboxHeader();
         renderInboxRail();
       }).catch(() => {}), INBOX_BOTS_REFRESH_MS);
@@ -8614,7 +8898,7 @@
   body { font: 14px/1.5 "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif; color: #1f2937; background: #f3f5f9; }
   button, input, textarea { font: inherit; }
   a { color: #1c6cf3; }
-  .loe-inbox { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .loe-inbox { position: relative; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
   .loe-inbox [hidden] { display: none !important; }
   .loe-inbox-top { flex: 0 0 auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-height: 56px; padding: 6px 20px; background: #fff; border-bottom: 1px solid #e3e7ee; }
   .loe-inbox-brand { display: flex; align-items: center; gap: 10px; }
@@ -8635,6 +8919,37 @@
   .loe-inbox-btn.primary:hover { background: #0b57d0; }
   .loe-inbox-hint { font-size: 12px; color: #9a3412; background: #ffedd5; padding: 2px 8px; border-radius: 10px; }
   .loe-inbox-body { flex: 1 1 auto; display: flex; align-items: stretch; min-height: 0; }
+  .loe-inbox-gate { position: absolute; top: 56px; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; background: #f3f5f9; }
+  .loe-inbox-gate[hidden] { display: none; }
+  .loe-inbox-gate-box { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 460px; padding: 32px 28px; background: #fff; border: 1px solid #e3e7ee; border-radius: 16px; box-shadow: 0 12px 40px rgba(15,23,42,.08); text-align: center; }
+  .loe-inbox-gate-box strong { font-size: 17px; color: #1f2937; }
+  .loe-inbox-gate-box p { margin: 0; color: #4b5563; font-size: 13px; line-height: 1.6; }
+  .loe-inbox-gate-icon { width: 56px; height: 56px; border-radius: 50%; background: #fffbeb; color: #b45309; display: inline-flex; align-items: center; justify-content: center; }
+  .loe-inbox-gate-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-gate-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+  .loe-inbox-terms { width: min(880px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid #e3e7ee; border-radius: 16px; background: #fff; color: #1f2937; box-shadow: 0 24px 80px rgba(15,23,42,.24); overflow: hidden; }
+  .loe-inbox-terms[open] { display: flex; flex-direction: column; }
+  .loe-inbox-terms::backdrop { background: rgba(15,23,42,.5); }
+  .loe-inbox-terms-head { flex: 0 0 auto; padding: 22px 28px 16px; border-bottom: 1px solid #e3e7ee; }
+  .loe-inbox-terms-head h1 { margin: 0; font-size: 20px; line-height: 1.5; }
+  .loe-inbox-terms-head p { margin: 8px 0 0; color: #6b7280; font-size: 13px; }
+  .loe-inbox-terms-body { flex: 1 1 auto; min-height: 0; padding: 8px 28px 20px; overflow-y: auto; overscroll-behavior: contain; line-height: 1.85; overflow-wrap: anywhere; }
+  .loe-inbox-terms-body h2 { margin: 24px 0 10px; font-size: 16px; }
+  .loe-inbox-terms-body p { margin: 12px 0; }
+  .loe-inbox-terms-body a { text-underline-offset: 3px; }
+  .loe-inbox-terms-highlight { padding: 2px 5px; border-radius: 4px; background: #fef08a; color: #991b1b; font-weight: 800; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  .loe-inbox-terms-foot { flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; padding: 16px 28px; border-top: 1px solid #e3e7ee; background: #f8fafc; }
+  .loe-inbox-terms-agree { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; cursor: pointer; }
+  .loe-inbox-terms-agree input { width: 18px; height: 18px; margin: 0; accent-color: #1c6cf3; }
+  .loe-inbox-terms-actions { display: flex; gap: 8px; margin-left: auto; }
+  .loe-inbox-terms-error { flex-basis: 100%; margin: 0; color: #b91c1c; font-size: 13px; }
+  @media (max-width: 600px) {
+    .loe-inbox-terms { width: calc(100vw - 16px); max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); border-radius: 12px; }
+    .loe-inbox-terms-head, .loe-inbox-terms-foot { padding: 14px 16px; }
+    .loe-inbox-terms-head h1 { font-size: 17px; }
+    .loe-inbox-terms-body { padding: 0 16px 12px; }
+    .loe-inbox-terms-actions { flex-wrap: wrap; }
+  }
   @media (max-width: 960px) { .loe-inbox { height: auto; min-height: 100vh; overflow: visible; } .loe-inbox-body { flex-wrap: wrap; } }
   .loe-inbox-rail { flex: 0 0 272px; min-width: 0; min-height: 0; background: #fff; border-right: 1px solid #e3e7ee; display: flex; flex-direction: column; }
   .loe-inbox-rail-head, .loe-inbox-list-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; font-size: 13px; color: #374151; }
@@ -8686,6 +9001,11 @@
   .loe-inbox-tag.ord.executing { background: #0d9488; }
   .loe-inbox-order-filters { padding-top: 0; }
   .loe-inbox-chip .n { margin-left: 4px; opacity: .75; }
+  .loe-inbox-chip-refresh { width: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #6b7280; }
+  .loe-inbox-chip-refresh svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-chip-refresh:disabled { opacity: .6; cursor: progress; }
+  .loe-inbox-chip-refresh:disabled svg { animation: loe-inbox-spin 1s linear infinite; }
+  @keyframes loe-inbox-spin { to { transform: rotate(360deg); } }
   .loe-inbox-tag.ai { background: #eef2ff; color: #4f46e5; font-weight: 700; }
   .loe-inbox-tag.group { background: #eef4ff; color: #1c6cf3; border: 1px solid rgba(28,108,243,.35); font-weight: 600; }
   .loe-inbox-prefix { color: #1c6cf3; border-color: rgba(28,108,243,.35); font-weight: 600; }
@@ -8748,10 +9068,18 @@
   .loe-inbox-ai-slot { display: inline-flex; align-items: center; }
   .loe-inbox-sysnoti.on { background: #ecfdf3; border-color: #16a34a; color: #15803d; font-weight: 600; }
   .loe-inbox-sysnoti.off { color: #6b7280; }
-  .loe-inbox-orders { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 8px 20px; background: #fafbfd; border-bottom: 1px solid #e3e7ee; font-size: 13px; }
+  .loe-inbox-orders { flex: 0 0 auto; position: relative; display: flex; flex-direction: column; gap: 6px; padding: 8px 48px 8px 20px; background: #fafbfd; border-bottom: 1px solid #e3e7ee; font-size: 13px; }
+  .loe-inbox-orders.collapsed { padding-top: 5px; padding-bottom: 5px; }
+  .loe-inbox-orders-toggle { position: absolute; top: 6px; right: 14px; }
+  .loe-inbox-orders.collapsed .loe-inbox-orders-toggle { top: 3px; }
+  .loe-ord-summary { gap: 4px 14px; }
+  .loe-ord-mini { display: inline-flex; align-items: center; gap: 6px; }
   .loe-inbox-orders .err { color: #dc2626; }
   .loe-inbox-sysnoti:disabled { opacity: 1; }
   .loe-inbox-dchat { position: absolute; top: 57px; right: 0; bottom: 0; width: min(400px, 100%); background: #fff; border-left: 1px solid #e3e7ee; box-shadow: -6px 0 18px rgba(15,23,42,.08); display: flex; flex-direction: column; z-index: 5; }
+  .loe-inbox-dchat.dock { position: static; flex: 0 0 400px; width: 400px; min-height: 0; box-shadow: none; }
+  .loe-inbox-dchat.dock .loe-dchat-title { cursor: default; }
+  @media (max-width: 1400px) { .loe-inbox-dchat.dock { flex-basis: 340px; width: 340px; } }
   img.loe-inbox-avatar { object-fit: cover; }
   .loe-inbox-msg.failed .loe-inbox-msg-meta { color: #b91c1c; }
   .loe-inbox-composer { flex: 0 0 auto; padding: 10px 20px 16px; background: #fff; border-top: 1px solid #e3e7ee; display: flex; flex-direction: column; gap: 8px; }
@@ -8764,7 +9092,10 @@
   .loe-inbox-send { height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #1c6cf3; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
   .loe-inbox-send:hover { background: #0b57d0; }
   .loe-inbox-send:disabled { opacity: .6; cursor: progress; }
-  .loe-inbox-tools { display: flex; align-items: center; gap: 2px; }
+  .loe-inbox-tools { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+  .loe-inbox-tools-right { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .loe-inbox-tools-right .loe-inbox-btn { height: 30px; font-size: 12px; }
+  .loe-inbox-flag.on { background: #ecfdf3; border-color: #16a34a; color: #15803d; font-weight: 600; }
   .loe-inbox-tool { width: 34px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
   .loe-inbox-tool:hover, .loe-inbox-tool.on { background: #e8eefb; color: #1c6cf3; }
   .loe-inbox-tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -8856,6 +9187,7 @@
 <body>
 <div id="loe-inbox" class="loe-inbox">
   <header class="loe-inbox-top"></header>
+  <div class="loe-inbox-gate" hidden></div>
   <div class="loe-inbox-body">
     <aside class="loe-inbox-rail">
       <div class="loe-inbox-rail-head"><strong>官方帳號</strong><span>打開 ＝ 監聽新訊息</span></div>
@@ -8864,8 +9196,8 @@
       <div class="loe-inbox-rail-foot"></div>
     </aside>
     <section class="loe-inbox-list">
-      <div class="loe-inbox-list-head"><strong>待回覆</strong><span>依最後訊息時間</span></div>
-      <input class="loe-inbox-search loe-inbox-list-search" type="search" placeholder="搜尋客人、訊息內容、官方帳號或群編" aria-label="搜尋待回覆">
+      <div class="loe-inbox-list-head"><strong>官方訊息</strong><span>依最後訊息時間</span></div>
+      <input class="loe-inbox-search loe-inbox-list-search" type="search" placeholder="搜尋客人、訊息內容、官方帳號或群編" aria-label="搜尋官方訊息">
       <div class="loe-inbox-filters"></div>
       <div class="loe-inbox-filters loe-inbox-order-filters" hidden aria-label="依訂單狀態篩選"></div>
       <div class="loe-inbox-rows"></div>
@@ -8892,6 +9224,7 @@
           <button type="button" class="loe-inbox-tool" data-tool="file" title="檔案：圖片、影片、語音或其他檔案（圖片 20MB、其他 100MB 以內）" aria-label="檔案"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></button>
           <button type="button" class="loe-inbox-tool" data-tool="contents" title="選擇內容：預設訊息、多頁訊息、優惠券" aria-label="選擇內容"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 12h8"></path><path d="M12 8v8"></path></svg></button>
           <input type="file" class="loe-inbox-file" multiple hidden tabindex="-1" aria-hidden="true">
+          <span class="loe-inbox-tools-right"></span>
         </div>
       </div>
     </main>
