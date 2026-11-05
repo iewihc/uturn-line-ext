@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.58.0
+// @version      1.59.0
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知、司機對話。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -709,6 +709,7 @@
     /* 訂單列（收件匣訂單列、原生頁訂單面板共用） */
     .loe-ord { display: flex; align-items: center; gap: 8px 10px; min-width: 0; flex-wrap: wrap; font-size: 13px; color: #1f2937; }
     .loe-ord a { color: ${BLUE}; }
+    .loe-ord-src { padding: 1px 6px; border-radius: 4px; background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 600; }
     .loe-ord-text { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; min-width: 0; }
     .loe-ord-col { padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; font-size: 12px; background: #6b7280; }
     .loe-ord-col.booking { background: #7c3aed; }
@@ -6026,14 +6027,27 @@
 
   /* 懶惰蟲訂單端點（發送 KEY＋這個後台帳號看得到這張單才放行）：
    *   …/driver-chat…（司機對話）；PUT …/system-noti {enabled}；POST …/cancel */
-  function lineExtOrderApi(method, orderId, sub, body, query = "") {
+  function lineExtApi(method, path, body, query = "") {
     const account = getDispatcher();
     const key = storedSendKey(account);
     if (!account || !key)
       return Promise.reject(new Error("請先在懶惰蟲完成「身份授權」"));
-    return lineBackendRequest(method,
-      `/line-ext/orders/${encodeURIComponent(orderId)}${sub}?account=${encodeURIComponent(account)}${query}`,
-      body, undefined, { "X-Line-Send-Key": key });
+    return lineBackendRequest(method, `${path}?account=${encodeURIComponent(account)}${query}`, body, undefined, { "X-Line-Send-Key": key });
+  }
+  const hasLineExtAuth = () => { const account = getDispatcher(); return !!(account && storedSendKey(account)); };
+  const lineExtOrderApi = (method, orderId, sub, body, query = "") =>
+    lineExtApi(method, `/line-ext/orders/${encodeURIComponent(orderId)}${sub}`, body, query);
+
+  /* ---- 聊天室 ↔ 乘客對應：客叫、AI 叫車的單沒有對話連結，靠後端比對是哪位乘客 ----
+   *   POST /line-ext/oa/{bot}/chat-links/resolve { chats: [{ chatId, avatarUrl, messageIds }] }（一次最多 25 個）
+   *   後端依聊天室訊息編號 → AI 對話已記的聊天室 → 大頭貼比對，對到就記下，之後以聊天室查得到那位乘客的單。 */
+  const LINE_CHAT_PROBE_MAX_IDS = 20;
+  const LINE_CHAT_RESOLVE_BATCH = 25;
+  const lineMessageIds = (list) => (list || [])
+    .map((m) => m && m.message && m.message.id).filter((id) => id != null && id !== "").map(String).slice(0, LINE_CHAT_PROBE_MAX_IDS);
+  async function resolveLineChats(botId, probes) {
+    const data = await lineExtApi("POST", `/line-ext/oa/${encodeURIComponent(botId)}/chat-links/resolve`, { chats: probes });
+    return Array.isArray(data && data.linked) ? data.linked : [];
   }
   const driverChatApi = (method, orderId, sub, body, query = "") =>
     lineExtOrderApi(method, orderId, "/driver-chat" + sub, body, query);
@@ -6083,12 +6097,13 @@
       ...[
         ih("span", { class: `loe-ord-col ${o.column || ""}`, text: o.columnLabel || o.status }),
         ih("strong", { text: o.shortId || "" }),
+        o.sourceLabel ? ih("span", { class: "loe-ord-src", text: o.sourceLabel }) : null,
         ih("span", { class: "loe-ord-text", text: o.pickupAddress || o.oriText || "" }),
         car ? ih("span", { text: `🚗 ${car}${eta ? " · " + eta : ""}` }) : null,
         o.trackingUrl ? ih("a", { href: o.trackingUrl, target: "_blank", rel: "noopener", text: "追蹤" }) : null,
         ih("span", { class: "loe-ord-actions" },
           ...[
-            ih("button", { type: "button", class: "loe-ord-btn noti" + (o.isSystemNoti ? " on" : ""), html: ic("bell"), disabled: busy,
+            o.systemNotiAvailable === false ? null : ih("button", { type: "button", class: "loe-ord-btn noti" + (o.isSystemNoti ? " on" : ""), html: ic("bell"), disabled: busy,
               title: o.isSystemNoti
                 ? `自動通知中：${noti}\n點擊關閉`
                 : "點擊開啟：之後司機承接／抵達，會用建單人員的懶惰蟲依車隊複製模板自動傳給客人（已過的不補送）",
@@ -6444,6 +6459,7 @@
     if (!key || !getDispatcher()) return;
     const run = ++nativeOrders.run;
     try {
+      await nativeProbeChat(oa, chat);
       const list = await fetchChatOrders(oa, chat);
       if (run !== nativeOrders.run || key !== nativeOrders.key) return;
       nativeOrders.list = list;
@@ -6452,6 +6468,24 @@
       renderNativeOrdersPanel();
       renderNativeButtons();
     } catch (_) { /* 後端暫時查不到就維持原狀，下次再試 */ }
+  }
+  // 這個聊天室本分頁還沒比對過乘客：讀大頭貼＋最近訊息編號交給後端比對一次（客叫／AI 單才找得到）
+  const nativeProbed = new Set();
+  async function nativeProbeChat(oa, chat) {
+    const key = oa + "/" + chat;
+    if (nativeProbed.has(key) || !hasLineExtAuth() || chat.startsWith("C")) return; // C 開頭＝群組
+    nativeProbed.add(key);
+    try {
+      const [profile, msgs] = await Promise.all([
+        fetchAiProfile(oa, chat).catch(() => null),
+        fetchLineJson(new URL(`/api/v3/bots/${oa}/chats/${encodeURIComponent(chat)}/messages`, location.origin),
+          { controller: new AbortController() }).catch(() => null),
+      ]);
+      const probe = { chatId: chat, avatarUrl: (profile && profile.avatarUrl) || "", messageIds: lineMessageIds(msgs && msgs.list) };
+      if (probe.avatarUrl || probe.messageIds.length) await resolveLineChats(oa, [probe]);
+    } catch (_) {
+      nativeProbed.delete(key); // 網路／後端暫時失敗：下次再試
+    }
   }
   function renderNativeButtons() {
     renderNativeOrdersButton();
@@ -6608,6 +6642,10 @@
     notesOpen: false,
     notes: new Map(), // "bot/chat" → { list, total, next, loading, error }
     orders: new Map(), // "bot/chat" → { list, loading, error }（以對話連結查的進行中訂單）
+    board: new Map(), // botId → { version, chats: Map(chatId → 看板欄位[]), counts }（官方帳號每個聊天室進行中訂單的狀態）
+    orderFilter: "", // 訂單狀態篩選（看板欄位；空＝不篩）
+    linked: new Set(), // 已對應到乘客的 "bot/chat"
+    linkProbed: new Map(), // "bot/chat" → 上次送去比對的內容（大頭貼＋訊息編號沒變就不再問）
     owners: new Map(), // botId → Map(bizId → name)
     renaming: false,
     csrf: null,
@@ -6720,7 +6758,17 @@
       avatarUrl: p.iconHash && p.iconHash !== "biz-app"
         ? `https://profile.line-scdn.net/${encodeURIComponent(p.iconHash)}/preview` : "",
       chatType: item.chatType || "",
+      messageIds: inboxMergeIds(prev ? prev.messageIds : [], lineMessageIds(le ? [le] : [])), // 最近的訊息編號（比對乘客用）
     };
+  }
+  function inboxMergeIds(prev, ids) {
+    const out = (prev || []).filter((id) => !ids.includes(id)).concat(ids);
+    return out.slice(-LINE_CHAT_PROBE_MAX_IDS);
+  }
+  function inboxNoteMessageIds(chat, ids) {
+    if (!chat || !ids.length) return;
+    chat.messageIds = inboxMergeIds(chat.messageIds, ids);
+    inboxQueueLink(chat);
   }
   // 未指派不顯示文字（清單與標題列都省略），只有「未指派」篩選用得到這個狀態
   function inboxAssigneeLabel(chat) {
@@ -6818,8 +6866,10 @@
     if (on) {
       inboxConnect(botId);
       inboxLoadChats(botId).catch((e) => toast(`${inboxBotName(botId)}：讀取對話失敗，${e.message}`, "err", 4000));
+      inboxLoadBoard(botId);
     } else {
       inboxDisconnect(botId);
+      inbox.board.delete(botId);
       for (const [k, c] of inbox.chats) if (c.botId === botId) { inbox.chats.delete(k); inbox.threads.delete(k); inboxDismissToast(k); }
       if (inbox.selected && inbox.selected.startsWith(botId + "/")) { inbox.selected = null; inboxSetContext(null); }
     }
@@ -6843,6 +6893,7 @@
       if (!next) break;
     }
     inboxProbeAi(botId);
+    for (const c of inbox.chats.values()) if (c.botId === botId) inboxQueueLink(c);
   }
   async function inboxFetchChat(botId, chatId) {
     try {
@@ -6876,11 +6927,13 @@
         chat.at = payload.timestamp || Date.now();
         inboxAppendToThread(key, payload);
         inboxNotify(chat, payload);
+        inboxNoteMessageIds(chat, lineMessageIds([payload]));
         break;
       case "messageSent":
         chat.preview = inboxPreview(payload) || chat.preview;
         chat.at = payload.timestamp || Date.now();
         inboxAppendToThread(key, payload);
+        inboxNoteMessageIds(chat, lineMessageIds([payload]));
         break;
       case "read": // 客服（任一分頁）標了已讀
         chat.unread = false; chat.unreadCount = 0;
@@ -7048,6 +7101,7 @@
       const data = await inboxApi("GET", `/api/v3/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`);
       // LINE 回新→舊，這裡翻成舊→新；載入期間 SSE 塞進來的保留在後面
       const items = (data?.list || []).filter((m) => m && (m.type === "message" || m.type === "messageSent")).reverse();
+      inboxNoteMessageIds(chat, lineMessageIds(items.slice(-LINE_CHAT_PROBE_MAX_IDS)));
       const seen = new Set(items.map((m) => m.message?.id).filter(Boolean));
       th.list = items.concat(th.list.filter((m) => !seen.has(m.message?.id)));
     } catch (e) { th.error = e.message; }
@@ -7385,6 +7439,7 @@
         if (f === "mine") return inbox.me && c.assignedBizId === inbox.me.bizId;
         return true;
       })
+      .filter((c) => !inbox.orderFilter || inboxChatColumns(c).includes(inbox.orderFilter))
       .sort((a, b) => b.at - a.at);
   }
   // 客人頭像：LINE 的 preview 圖；沒有或載入失敗就退回名字第一個字
@@ -7394,6 +7449,96 @@
     const img = ih("img", { class: "loe-inbox-avatar", src: chat.avatarUrl, alt: "", loading: "lazy" });
     img.addEventListener("error", () => img.replaceWith(fallback), { once: true });
     return img;
+  }
+  /* ---- 依訂單狀態篩選：每個啟用的官方帳號一次抓齊「每個聊天室進行中訂單的狀態」 ----
+   *   GET /line-ext/oa/{bot}/board?version=（發送 KEY）：沒變只回 unchanged；後端 5 秒快取，多人同開一個帳號只查一次。
+   *   每 20 秒一輪（分頁在背景 60 秒）；自己派單、取消、開關通知後立刻補抓。 */
+  const ORDER_COLUMNS = [
+    { id: "booking", label: "預約" }, { id: "pending", label: "未派" }, { id: "accepted", label: "承接" },
+    { id: "arrived", label: "抵達" }, { id: "executing", label: "執行" },
+  ];
+  const orderColumnLabel = (id) => (ORDER_COLUMNS.find((c) => c.id === id) || {}).label || id;
+  const INBOX_BOARD_REFRESH_MS = 20000;
+  const INBOX_BOARD_HIDDEN_MS = 60000;
+  const INBOX_BOARD_FETCH_MISSING = 10; // 一輪最多補抓幾位「有訂單但不在已載入對話裡」的客人
+  const INBOX_LINK_DEBOUNCE_MS = 1500;
+  const INBOX_BOARD_AFTER_ACTION_MS = 6000; // 派單／取消後補抓看板（後端看板快取 5 秒，太早抓會拿到舊的）
+  const inboxChatColumns = (chat) => (inbox.board.get(chat.botId)?.chats.get(chat.chatId)) || [];
+  async function inboxLoadBoard(botId) {
+    if (!inbox.enabled.has(botId) || !hasLineExtAuth()) return;
+    const prev = inbox.board.get(botId);
+    const data = await lineExtApi("GET", `/line-ext/oa/${encodeURIComponent(botId)}/board`, undefined,
+      prev ? `&version=${encodeURIComponent(prev.version)}` : "").catch(() => null);
+    if (!data || !inbox.enabled.has(botId) || (data.unchanged && prev)) return;
+    const chats = new Map((data.chats || []).map((c) => [c.chatId, c.columns || []]));
+    inbox.board.set(botId, { version: data.version || "", chats, counts: data.counts || {} });
+    for (const chatId of chats.keys()) inbox.linked.add(inboxKey(botId, chatId));
+    // 有進行中訂單、但不在已載入對話裡的客人補抓進清單（依訂單狀態篩選才不會漏）
+    const missing = [...chats.keys()].filter((id) => !id.startsWith("C") && !inbox.chats.has(inboxKey(botId, id))).slice(0, INBOX_BOARD_FETCH_MISSING);
+    await Promise.all(missing.map((id) => inboxFetchChat(botId, id)));
+    renderInboxList();
+  }
+  let inboxBoardTimer = 0;
+  function inboxScheduleBoard() {
+    clearTimeout(inboxBoardTimer);
+    inboxBoardTimer = setTimeout(async () => {
+      await Promise.all([...inbox.enabled].map((id) => inboxLoadBoard(id)));
+      inboxScheduleBoard();
+    }, document.visibilityState === "visible" ? INBOX_BOARD_REFRESH_MS : INBOX_BOARD_HIDDEN_MS);
+  }
+  function renderInboxOrderFilters() {
+    const host = inbox.el.orderFilters;
+    if (!host) return;
+    host.textContent = "";
+    const boards = [...inbox.enabled].map((id) => inbox.board.get(id)).filter(Boolean);
+    host.hidden = !boards.length;
+    if (!boards.length) return;
+    const count = (col) => boards.reduce((n, b) => n + (b.counts[col] || 0), 0);
+    const chip = (id, label, n) => ih("button", {
+      type: "button", class: "loe-inbox-chip" + (inbox.orderFilter === id ? " on" : ""), "aria-pressed": inbox.orderFilter === id ? "true" : "false",
+      onclick: () => { inbox.orderFilter = id; renderInboxList(); },
+    }, label, n ? ih("span", { class: "n", text: String(n) }) : null);
+    host.append(chip("", "全部狀態", 0), ...ORDER_COLUMNS.map((c) => chip(c.id, c.label, count(c.id))));
+  }
+
+  // 還沒對應到乘客的聊天室排進佇列，攢一下整批送後端比對（大頭貼＋訊息編號沒變的不重問）
+  const inboxLinkQueue = new Set();
+  let inboxLinkTimer = 0;
+  function inboxQueueLink(chat) {
+    if (!chat || chat.chatId.startsWith("C") || !inbox.enabled.has(chat.botId) || inbox.linked.has(chat.key)) return; // C 開頭＝群組
+    const ids = chat.messageIds || [];
+    if (!chat.avatarUrl && !ids.length) return;
+    const sig = `${chat.avatarUrl}|${ids.join(",")}`;
+    if (inbox.linkProbed.get(chat.key) === sig) return;
+    inbox.linkProbed.set(chat.key, sig);
+    inboxLinkQueue.add(chat.key);
+    clearTimeout(inboxLinkTimer);
+    inboxLinkTimer = setTimeout(inboxFlushLinks, INBOX_LINK_DEBOUNCE_MS);
+  }
+  async function inboxFlushLinks() {
+    const keys = [...inboxLinkQueue];
+    inboxLinkQueue.clear();
+    if (!hasLineExtAuth()) { keys.forEach((k) => inbox.linkProbed.delete(k)); return; }
+    const byBot = new Map();
+    for (const key of keys) {
+      const chat = inbox.chats.get(key);
+      if (chat) byBot.set(chat.botId, [...(byBot.get(chat.botId) || []), chat]);
+    }
+    for (const [botId, chats] of byBot) {
+      for (let i = 0; i < chats.length; i += LINE_CHAT_RESOLVE_BATCH) {
+        const batch = chats.slice(i, i + LINE_CHAT_RESOLVE_BATCH);
+        let linked;
+        try {
+          linked = await resolveLineChats(botId, batch.map((c) => ({ chatId: c.chatId, avatarUrl: c.avatarUrl, messageIds: c.messageIds || [] })));
+        } catch (_) { batch.forEach((c) => inbox.linkProbed.delete(c.key)); continue; } // 暫時失敗：下次再問
+        const fresh = linked.filter((id) => !inbox.linked.has(inboxKey(botId, id)));
+        linked.forEach((id) => inbox.linked.add(inboxKey(botId, id)));
+        if (!fresh.length) continue;
+        inboxLoadBoard(botId);
+        const sel = inbox.selected && inbox.chats.get(inbox.selected);
+        if (sel && sel.botId === botId && fresh.includes(sel.chatId)) inboxLoadOrders(sel);
+      }
+    }
   }
   function renderInboxList() {
     const filters = inbox.el.filters, rows = inbox.el.rows;
@@ -7406,6 +7551,7 @@
         text: f.label, onclick: () => { inbox.filter = f.id; renderInboxList(); },
       }));
     }
+    renderInboxOrderFilters();
     rows.textContent = "";
     const chats = inboxVisibleChats();
     const overrides = getChatOverrides();
@@ -7428,6 +7574,7 @@
             c.unread ? ih("span", { class: "loe-inbox-unread" + (c.unreadCount ? "" : " dot"), text: c.unreadCount ? String(c.unreadCount) : "" }) : null,
           ),
           ih("span", { class: "loe-inbox-row-meta" },
+            ...inboxChatColumns(c).map((col) => ih("span", { class: `loe-inbox-tag ord ${col}`, text: orderColumnLabel(col) })),
             ai ? ih("span", { class: `loe-inbox-tag ${ai.cls}`, text: ai.text }) : null,
             c.followedUp ? ih("span", { class: "loe-inbox-tag", text: "待處理" }) : null,
             c.done ? ih("span", { class: "loe-inbox-tag done", text: "處理完畢" }) : null,
@@ -7466,7 +7613,9 @@
   }
   function inboxReloadSelectedOrders() {
     const chat = inbox.selected && inbox.chats.get(inbox.selected);
-    if (chat) window.setTimeout(() => inboxLoadOrders(chat), 800);
+    if (!chat) return;
+    window.setTimeout(() => inboxLoadOrders(chat), 800);
+    window.setTimeout(() => inboxLoadBoard(chat.botId), INBOX_BOARD_AFTER_ACTION_MS);
   }
   // 訂單有動作（開關自動通知、取消）：先重畫停用按鈕，結束後重抓
   function inboxOrdersChanged(done) {
@@ -7484,14 +7633,15 @@
     bar.hidden = !chat;
     if (!chat) return;
     const list = liveOrders(st && st.list);
-    const notiOn = list.some((o) => o.isSystemNoti);
+    const notiList = list.filter((o) => o.systemNotiAvailable !== false); // 客叫／AI 單系統本來就會推通知，不在這裡開關
+    const notiOn = notiList.some((o) => o.isSystemNoti);
     const notiTip = list.filter((o) => o.isSystemNoti).map((o) => `${o.shortId} ${orderNotiSummary(o) || "等待司機承接"}`).join("\n");
     slot.append(ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-sysnoti" + (notiOn ? " on" : " off"), html: ic("bell"),
-      disabled: !list.length || list.some((o) => orderActionBusy.has(o.id)),
-      title: !list.length ? "沒有進行中的訂單"
+      disabled: !notiList.length || notiList.some((o) => orderActionBusy.has(o.id)),
+      title: !notiList.length ? (list.length ? "客叫／AI 叫車的單系統會自己推 LINE 通知給乘客" : "沒有進行中的訂單")
         : notiOn ? `系統自動通知中（點擊全部關閉）\n${notiTip}`
           : "點擊開啟這位客人進行中訂單的系統自動通知（之後的承接／抵達自動傳給客人）",
-      onclick: () => list.filter((o) => !!o.isSystemNoti === notiOn).forEach((o) => setOrderSystemNoti(o, !notiOn, inboxOrdersChanged)) },
+      onclick: () => notiList.filter((o) => !!o.isSystemNoti === notiOn).forEach((o) => setOrderSystemNoti(o, !notiOn, inboxOrdersChanged)) },
       ih("span", { text: notiOn ? "自動通知" : "自動通知 關" })));
 
     if (!st || (st.loading && !list.length)) { bar.append(ih("span", { class: "loe-inbox-muted", text: "讀取訂單中…" })); return; }
@@ -7663,7 +7813,7 @@
       filters: $(".loe-inbox-filters"), rows: $(".loe-inbox-rows"), listSearch: $(".loe-inbox-list-search"),
       thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
       quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
-      orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"),
+      orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
     };
     // 開著的對話定時重抓訂單狀態（分頁在背景就不抓）
     setInterval(() => {
@@ -7705,7 +7855,9 @@
       for (const id of inbox.enabled) {
         inboxConnect(id);
         inboxLoadChats(id).catch((e) => toast(`${inboxBotName(id)}：讀取對話失敗，${e.message}`, "err", 4000));
+        inboxLoadBoard(id);
       }
+      inboxScheduleBoard();
       setInterval(() => inboxLoadBots().then(renderInboxRail).catch(() => {}), INBOX_BOTS_REFRESH_MS);
     })();
   }
@@ -7894,6 +8046,14 @@
   .loe-inbox-unread.dot { min-width: 10px; width: 10px; height: 10px; padding: 0; }
   .loe-inbox-tag { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: #ffedd5; color: #9a3412; }
   .loe-inbox-tag.done { background: #e5e7eb; color: #4b5563; }
+  .loe-inbox-tag.ord { color: #fff; font-weight: 600; background: #6b7280; }
+  .loe-inbox-tag.ord.booking { background: #7c3aed; }
+  .loe-inbox-tag.ord.pending { background: #f59e0b; }
+  .loe-inbox-tag.ord.accepted { background: #1c6cf3; }
+  .loe-inbox-tag.ord.arrived { background: #16a34a; }
+  .loe-inbox-tag.ord.executing { background: #0d9488; }
+  .loe-inbox-order-filters { padding-top: 0; }
+  .loe-inbox-chip .n { margin-left: 4px; opacity: .75; }
   .loe-inbox-tag.ai { background: #eef2ff; color: #4f46e5; font-weight: 700; }
   .loe-inbox-tag.group { background: #eef4ff; color: #1c6cf3; border: 1px solid rgba(28,108,243,.35); font-weight: 600; }
   .loe-inbox-prefix { color: #1c6cf3; border-color: rgba(28,108,243,.35); font-weight: 600; }
@@ -7998,6 +8158,7 @@
       <div class="loe-inbox-list-head"><strong>待回覆</strong><span>依最後訊息時間</span></div>
       <input class="loe-inbox-search loe-inbox-list-search" type="search" placeholder="搜尋客人、訊息內容、官方帳號或群編" aria-label="搜尋待回覆">
       <div class="loe-inbox-filters"></div>
+      <div class="loe-inbox-filters loe-inbox-order-filters" hidden aria-label="依訂單狀態篩選"></div>
       <div class="loe-inbox-rows"></div>
     </section>
     <main class="loe-inbox-thread">
