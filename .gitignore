@@ -1,0 +1,8 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.line-image-test/
+.DS_Store
+scripts/cookie.txt
+__pycache__/

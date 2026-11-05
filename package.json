@@ -1,0 +1,22 @@
+{
+  "name": "uturn-line-ext",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node -e \"require('fs').copyFileSync('dist/uturn-line-ext.user.js','uturn-line-ext.user.js')\"",
+    "check": "node --check uturn-line-ext.user.js",
+    "test": "npm run build && playwright test",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "acorn": "^8.19.0",
+    "acorn-walk": "^8.3.5",
+    "eslint": "^10.14.0",
+    "globals": "^17.14.0",
+    "terser": "^5.51.2",
+    "vite": "^8.3.6",
+    "vite-plugin-monkey": "^8.1.1"
+  },
+  "version": "1.65.0"
+}

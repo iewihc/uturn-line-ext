@@ -1,0 +1,67 @@
+// 收件匣通知：右上卡片、提示音、背景時的桌面通知。
+import { inboxPreview } from "./chats.js";
+import { INBOX_TOAST_MS, inbox, inboxBotName } from "./core.js";
+import { inboxOpenChat } from "./send.js";
+import { renderInboxHeader } from "./shell.js";
+import { renderInboxToasts } from "./thread.js";
+
+/* ---- 通知：卡片（同一位客人合併計數）＋提示音＋背景時的桌面通知 ---- */
+function inboxDismissToast(key) {
+  const t = inbox.toasts.get(key);
+  if (!t) return;
+  clearTimeout(t.timer);
+  inbox.toasts.delete(key);
+}
+function inboxNotify(chat, payload) {
+  const key = chat.key;
+  const t = inbox.toasts.get(key) || { key, count: 0, lines: [], timer: 0 };
+  t.count += 1;
+  t.lines.push(inboxPreview(payload) || "[訊息]");
+  if (t.lines.length > 3) t.lines.shift();
+  clearTimeout(t.timer);
+  t.timer = setTimeout(() => { inbox.toasts.delete(key); renderInboxToasts(); }, INBOX_TOAST_MS);
+  inbox.toasts.set(key, t);
+  if (inbox.sound) inboxBeep();
+  if (document.hidden && typeof Notification === "function" && Notification.permission === "granted") {
+    try {
+      const n = new Notification(`${inboxBotName(chat.botId)}・${chat.name}`, { body: t.lines.join("\n"), tag: key });
+      n.onclick = () => { window.focus(); inboxOpenChat(key); n.close(); };
+    } catch (_) {}
+  }
+}
+// 不載外部音檔（CSP／離線都不受影響）：Web Audio 兩個短音
+function inboxAudio() {
+  if (!inbox.audio) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    inbox.audio = new Ctx();
+    inbox.audio.addEventListener("statechange", renderInboxHeader);
+  }
+  return inbox.audio;
+}
+function inboxBeep() {
+  try {
+    const ctx = inboxAudio();
+    if (!ctx) return;
+    if (ctx.state !== "running") { ctx.resume().catch(() => {}); return; }
+    playTwoTone(ctx);
+  } catch (_) {}
+}
+// 兩個短音（收件匣新訊息、司機對話共用）
+function playTwoTone(ctx) {
+  try {
+    const t0 = ctx.currentTime;
+    [[880, 0], [1175, 0.12]].forEach(([freq, delay]) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = "sine"; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t0 + delay);
+      gain.gain.exponentialRampToValueAtTime(0.25, t0 + delay + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + 0.18);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0 + delay); osc.stop(t0 + delay + 0.2);
+    });
+  } catch (_) {}
+}
+const inboxSoundReady = () => !inbox.sound || (inbox.audio && inbox.audio.state === "running");
+
+export { inboxBeep, inboxDismissToast, inboxNotify, inboxSoundReady, playTwoTone };
