@@ -12,7 +12,7 @@ import { renderInboxThread } from "./thread.js";
  *   轉給司機：走司機對話（POST …/driver-chat/messages｜/images），對象＝這位客人進行中、已有司機的單；多台先選哪一台
  *   轉給客人：走收件匣送出（文字／圖片，同手動回覆）
  *   文字加前綴（客人說：／司機說：）讓對方分得出是誰講的；圖片原圖下載後轉傳（LINE 圖要帶登入、GCS 不給跨網域讀，一律 GM_xmlhttpRequest）
- *   按一下就送，不再確認；原訊息下方標轉傳結果，失敗可重試（多台只重送還沒成功的）
+ *   按一下就送，不再確認；原訊息下方標轉傳結果，失敗可重試（多台只重送還沒成功的）；轉過的可以再轉，不限次數
  * ---------------------------------------------------------------------- */
 const RELAY_PREFIX = { driver: "客人說：", customer: "司機說：" };
 const RELAY_LABEL = { driver: "司機", customer: "客人" };
@@ -148,8 +148,10 @@ function relayControls(dir, item) {
   const st = relay.status.get(`${dir}:${item.id}`);
   const send = (e) => (dir === "driver" ? relayToDriver(item, e.currentTarget) : relayToCustomer(item));
   if (st?.state === "sending") return ih("span", { class: "loe-relay-status", text: `轉給${RELAY_LABEL[dir]}中…` });
+  // 轉過的一樣可以再轉（不限次數）
   if (st?.state === "sent")
-    return ih("span", { class: "loe-relay-status ok", text: `已轉給${RELAY_LABEL[dir]}${st.to ? ` ${st.to}` : ""} ✓` });
+    return ih("span", { class: "loe-relay-status ok" }, `已轉給${RELAY_LABEL[dir]}${st.to ? ` ${st.to}` : ""} ✓`,
+      ih("button", { type: "button", class: "loe-relay-btn", text: "再轉一次", title: `把這則訊息再轉給${RELAY_LABEL[dir]}`, onclick: send }));
   if (st?.state === "failed")
     return ih("span", { class: "loe-relay-status err" }, `沒轉成功：${st.error} `,
       ih("button", { type: "button", class: "loe-relay-retry", text: "重試", onclick: () => st.retry() }));
