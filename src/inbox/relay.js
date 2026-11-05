@@ -11,14 +11,15 @@ import { renderInboxThread } from "./thread.js";
 /* ---------------------------------------------------------------------- *
  *   轉給司機：走司機對話（POST …/driver-chat/messages｜/images），對象＝這位客人進行中、已有司機的單；多台先選哪一台
  *   轉給客人：走收件匣送出（文字／圖片，同手動回覆）
- *   文字加前綴（客人說：／司機說：）讓對方分得出是誰講的；客服自己送出的訊息也能轉（raw：原文照轉、不加前綴）；圖片原圖下載後轉傳（LINE 圖要帶登入、GCS 不給跨網域讀，一律 GM_xmlhttpRequest）
+ *   文字一律加前綴：轉給司機＝「客人說：」、轉給客人＝「司機說：」（客服自己送出的也一樣；原文已有前綴先拿掉，不疊兩層）；圖片原圖下載後轉傳（LINE 圖要帶登入、GCS 不給跨網域讀，一律 GM_xmlhttpRequest）
  *   按一下就送，不再確認；原訊息下方標轉傳結果，失敗可重試（多台只重送還沒成功的）；轉過的可以再轉，不限次數
  * ---------------------------------------------------------------------- */
 const RELAY_PREFIX = { driver: "客人說：", customer: "司機說：" };
 const RELAY_LABEL = { driver: "司機", customer: "客人" };
 const relay = { status: new Map(), menu: null, bar: null }; // status：`${dir}:${訊息id}` → { state, error, retry, to }
 
-const relayText = (dir, item) => (item.raw ? item.text : RELAY_PREFIX[dir] + item.text);
+const RELAY_PREFIX_RE = /^(客人說|司機說)：\s*/;
+const relayText = (dir, item) => RELAY_PREFIX[dir] + item.text.replace(RELAY_PREFIX_RE, "");
 const relayTargets = () => {
   const chat = inboxSelectedChat();
   return chat ? liveOrders(inbox.orders.get(chat.key)?.list).filter((o) => o.hasDriver) : [];
@@ -163,7 +164,7 @@ function inboxRelayControls(m) {
   const msg = m.message;
   if (!msg?.id || !relayTargets().length) return null;
   const item = relayItemOfLine(msg);
-  return item ? relayControls("driver", { ...item, raw: m.type === "messageSent" }) : null;
+  return item ? relayControls("driver", item) : null;
 }
 function relayItemOfLine(msg) {
   if (msg.type === "text" || msg.type === "textV2") return msg.text ? { id: msg.id, text: msg.text } : null;
@@ -192,9 +193,8 @@ async function relayLineImageUrl(msgId) {
 // 司機對話的訊息：司機傳的、調度這邊送出的都能轉（只在收件匣：面板對應的就是目前這位客人）
 function driverRelayControls(m) {
   if (driverChat.host !== inbox.el.dchat || (m.sender !== "driver" && m.sender !== "user") || !m.id || m.isRecalled) return null;
-  const raw = m.sender !== "driver";
-  const item = m.type === "image" ? (m.imageUrl ? { id: m.id, imageUrl: m.imageUrl, raw } : null)
-    : m.type === "text" || m.type === "location" ? (m.content ? { id: m.id, text: m.content, raw } : null) : null;
+  const item = m.type === "image" ? (m.imageUrl ? { id: m.id, imageUrl: m.imageUrl } : null)
+    : m.type === "text" || m.type === "location" ? (m.content ? { id: m.id, text: m.content } : null) : null;
   return item ? relayControls("customer", item) : null;
 }
 
@@ -217,7 +217,7 @@ function relayOnSelect() {
   const keep = (e) => e.preventDefault(); // 按工具列不要取消反白
   const bar = ih("div", { class: "loe-relay-bar", role: "toolbar", "aria-label": "轉傳反白的文字", onmousedown: keep },
     ih("button", { type: "button", class: "primary", text: toDriver ? "轉給司機" : "轉給客人",
-      onclick: (e) => { const item = { id, text, raw: msgEl.classList.contains("out") }; if (toDriver) relayToDriver(item, e.currentTarget); else relayToCustomer(item); relayHideBar(); } }),
+      onclick: (e) => { const item = { id, text }; if (toDriver) relayToDriver(item, e.currentTarget); else relayToCustomer(item); relayHideBar(); } }),
     ih("button", { type: "button", text: "複製", onclick: async () => { await copyText(text).catch(() => {}); toast("已複製", "ok", 1500); relayHideBar(); } }));
   bar.style.left = `${Math.max(8, rect.left + rect.width / 2 - 70)}px`;
   bar.style.top = `${Math.max(8, rect.top - 44)}px`;
