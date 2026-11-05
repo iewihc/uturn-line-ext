@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UTurn懶惰蟲專用
 // @namespace    https://github.com/iewihc/uturn-line-ext
-// @version      1.61.0
+// @version      1.61.1
 // @description  Uturn 派單神器：複製、地址導航、快速回覆、前綴、派單轉發到 Discord、估價、預約單、後台一鍵分享自動送出、多開收件匣、系統自動通知、司機對話。
 // @author       iewihc
 // @match        https://manager.line.biz/*
@@ -5128,7 +5128,8 @@
 
   function renderAiToggle() {
     let box = document.querySelector(`.${AI_TOGGLE_CLASS}`);
-    const s = aiState && aiState.chat === getChatId() &&
+    // 同一個 LINE 用戶在同 provider 的多個官方帳號對話 ID 相同，所以帳號也要一起比對
+    const s = aiState && aiState.chat === getChatId() && aiState.bot === getOaId() &&
       (aiState.status !== "loading" || aiBots.get(aiState.bot)) ? aiState : null;
     if (!s) {
       if (box) box.remove();
@@ -7126,7 +7127,8 @@
   /* ---- 訊息串 ---- */
   function inboxSetContext(chat) {
     const next = chat ? { botId: chat.botId, chatId: chat.chatId, customerName: chat.name, oaName: inboxBotName(chat.botId) } : null;
-    const changed = (pageContext && pageContext.chatId) !== (next && next.chatId);
+    // 比「帳號／對話」而不只比對話 ID：同 provider 的帳號同一位客人對話 ID 相同，只比對話 ID 會讓 AI 狀態停在上一個帳號
+    const changed = (pageContext ? inboxKey(pageContext.botId, pageContext.chatId) : "") !== (next ? inboxKey(next.botId, next.chatId) : "");
     pageContext = next;
     if (changed) { closeDispatchPopover(); refreshAiToggle(); }
   }
@@ -7190,7 +7192,7 @@
       chat.preview = inboxPreview(bubble) || chat.preview; chat.at = Date.now();
       if (chat.unread) inboxMarkRead(chat); // 回覆了就等於看過
       // 客服已接手：AI 處理中的對話自動轉人工（同 LINE 聊天室的送出手勢）
-      if (aiState && aiState.status === "ready" && !aiState.handoff && !aiState.busy && aiState.chat === chat.chatId) switchAiHandoff(true, true);
+      if (aiState && aiState.status === "ready" && !aiState.handoff && !aiState.busy && aiState.bot === chat.botId && aiState.chat === chat.chatId) switchAiHandoff(true, true);
       inboxRenderAll();
       return true;
     } catch (e) {
@@ -7381,7 +7383,7 @@
     await inboxApi("PUT", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/nickname`, { nickname });
     chat.nickname = nickname;
     chat.name = nickname || chat.lineName || "（未提供名稱）";
-    if (pageContext && pageContext.chatId === chat.chatId) pageContext.customerName = chat.name;
+    if (pageContext && pageContext.botId === chat.botId && pageContext.chatId === chat.chatId) pageContext.customerName = chat.name;
     toast(nickname ? `已改為「${nickname}」` : "已清除暱稱，顯示 LINE 原名", "ok");
     inboxRenderAll();
   }
