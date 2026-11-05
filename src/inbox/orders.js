@@ -83,7 +83,7 @@ function renderInboxOrders() {
     disabled: !notiList.length || notiList.some((o) => orderActionBusy.has(o.id)),
     title: !notiList.length ? (list.length ? "客叫／AI 叫車的單系統會自己推 LINE 通知給乘客" : "沒有進行中的訂單")
       : notiOn ? `系統自動通知中（點擊全部關閉）\n${notiTip}`
-        : "點擊開啟這位客人進行中訂單的系統自動通知（之後的承接／抵達自動傳給客人）",
+        : "點擊開啟這位客人進行中訂單的系統自動通知（之後的承接／抵達／客上自動傳給客人）",
     onclick: () => notiList.filter((o) => !!o.isSystemNoti === notiOn).forEach((o) => setOrderSystemNoti(o, !notiOn, inboxOrdersChanged)) },
     ih("span", { text: notiOn ? "自動通知" : "自動通知 關" })));
 

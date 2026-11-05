@@ -125,7 +125,7 @@ function renderNativeOrdersPanel() {
       ? list.map((o) => orderRow(o, { onChange: nativeOrdersChanged,
         onChat: (id) => { closeNativeOrdersPanel(); openNativeDriverChat(id); } }))
       : ih("div", { class: "loe-dchat-empty", text: "目前沒有進行中的訂單" })),
-    ih("div", { class: "loe-ordp-hint", text: "自動通知開著時，司機承接／抵達會用建單人員的懶惰蟲，依車隊複製模板自動傳給客人；隨時可開關，已過的節點不補送。" }));
+    ih("div", { class: "loe-ordp-hint", text: "自動通知開著時，司機承接／抵達／客上會用建單人員的懶惰蟲，依車隊複製模板自動傳給客人；隨時可開關，已過的節點不補送。" }));
 }
 function renderDriverChatButton() {
   const group = document.querySelector(".send-group.btn-group");

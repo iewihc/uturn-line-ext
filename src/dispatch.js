@@ -192,18 +192,18 @@ function openDispatchPopover(prefillAddress) {
     closeDispatchPopover();
   });
 
-  // 系統自動通知：司機承接／抵達時，後端用「建單人員」的懶惰蟲身份授權，
+  // 系統自動通知：司機承接／抵達／客上時，後端用「建單人員」的懶惰蟲身份授權，
   // 依車隊複製模板自動把車牌／追蹤連結等送進這個對話（需先完成身份授權）
   const notiWrap = document.createElement("label");
   notiWrap.className = "loe-check loe-sysnoti-check";
   notiWrap.style.margin = "10px 0 4px";
-  notiWrap.title = "司機承接、抵達時，系統用你的懶惰蟲身份授權，依車隊複製模板自動傳訊息給這位客人";
+  notiWrap.title = "司機承接、抵達、客上時，系統用你的懶惰蟲身份授權，依車隊複製模板自動傳訊息給這位客人";
   const notiChk = document.createElement("input");
   notiChk.type = "checkbox";
   notiChk.checked = getSystemNoti();
   notiChk.addEventListener("change", () => setSystemNoti(notiChk.checked));
   const notiText = document.createElement("span");
-  notiText.textContent = "系統自動通知（承接／抵達自動傳給客人）";
+  notiText.textContent = "系統自動通知（承接／抵達／客上自動傳給客人）";
   notiWrap.appendChild(notiChk);
   notiWrap.appendChild(notiText);
 
