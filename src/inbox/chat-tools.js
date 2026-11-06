@@ -138,7 +138,7 @@ function renderInboxNotes() {
   host.append(ih("div", { class: "loe-inbox-notes-head" },
     ih("button", { type: "button", class: "loe-inbox-x", html: ic(collapsed ? "chevron-right" : "chevron-down"), "aria-expanded": collapsed ? "false" : "true",
       "aria-label": collapsed ? "展開記事本" : "收起記事本", onclick: toggle }),
-    ih("strong", { class: "loe-inbox-notes-title", text: `記事本 ${st ? st.total : ""}`, onclick: toggle }),
+    ih("strong", { class: "loe-inbox-notes-title", text: "記事本", onclick: toggle }),
     ih("span", { class: "loe-inbox-spacer" }),
     collapsed ? null : ih("button", { type: "button", class: "loe-inbox-x", "aria-label": inbox.notesMax ? "還原記事本" : "放大記事本", title: inbox.notesMax ? "還原（Esc）" : "放大：蓋到訊息串上，看更多筆記",
       html: ic(inbox.notesMax ? "minimize-2" : "maximize-2"), onclick: () => { inbox.notesMax = !inbox.notesMax; renderInboxNotes(); } }),

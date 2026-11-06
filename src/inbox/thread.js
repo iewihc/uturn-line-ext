@@ -78,7 +78,6 @@ function renderInboxThread() {
         onclick: () => { inbox.renaming = true; renderInboxThread(); } }),
       oaChip);
   }
-  const notesCount = inbox.notes.get(chat.key)?.total;
   thHead.append(...[
     inboxAvatar(chat),
     ih("div", { class: "loe-inbox-th-title" },
@@ -89,7 +88,7 @@ function renderInboxThread() {
     inbox.el.sysNotiSlot, // 系統自動通知（renderInboxOrders 填）
     ih("button", { type: "button", class: "loe-inbox-btn" + (inbox.notesOpen ? " on" : ""), html: ic("notebook"), "aria-pressed": inbox.notesOpen ? "true" : "false", title: "這位客人的 LINE 記事本（客人看不到）",
       onclick: () => { inbox.notesOpen = !inbox.notesOpen; inbox.notesCollapsed = false; if (inbox.notesOpen && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); renderInboxNotes(); renderInboxThread(); } },
-      ih("span", { text: "記事本" + (Number.isInteger(notesCount) ? ` ${notesCount}` : "") })),
+      ih("span", { text: "記事本" })),
     (() => {
       const prefix = getPrefix(); // pageContext 已指向這個帳號
       return ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-prefix" + (prefix ? "" : " empty"), html: GEAR_ICON,

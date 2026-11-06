@@ -317,7 +317,7 @@ function buildDriverChat() {
   const head = ih("div", { class: "loe-dchat-head" });
   const msgs = ih("div", { class: "loe-dchat-msgs" });
   const quick = ih("div", { class: "loe-dchat-quick" });
-  const textarea = ih("textarea", { class: "loe-dchat-input", rows: "2", placeholder: "傳送訊息給司機 (Enter送出，Shift+Enter可換行)", "aria-label": "傳訊息給司機" });
+  const textarea = ih("textarea", { class: "loe-dchat-input", rows: "2", placeholder: "傳送訊息給司機", "aria-label": "傳訊息給司機" });
   const fileInput = ih("input", { type: "file", accept: "image/*", hidden: true });
   const send = () => { if (driverChatSendText(textarea.value)) textarea.value = ""; textarea.focus(); };
   textarea.addEventListener("keydown", (e) => {
@@ -392,7 +392,7 @@ function renderDriverChatHead() {
     const no = driverChat.orders.findIndex((x) => x.id === driverChat.orderId) + 1;
     driverChat.el.textarea.placeholder = driverChat.orders.length > 1 && no
       ? `傳給第 ${no} 台 ${summary.carPlate || summary.driverNo || ""}…（Enter 送出）`
-      : "傳送訊息給司機 (Enter送出，Shift+Enter可換行)";
+      : "傳送訊息給司機";
   }
 }
 function driverChatBubbleBody(m) {
