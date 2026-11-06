@@ -65,8 +65,9 @@ function bootInbox() {
   document.addEventListener("click", (e) => {
     closePrefixPopover();
     if (inbox.optionsOpen) { inbox.optionsOpen = false; renderInboxHeader(); } // 點選單外面收起「選項」
-    // 貼圖／表情貼面板：點面板和輸入區以外的地方就收起（工具列那顆笑臉自己會 stopPropagation 切換）
-    if (inbox.picker && e.target instanceof Element && !e.target.closest(".loe-inbox-picker, .loe-inbox-composer-row, .loe-inbox-tools")) { inbox.picker = null; renderInboxPicker(); }
+    // 貼圖／表情貼面板：點面板和輸入區以外的地方就收起（工具列那顆笑臉自己會 stopPropagation 切換）。
+    // 用 composedPath：點貼圖包分頁會立刻重畫面板，事件冒泡到這裡時被點的按鈕已不在 DOM，closest 會誤判成「點到外面」
+    if (inbox.picker && !e.composedPath().some((n) => n instanceof Element && n.matches(".loe-inbox-picker, .loe-inbox-composer-row, .loe-inbox-tools"))) { inbox.picker = null; renderInboxPicker(); }
   });
   const sendBtn = $(".loe-inbox-send");
   const doSend = async () => {
