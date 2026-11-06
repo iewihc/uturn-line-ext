@@ -4,10 +4,11 @@ import { hasLineExtAuth } from "../core/backend.js";
 import { ic } from "../core/icons.js";
 import { inboxAiLabel, inboxQueueAi } from "./ai.js";
 import { inboxAssigneeLabel, inboxEnabledIds } from "./chats.js";
-import { INBOX_FILTERS, ih, inbox, inboxBotColor, inboxBotName, inboxGroupLabel, inboxTime } from "./core.js";
+import { INBOX_FILTERS, INBOX_ORDER_FILTERS_COLLAPSED_KEY, ih, inbox, inboxBotColor, inboxBotName, inboxGroupLabel, inboxTime } from "./core.js";
 import { inboxChatColumns, inboxRefreshBoards, orderColumnLabel, renderInboxOrderFilters } from "./order-status.js";
 import { inboxOpenChat } from "./send.js";
 import { inboxAvatar, inboxVisibleChats } from "./shell.js";
+import { storeSet } from "../core/store.js";
 import { getChatOverrides, getPrefixForGid } from "../settings.js";
 
 function renderInboxList() {
@@ -27,6 +28,15 @@ function renderInboxList() {
   if (hasLineExtAuth())
     filters.append(ih("button", { type: "button", class: "loe-inbox-chip loe-inbox-chip-refresh", html: ic("refresh"), disabled: inbox.boardRefreshing,
       title: "重新整理預約／未派／承接／抵達／執行的數量", "aria-label": "重新整理訂單狀態數量", onclick: inboxRefreshBoards }));
+  // 訂單狀態那排可往上收起（篩選照常生效；收起時有選狀態就顯示在這顆上提醒）
+  if (hasLineExtAuth() && inboxEnabledIds().some((id) => inbox.board.get(id))) {
+    const collapsed = inbox.orderFiltersCollapsed;
+    const active = collapsed && inbox.orderFilter ? orderColumnLabel(inbox.orderFilter) : "";
+    filters.append(ih("button", { type: "button", class: "loe-inbox-chip loe-inbox-chip-refresh loe-inbox-chip-fold" + (active ? " on" : ""), html: ic(collapsed ? "chevron-down" : "chevron-up"),
+      title: collapsed ? "展開訂單狀態篩選" : "收起訂單狀態篩選", "aria-label": collapsed ? "展開訂單狀態篩選" : "收起訂單狀態篩選", "aria-expanded": collapsed ? "false" : "true",
+      onclick: () => { inbox.orderFiltersCollapsed = !collapsed; storeSet(INBOX_ORDER_FILTERS_COLLAPSED_KEY, inbox.orderFiltersCollapsed); renderInboxList(); } },
+      active ? ih("span", { class: "loe-inbox-chip-fold-active", text: active }) : null));
+  }
   renderInboxOrderFilters();
   rows.textContent = "";
   const chats = inboxVisibleChats();

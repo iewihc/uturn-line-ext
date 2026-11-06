@@ -159,6 +159,9 @@ function inboxTakeover() {
   .loe-inbox-chip-refresh { width: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #6b7280; }
   .loe-inbox-chip-refresh svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .loe-inbox-chip-refresh:disabled { opacity: .6; cursor: progress; }
+  .loe-inbox-chip-fold { width: auto; padding: 0 8px; gap: 4px; }
+  .loe-inbox-chip-fold.on { color: #fff; }
+  .loe-inbox-chip-fold-active { font-size: 12px; }
   .loe-inbox-chip-refresh:disabled svg { animation: loe-inbox-spin 1s linear infinite; }
   @keyframes loe-inbox-spin { to { transform: rotate(360deg); } }
   .loe-inbox-tag.ai { background: #eef2ff; color: #4f46e5; font-weight: 700; }

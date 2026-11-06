@@ -24,6 +24,7 @@ import { makeLineRateLimiter } from "../line/fetch.js";
 const INBOX_ENABLED_KEY = "loe_inbox_enabled_bots_v1"; // 啟用監聽的官方帳號 botId 陣列
 const INBOX_SOUND_KEY = "loe_inbox_sound_v1"; // 新訊息提示音（預設開）
 const INBOX_ORDERS_COLLAPSED_KEY = "loe_inbox_orders_collapsed_v1";
+const INBOX_ORDER_FILTERS_COLLAPSED_KEY = "loe_inbox_order_filters_collapsed_v1"; // 官方訊息篩選列下方「訂單狀態」那排往上收起
 const INBOX_RAIL_COLLAPSED_KEY = "loe_inbox_rail_collapsed_v1"; // 左欄「官方帳號」收起（預設展開）
 const INBOX_COLS_COLLAPSED_KEY = "loe_inbox_cols_collapsed_v1"; // 官方訊息／聊天／司機對話欄收起 { list, thread, side }
 const INBOX_DCHAT_DOCK_KEY = "loe_inbox_dchat_dock_v1"; // 司機對話停靠在最右邊一欄（false＝浮動可拖曳）
@@ -85,6 +86,7 @@ const inbox = {
   picker: null, // 貼圖／表情貼面板：{ kind: "sticker"|"emoji", pkg }（null＝收起）
   colsCollapsed: { list: false, thread: false, side: false }, // 其他欄收起（initInboxCollapse 讀設定）
   railCollapsed: storeGet(INBOX_RAIL_COLLAPSED_KEY, false) === true, // 左欄「官方帳號」往左收成一條（監聽不受影響）
+  orderFiltersCollapsed: storeGet(INBOX_ORDER_FILTERS_COLLAPSED_KEY, false) === true, // 訂單狀態篩選那排收起（篩選仍生效）
   ordersCollapsed: storeGet(INBOX_ORDERS_COLLAPSED_KEY, false) === true, // 標頭下方訂單列收起（只剩狀態＋單號）
   dchatDock: storeGet(INBOX_DCHAT_DOCK_KEY, true) !== false, // 司機對話：true＝對話右邊再開一欄，false＝浮動蓋在對話上、可拖曳
   dchatAutoFor: "", // 已自動開過司機對話的 "bot/chat"（手動關掉後，同一位客人不再自動開）
@@ -168,4 +170,4 @@ async function inboxApi(method, path, body, retried = false) {
   return text ? JSON.parse(text) : null;
 }
 
-export { INBOX_AUTO_READ_KEY, INBOX_BOTS_REFRESH_MS, INBOX_COLS_COLLAPSED_KEY, INBOX_COL_WIDTHS_KEY, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
+export { INBOX_AUTO_READ_KEY, INBOX_BOTS_REFRESH_MS, INBOX_COLS_COLLAPSED_KEY, INBOX_COL_WIDTHS_KEY, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDER_FILTERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };

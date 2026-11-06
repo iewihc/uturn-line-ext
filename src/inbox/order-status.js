@@ -61,8 +61,8 @@ function renderInboxOrderFilters() {
   if (!host) return;
   host.textContent = "";
   const boards = inboxEnabledIds().map((id) => inbox.board.get(id)).filter(Boolean);
-  host.hidden = !boards.length;
-  if (!boards.length) return;
+  host.hidden = !boards.length || inbox.orderFiltersCollapsed; // 收起：整排不畫，篩選照常生效
+  if (host.hidden) return;
   // 只算收件匣列得出來的官方對話（同上方篩選與搜尋）：數字＝點下去看到的列數；沒有對應對話的訂單不算
   const count = (col) => inboxVisibleChats(col).length;
   const chip = (id, label, n) => ih("button", {
