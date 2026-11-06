@@ -45,6 +45,6 @@ const COPY_ICON = ic("copy");
 const CHECK_ICON = ic("check");
 const ERROR_ICON = ic("x");
 const QUICK_ICON = ic("message-square");
-const FORWARD_ICON = ic("forward");
+const FORWARD_ICON = ic("truck"); // 訊息旁「帶入派車」鈕：和輸入框旁的派車鈕同一個卡車圖示
 
 export { CHECK_ICON, COPY_ICON, ERROR_ICON, FORWARD_ICON, QUICK_ICON, ic };

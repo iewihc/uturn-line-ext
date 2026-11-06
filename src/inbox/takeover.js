@@ -263,9 +263,13 @@ function inboxTakeover() {
   .loe-inbox-send { height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: #1c6cf3; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
   .loe-inbox-send:hover { background: #0b57d0; }
   .loe-inbox-send:disabled { opacity: .6; cursor: progress; }
-  .loe-inbox-tools { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
-  .loe-inbox-tools-right { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .loe-inbox-tools-right .loe-inbox-btn { height: 30px; font-size: 12px; }
+  /* 輸入框下方一排：左邊三顆圖示、右邊待處理／處理完畢／開啟官方，擠不下就縮小、再擠不下只留圖示（不換行） */
+  .loe-inbox-composer { container-type: inline-size; }
+  .loe-inbox-tools { display: flex; align-items: center; gap: 2px; flex-wrap: nowrap; min-width: 0; }
+  .loe-inbox-tools-right { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; flex-wrap: nowrap; flex: 0 1 auto; min-width: 0; }
+  .loe-inbox-tools-right .loe-inbox-btn { height: 28px; padding: 0 8px; gap: 4px; font-size: 12px; }
+  @container (max-width: 480px) { .loe-inbox-tools-right .loe-inbox-btn { height: 26px; padding: 0 6px; font-size: 11px; } .loe-inbox-tools-right .loe-inbox-btn svg { width: 14px; height: 14px; } .loe-inbox-tool { width: 28px; } }
+  @container (max-width: 360px) { .loe-inbox-tools-right .loe-inbox-btn span { display: none; } .loe-inbox-tools-right .loe-inbox-btn { padding: 0 7px; } }
   .loe-inbox-flag.on { background: #ecfdf3; border-color: #16a34a; color: #15803d; font-weight: 600; }
   .loe-inbox-tool { width: 34px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
   .loe-inbox-tool:hover, .loe-inbox-tool.on { background: #e8eefb; color: #1c6cf3; }
