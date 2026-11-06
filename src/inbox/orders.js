@@ -113,7 +113,7 @@ function renderInboxOrders() {
       : notiOn ? `系統自動通知中（點擊全部關閉）\n${notiTip}`
         : "點擊開啟這位客人進行中訂單的系統自動通知（之後的承接／抵達／客上自動傳給客人）",
     onclick: () => notiList.filter((o) => !!o.isSystemNoti === notiOn).forEach((o) => setOrderSystemNoti(o, !notiOn, inboxOrdersChanged)) },
-    ih("span", { text: notiOn ? "自動通知" : "自動通知 關" })));
+    ih("span", { text: notiOn ? "通知" : "通知 關" })));
 
   if (!st || (st.loading && !list.length)) { bar.append(ih("span", { class: "loe-inbox-muted", text: "讀取訂單中…" })); return; }
   if (st.error && !list.length) { bar.append(ih("span", { class: "loe-inbox-muted err", text: "訂單讀取失敗：" + st.error })); return; }

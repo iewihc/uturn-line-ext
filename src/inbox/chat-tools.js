@@ -37,7 +37,7 @@ function inboxFlagButton(chat, flag, icon) {
     onclick: () => inboxSetChatFlag(chat, flag, !on),
   }, ih("span", { text: INBOX_FLAG_LABEL[flag] }));
 }
-// 輸入框下方右側：待處理／處理完畢（LINE 的對話狀態）＋在官方視窗開啟
+// 輸入框下方右側：待處理／處理完畢（LINE 的對話狀態）＋開啟官方
 function renderInboxToolsRight(chat) {
   const host = inbox.el.toolsRight;
   if (!host) return;
@@ -46,7 +46,7 @@ function renderInboxToolsRight(chat) {
   host.append(
     inboxFlagButton(chat, "followUp", "message-circle"),
     inboxFlagButton(chat, "done", "circle-check"),
-    ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", html: ic("external-link"), title: "在 LINE 官方聊天室開啟這位客人（新分頁）" }, ih("span", { text: "在官方視窗開啟" })));
+    ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", html: ic("external-link"), title: "在 LINE 官方聊天室開啟這位客人（新分頁）" }, ih("span", { text: "開啟官方" })));
 }
 // 改客人暱稱：LINE 的 nickname API；空字串＝清掉暱稱、恢復顯示原名
 async function inboxRename(chat, nickname) {
