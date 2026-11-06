@@ -350,9 +350,9 @@ function inboxDriverToastCard(t) {
     ih("div", { class: "loe-inbox-toast-sub" },
       t.shortId ? ih("span", { class: "loe-inbox-toast-order", text: t.shortId, title: "訂單" }) : null,
       chat ? ih("span", { class: "loe-inbox-toast-who", text: chat.name, title: chat.name }) : null,
+      t.oriText ? ih("span", { class: "loe-inbox-toast-ori", text: t.oriText, title: t.oriText }) : null, // 派單原文併同一列（小字、縮略）
       t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則` }) : null,
     ),
-    t.oriText ? ih("div", { class: "loe-inbox-toast-ori", text: t.oriText, title: t.oriText }) : null, // 派單原文（小字，一行）
     ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
     chat ? ih("div", { class: "loe-inbox-toast-actions" },
       ih("button", { type: "button", class: "loe-inbox-btn primary", html: ic("message-square"), onclick: () => { close(); inbox.notifOpen = false; inboxOpenDriverChatFor(chat.key, t.orderId); } }, ih("span", { text: "司機對話" })),

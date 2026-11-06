@@ -379,18 +379,18 @@ function inboxTakeover() {
   .loe-inbox-more { align-self: center; }
   .loe-inbox-modal-foot { flex: 0 0 auto; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid rgba(145,158,171,.24); }
   .loe-inbox-send svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-  .loe-inbox-toasts { position: fixed; top: 64px; right: 20px; width: min(360px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: 2147483647; pointer-events: none; }
+  .loe-inbox-toasts { position: fixed; top: 64px; right: 20px; width: min(320px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 6px; z-index: 2147483647; pointer-events: none; }
   .loe-inbox-toasts > * { pointer-events: auto; }
-  .loe-inbox-toast { background: #fff; border: 1px solid rgba(145,158,171,.24); border-left: 4px solid #00a76f; border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 20px rgba(15,23,42,.12); display: flex; flex-direction: column; gap: 6px; }
+  .loe-inbox-toast { background: #fff; border: 1px solid rgba(145,158,171,.24); border-left: 4px solid #00a76f; border-radius: 10px; padding: 7px 10px; box-shadow: 0 6px 20px rgba(15,23,42,.12); display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
   .loe-inbox-toast-top { display: flex; align-items: center; gap: 6px; }
   .loe-inbox-toast-top > .loe-inbox-tag { flex: 0 0 auto; white-space: nowrap; }
   .loe-inbox-toast-top > .loe-inbox-row-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .loe-inbox-toast-sub { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; color: #64748b; margin-top: -2px; }
+  .loe-inbox-toast-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: #64748b; }
   .loe-inbox-toast-order { flex: 0 0 auto; font-weight: 600; color: #475569; }
   .loe-inbox-toast-who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .loe-inbox-toast-sub .loe-inbox-badge { flex: 0 0 auto; }
-  .loe-inbox-toast-ori { font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
-  .loe-inbox-toast-body { color: #454f5b; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .loe-inbox-toast-ori { flex: 1 1 auto; min-width: 0; font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loe-inbox-toast-body { color: #454f5b; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
   .loe-inbox-toast-actions { display: flex; gap: 6px; }
   .loe-inbox-toast { position: relative; overflow: hidden; }
   .loe-inbox-toast-time { flex: 0 0 auto; font-size: 11px; color: #94a3b8; }
@@ -419,7 +419,8 @@ function inboxTakeover() {
   .loe-inbox-notif-head .loe-inbox-btn { height: 26px; font-size: 12px; }
   .loe-inbox-notif-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
   .loe-inbox-notif .loe-inbox-toast { box-shadow: none; }
-  .loe-inbox-toast-actions .loe-inbox-btn { height: 28px; font-size: 12px; }
+  .loe-inbox-toast-actions { margin-top: 2px; }
+  .loe-inbox-toast-actions .loe-inbox-btn { height: 26px; font-size: 12px; padding: 0 9px; }
   .loe-inbox-x { width: 24px; height: 24px; border: 0; background: transparent; cursor: pointer; color: #6b7280; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
   .loe-inbox-x:hover { background: #f1f5f9; }
   .loe-inbox .loe-qr-bar { padding: 0; margin: 0; }
