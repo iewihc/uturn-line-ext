@@ -103,8 +103,6 @@ function renderInboxHeader() {
         ih("button", { type: "button", class: "loe-inbox-btn" + (board.open ? " on" : ""), html: ic(board.open ? "inbox" : "truck"),
           "aria-pressed": board.open ? "true" : "false", onclick: () => (board.open ? closeBoard() : openBoard()) },
           ih("span", { text: board.open ? "回到對話" : "訂單看板" })),
-        ih("button", { type: "button", class: "loe-inbox-btn", text: "全部開啟", onclick: () => inbox.bots.forEach((b) => { if (!inbox.enabled.has(b.botId)) inboxSetEnabled(b.botId, true); }) }),
-        ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => inboxEnabledIds().forEach((id) => inboxSetEnabled(id, false)) }),
         authBtn, hint, optionsBtn, backBtn)
       : ih("div", { class: "loe-inbox-actions" }, authBtn, backBtn), // 沒授權：其他功能先不開
   ].filter(Boolean)); // 原生 append 會把 null 印成文字
@@ -210,8 +208,15 @@ function renderInboxRail() {
     inbox.el.foot.textContent = "";
     const ago = inbox.lastEventAt ? `${Math.max(0, Math.round((Date.now() - inbox.lastEventAt) / 1000))} 秒前` : "尚無";
     inbox.el.foot.append(
-      ih("div", {}, "監聽中 ", ih("strong", { text: String([...inbox.conns.values()].filter((c) => c.es).length) }), " 個帳號"),
-      ih("div", {}, "最後事件 ", ih("strong", { text: ago })),
+      ih("div", { class: "loe-inbox-rail-foot-text" },
+        ih("div", {}, "監聽中 ", ih("strong", { text: String([...inbox.conns.values()].filter((c) => c.es || c.polling).length) }), " 個帳號"),
+        ih("div", {}, "最後事件 ", ih("strong", { text: ago }))),
+      // 全部開啟／全部關閉：兩顆小圖示鈕（原本在標頭）
+      ih("div", { class: "loe-inbox-rail-foot-all" },
+        ih("button", { type: "button", class: "loe-inbox-x on", html: ic("toggle-right"), title: "全部開啟（監聽所有官方帳號）", "aria-label": "全部開啟",
+          onclick: () => inbox.bots.forEach((b) => { if (!inbox.enabled.has(b.botId)) inboxSetEnabled(b.botId, true); }) }),
+        ih("button", { type: "button", class: "loe-inbox-x", html: ic("toggle-left"), title: "全部關閉", "aria-label": "全部關閉",
+          onclick: () => inboxEnabledIds().forEach((id) => inboxSetEnabled(id, false)) })),
     );
   }
 }

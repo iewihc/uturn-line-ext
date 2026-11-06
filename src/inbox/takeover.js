@@ -92,7 +92,10 @@ function inboxTakeover() {
   .loe-inbox-rail-strip-text { writing-mode: vertical-rl; font-size: 12px; letter-spacing: 2px; }
   .loe-inbox-search { margin: 0 12px 10px; height: 34px; padding: 0 10px; border: 1px solid #d5dbe5; border-radius: 8px; font-size: 13px; }
   .loe-inbox-rail-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 0 8px 12px; }
-  .loe-inbox-rail-foot { flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid #e3e7ee; font-size: 11px; color: #6b7280; display: flex; flex-direction: column; gap: 4px; }
+  .loe-inbox-rail-foot { flex: 0 0 auto; padding: 10px 12px 10px 16px; border-top: 1px solid #e3e7ee; font-size: 11px; color: #6b7280; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .loe-inbox-rail-foot-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .loe-inbox-rail-foot-all { display: flex; gap: 2px; flex: 0 0 auto; }
+  .loe-inbox-rail-foot-all .loe-inbox-x.on { color: #1c6cf3; }
   .loe-inbox-rail-foot strong { color: #1f2937; }
   .loe-inbox-oa { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; }
   .loe-inbox-oa.on { background: #f8fafc; }
