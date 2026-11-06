@@ -45,6 +45,8 @@ const INBOX_OA_COLORS = ["#1c6cf3", "#0f766e", "#7c3aed", "#b45309", "#be185d", 
 const INBOX_FILTERS = [
   { id: "unread", label: "未讀" },
   { id: "all", label: "全部" },
+  { id: "followUp", label: "待處理" }, // 同 LINE 聊天室的資料夾（folderType=FOLLOW_UP）
+  { id: "done", label: "處理完畢" }, // folderType=DONE
   { id: "unassigned", label: "未指派" },
   { id: "mine", label: "我負責" },
 ];

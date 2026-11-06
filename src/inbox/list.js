@@ -14,12 +14,15 @@ function renderInboxList() {
   const filters = inbox.el.filters, rows = inbox.el.rows;
   if (!filters || !rows) return;
   filters.textContent = "";
+  // 未讀／待處理／處理完畢掛數量（同下面訂單狀態：已載入且符合目前搜尋的對話數＝點下去看到的列數）
+  const counted = new Set(["unread", "followUp", "done"]);
   for (const f of INBOX_FILTERS) {
     if (f.id === "mine" && !inbox.me?.bizId) continue;
+    const n = counted.has(f.id) ? inboxVisibleChats(inbox.orderFilter, f.id).length : 0;
     filters.append(ih("button", {
       type: "button", class: "loe-inbox-chip" + (inbox.filter === f.id ? " on" : ""), "aria-pressed": inbox.filter === f.id ? "true" : "false",
-      text: f.label, onclick: () => { inbox.filter = f.id; renderInboxList(); },
-    }));
+      onclick: () => { inbox.filter = f.id; renderInboxList(); },
+    }, f.label, n ? ih("span", { class: "n", text: String(n) }) : null));
   }
   if (hasLineExtAuth())
     filters.append(ih("button", { type: "button", class: "loe-inbox-chip loe-inbox-chip-refresh", html: ic("refresh"), disabled: inbox.boardRefreshing,

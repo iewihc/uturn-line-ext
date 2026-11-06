@@ -230,8 +230,8 @@ function inboxToggleRail() {
   inboxApplyRail();
 }
 // orderFilter：依訂單狀態篩選（預設目前選的；算各狀態數量時帶別的欄位）
-function inboxVisibleChats(orderFilter = inbox.orderFilter) {
-  const f = inbox.filter;
+// filter：算別顆篩選的數量時帶別的 id（預設目前選的）
+function inboxVisibleChats(orderFilter = inbox.orderFilter, f = inbox.filter) {
   const q = (inbox.el.listSearch?.value || "").trim().toLowerCase();
   const overrides = q ? getChatOverrides() : {};
   const groupOf = (c) => (overrides[c.key] && overrides[c.key].group) || getPrefixForGid(c.botId);
@@ -240,6 +240,8 @@ function inboxVisibleChats(orderFilter = inbox.orderFilter) {
     .filter((c) => inbox.enabled.has(c.botId) && hit(c))
     .filter((c) => {
       if (f === "unread") return c.unread;
+      if (f === "followUp") return !!c.followedUp;
+      if (f === "done") return !!c.done;
       if (f === "unassigned") return !c.assignedBizId;
       if (f === "mine") return inbox.me && c.assignedBizId === inbox.me.bizId;
       return true;
