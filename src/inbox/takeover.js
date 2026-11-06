@@ -205,6 +205,13 @@ function inboxTakeover() {
   .loe-inbox-rename-btn:hover { color: #00a76f; }
   .loe-inbox-th-head { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 44px 10px 20px; background: #fff; border-bottom: 1px solid rgba(145,158,171,.24); position: relative; }
   .loe-inbox-th-head > .loe-inbox-col-toggle { position: absolute; top: 10px; right: 12px; } /* 收起「聊天」欄的箭頭固定在右上角，不佔一行 */
+  /* 聊天欄不夠寬時（例如三欄都開、視窗小），標頭按鈕只留 icon，文字收進 title，避免換行擠成兩排 */
+  .loe-inbox-thread { container-type: inline-size; }
+  @container (max-width: 720px) {
+    .loe-inbox-th-head { gap: 8px; padding-right: 40px; }
+    .loe-inbox-th-head .loe-inbox-btn > span { display: none; }
+    .loe-inbox-th-head .loe-inbox-btn { padding: 0 9px; gap: 0; }
+  }
   .loe-inbox-th-head .loe-inbox-avatar { width: 36px; height: 36px; }
   /* 對話內訊息搜尋列（標題列下方）＋結果下拉 */
   .loe-inbox-msearch { flex: 0 0 auto; position: relative; display: flex; align-items: center; gap: 6px; padding: 8px 20px; background: #fff; border-bottom: 1px solid rgba(145,158,171,.24); }
