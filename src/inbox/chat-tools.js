@@ -2,8 +2,7 @@
 import { renderInboxSide } from "./side.js";
 import { ic } from "../core/icons.js";
 import { pageContext } from "../core/page-context.js";
-import { storeSet } from "../core/store.js";
-import { INBOX_NOTES_FONT, INBOX_NOTES_FONT_KEY, ih, inbox, inboxApi, inboxChatUrl, inboxTime } from "./core.js";
+import { ih, inbox, inboxApi, inboxChatUrl, inboxTime } from "./core.js";
 import { inboxDismissToast } from "./notify.js";
 import { inboxRenderAll } from "./shell.js";
 import { renderInboxThread } from "./thread.js";
@@ -95,11 +94,23 @@ async function inboxLoadNotes(chat, more = false) {
   renderInboxNotes();
   renderInboxThread();
 }
+// LINE 每個對話只能有一則筆記（多加一則回 400 exceeds_note_limit，84 個對話查過沒有超過 1 則的）；要改內容用 PUT
+const INBOX_NOTE_LIMIT_TEXT = "LINE 每個對話只能有一則筆記，請直接編輯或刪除現有的那則";
 async function inboxAddNote(chat, body) {
   body = String(body || "").trim();
   if (!body) return false;
-  await inboxApi("POST", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/notes`, { body });
+  try { await inboxApi("POST", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/notes`, { body }); }
+  catch (e) { if (e.code === "exceeds_note_limit") { await inboxLoadNotes(chat); throw new Error(INBOX_NOTE_LIMIT_TEXT); } throw e; }
   toast("已新增筆記", "ok");
+  await inboxLoadNotes(chat);
+  return true;
+}
+async function inboxUpdateNote(chat, noteId, body) {
+  body = String(body || "").trim();
+  if (!body) return false;
+  await inboxApi("PUT", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/notes/${encodeURIComponent(noteId)}`, { body });
+  toast("已更新筆記", "ok");
+  inbox.noteEditing = null;
   await inboxLoadNotes(chat);
   return true;
 }
@@ -116,15 +127,13 @@ function renderInboxNotes() {
   renderInboxSide();
   if (host.hidden) return;
   host.textContent = "";
+  // 放大：從收件匣主體的上緣蓋到底、靠右，寬度最多 960px；還原回右欄
+  host.classList.toggle("max", inbox.notesMax && !inbox.notesCollapsed);
+  if (inbox.notesMax) { const body = inbox.el.body?.getBoundingClientRect(); if (body) host.style.setProperty("--loe-notes-top", `${Math.round(body.top)}px`); }
   const st = inbox.notes.get(chat.key);
   const owners = inbox.owners.get(chat.botId) || new Map();
   const collapsed = inbox.notesCollapsed;
   const toggle = () => { inbox.notesCollapsed = !collapsed; renderInboxNotes(); };
-  // 文字大小：A−／A+ 一次 1px、點數字回預設；有些客人筆記很多，可以縮小看更多或放大看清楚
-  const font = inbox.notesFont || INBOX_NOTES_FONT.def;
-  host.style.setProperty("--loe-notes-font", `${font}px`);
-  const setFont = (px) => { inbox.notesFont = px === INBOX_NOTES_FONT.def ? 0 : px; storeSet(INBOX_NOTES_FONT_KEY, inbox.notesFont); renderInboxNotes(); };
-  const fontBtn = (label, px, title) => ih("button", { type: "button", class: "loe-inbox-notes-zoom", text: label, title, disabled: px < INBOX_NOTES_FONT.min || px > INBOX_NOTES_FONT.max, onclick: () => setFont(px) });
   // 標題列點一下收起／展開（固定開啟也能收）；固定開啟時不能關，只能收
   host.append(ih("div", { class: "loe-inbox-notes-head" },
     ih("button", { type: "button", class: "loe-inbox-x", html: ic(collapsed ? "chevron-right" : "chevron-down"), "aria-expanded": collapsed ? "false" : "true",
@@ -132,11 +141,9 @@ function renderInboxNotes() {
     ih("strong", { class: "loe-inbox-notes-title", text: `記事本 ${st ? st.total : ""}`, onclick: toggle }),
     ih("span", { class: "loe-inbox-muted", text: "客人看不到" }),
     ih("span", { class: "loe-inbox-spacer" }),
-    collapsed ? null : ih("span", { class: "loe-inbox-notes-zoom-wrap", title: "記事本文字大小" },
-      fontBtn("A−", font - INBOX_NOTES_FONT.step, "縮小文字"),
-      ih("button", { type: "button", class: "loe-inbox-notes-zoom num", text: `${font}`, title: "點一下回到預設大小", onclick: () => setFont(INBOX_NOTES_FONT.def) }),
-      fontBtn("A+", font + INBOX_NOTES_FONT.step, "放大文字")),
-    inbox.pinNotes ? null : ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉記事本", html: ic("x"), onclick: () => { inbox.notesOpen = false; renderInboxNotes(); renderInboxThread(); } }),
+    collapsed ? null : ih("button", { type: "button", class: "loe-inbox-x", "aria-label": inbox.notesMax ? "還原記事本" : "放大記事本", title: inbox.notesMax ? "還原（Esc）" : "放大：蓋到訊息串上，看更多筆記",
+      html: ic(inbox.notesMax ? "minimize-2" : "maximize-2"), onclick: () => { inbox.notesMax = !inbox.notesMax; renderInboxNotes(); } }),
+    inbox.pinNotes ? null : ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉記事本", html: ic("x"), onclick: () => { inbox.notesOpen = false; inbox.notesMax = false; renderInboxNotes(); renderInboxThread(); } }),
   ));
   if (collapsed) return;
   const ta = ih("textarea", { class: "loe-inbox-note-input", rows: "3", placeholder: "新增筆記（客人看不到，只有客服看得到）", "aria-label": "新增筆記" });
@@ -145,7 +152,9 @@ function renderInboxNotes() {
     try { if (await inboxAddNote(chat, ta.value)) ta.value = ""; } catch (e) { toast("新增筆記失敗：" + e.message, "err", 4000); }
     addBtn.disabled = false;
   } });
-  host.append(ih("div", { class: "loe-inbox-note-add" }, ta, addBtn));
+  // 已有一則：不再給「新增」，提示直接編輯（LINE 上限一則）
+  if (st && !st.loading && st.list.length) host.append(ih("div", { class: "loe-inbox-note-limit", text: INBOX_NOTE_LIMIT_TEXT }));
+  else host.append(ih("div", { class: "loe-inbox-note-add" }, ta, addBtn));
   const list = ih("div", { class: "loe-inbox-notes-list" });
   if (!st || (st.loading && !st.list.length)) list.append(ih("div", { class: "loe-inbox-empty", text: "讀取中…" }));
   else if (st.error) list.append(ih("div", { class: "loe-inbox-empty err", text: "讀取失敗：" + st.error }));
@@ -156,11 +165,26 @@ function renderInboxNotes() {
       del.disabled = true;
       try { await inboxDeleteNote(chat, n.noteId); } catch (e) { toast("刪除筆記失敗：" + e.message, "err", 4000); del.disabled = false; }
     } });
-    list.append(ih("div", { class: "loe-inbox-note" },
-      ih("div", { class: "loe-inbox-note-body", text: firstText([n.body, n.text]) }),
+    const text = firstText([n.body, n.text]);
+    const editing = inbox.noteEditing === n.noteId;
+    // 編輯：原地換成輸入框，儲存走 PUT；取消回原樣
+    const editTa = editing ? ih("textarea", { class: "loe-inbox-note-input", rows: "6", "aria-label": "編輯筆記" }) : null;
+    if (editTa) editTa.value = text;
+    const saveBtn = editing ? ih("button", { type: "button", class: "loe-inbox-btn primary", text: "儲存", onclick: async () => {
+      saveBtn.disabled = true;
+      try { if (editTa.value.trim() === text) { inbox.noteEditing = null; renderInboxNotes(); } else await inboxUpdateNote(chat, n.noteId, editTa.value); }
+      catch (e) { toast("更新筆記失敗：" + e.message, "err", 4000); saveBtn.disabled = false; }
+    } }) : null;
+    const edit = editing
+      ? ih("button", { type: "button", class: "loe-inbox-note-del edit", text: "取消", onclick: () => { inbox.noteEditing = null; renderInboxNotes(); } })
+      : ih("button", { type: "button", class: "loe-inbox-note-del edit", text: "編輯", onclick: () => { inbox.noteEditing = n.noteId; renderInboxNotes(); editTaFocus(); } });
+    const editTaFocus = () => { const el = host.querySelector(".loe-inbox-note textarea"); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } };
+    list.append(ih("div", { class: "loe-inbox-note" + (editing ? " editing" : "") },
+      editing ? editTa : ih("div", { class: "loe-inbox-note-body", text }),
+      editing ? ih("div", { class: "loe-inbox-note-edit-actions" }, edit, saveBtn) : null,
       ih("div", { class: "loe-inbox-note-meta" },
         ih("span", { text: `${owners.get(n.userBizId) || "客服"} · ${inboxTime(toEpochMs(n.updatedAt || n.createdAt))}` }),
-        ih("span", { class: "loe-inbox-spacer" }), del),
+        ih("span", { class: "loe-inbox-spacer" }), editing ? null : edit, del),
     ));
   }
   if (st && st.next) list.append(ih("button", { type: "button", class: "loe-inbox-btn", text: st.loading ? "讀取中…" : "載入更多", disabled: st.loading, onclick: () => inboxLoadNotes(chat, true) }));

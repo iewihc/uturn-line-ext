@@ -13,6 +13,7 @@ import { inboxLoadOrders } from "./orders.js";
 import { inboxSend, inboxSendFiles, inboxSetReply } from "./send.js";
 import { inboxApplyRail, inboxRenderAll, inboxToggleRail, renderInboxGate, renderInboxHeader, renderInboxRail } from "./shell.js";
 import { hasAcceptedInboxTerms, showInboxTerms } from "./terms.js";
+import { renderInboxNotes } from "./chat-tools.js";
 import { renderInboxContents, renderInboxPicker } from "./thread.js";
 import { closePrefixPopover } from "../prefix.js";
 import { initInboxSearch } from "./msearch.js";
@@ -105,6 +106,7 @@ function bootInbox() {
     if (e.key !== "Escape") return;
     if (inbox.contents) closeInboxContents();
     else if (inbox.picker) { inbox.picker = null; renderInboxPicker(); }
+    else if (inbox.notesMax) { inbox.notesMax = false; renderInboxNotes(); }
   });
   // 第一個使用者手勢：建立 AudioContext（瀏覽器規定），之後新訊息才會響
   const unlock = () => { if (inbox.sound) inboxBeep(); };

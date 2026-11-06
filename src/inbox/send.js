@@ -37,6 +37,7 @@ async function inboxOpenChat(key) {
   inboxRenderAll();
   const chat = inbox.chats.get(key);
   if (inbox.pinNotes) inbox.notesOpen = true; // 選項：固定開啟記事本
+  inbox.noteEditing = null;
   if (chat && inbox.notesOpen && !inbox.notes.has(key)) inboxLoadNotes(chat);
   if (chat && chat.unread && inbox.autoRead) inboxMarkRead(chat); // 選項：開啟對話自動標已讀
   if (chat) inboxLoadOrders(chat);
