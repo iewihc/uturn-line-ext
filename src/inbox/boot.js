@@ -1,4 +1,5 @@
 // 收件匣啟動：條款 → 綁定畫面事件 → 讀官方帳號 → 授權閘門 → 連線與輪詢。
+import { initInboxCollapse } from "./collapse.js";
 import { initInboxColumns } from "./columns.js";
 import { initInboxSide } from "./side.js";
 import { initInboxRelay } from "./relay.js";
@@ -48,6 +49,7 @@ function bootInbox() {
   }, INBOX_ORDERS_REFRESH_MS);
   initInboxSide();
   initInboxColumns();
+  initInboxCollapse();
   initInboxSearch();
   // 使用者往上捲就不再自動捲到底（圖片載入時）
   inbox.el.thMsgs?.addEventListener("scroll", (e) => {

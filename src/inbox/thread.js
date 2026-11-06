@@ -4,6 +4,7 @@ import { COPY_ICON, FORWARD_ICON, ic } from "../core/icons.js";
 import { openDispatchPopover } from "../dispatch.js";
 import { inboxFlagButton, inboxLoadNotes, inboxMarkRead, inboxRename, renderInboxNotes, renderInboxToolsRight } from "./chat-tools.js";
 import { inboxAssigneeLabel, inboxPreview } from "./chats.js";
+import { inboxColToggleButton } from "./collapse.js";
 import { INBOX_CONTENT_TABS, closeInboxContents, inboxLoadContents, inboxLoadPacks, inboxUseContent } from "./contents.js";
 import { ih, inbox, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxTime } from "./core.js";
 import { inboxEmojiUrl, inboxMediaNode, inboxPackTabUrl, inboxStickerUrl, inboxTextNodes } from "./media.js";
@@ -99,6 +100,7 @@ function renderInboxThread() {
     // 選項「開啟對話自動標已讀」勾了就會自動標，手動鈕不再顯示
     inbox.autoRead ? null : ih("button", { type: "button", class: "loe-inbox-btn", html: ic("check-check"), disabled: !chat.unread, onclick: () => inboxMarkRead(chat) }, ih("span", { text: "標為已讀" })),
     inboxFlagButton(chat, "pin", "pin"),
+    inboxColToggleButton("thread"),
   ].filter(Boolean)); // 原生 append 會把 null 印成文字
   renderInboxToolsRight(chat);
   const th = inbox.threads.get(chat.key);

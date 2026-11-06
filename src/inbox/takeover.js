@@ -90,6 +90,19 @@ function inboxTakeover() {
   .loe-inbox-rail.collapsed .loe-inbox-rail-strip { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; height: 100%; padding: 12px 0; border: 0; background: transparent; color: #374151; cursor: pointer; }
   .loe-inbox-rail-strip:hover { background: #f8fafc; }
   .loe-inbox-rail-strip-text { writing-mode: vertical-rl; font-size: 12px; letter-spacing: 2px; }
+  /* 其他欄位收起：同官方帳號欄，收成 40px 的窄條（直排欄名＋箭頭），點一下展開 */
+  .loe-inbox-col-strip { display: none; }
+  .loe-inbox-list.collapsed, .loe-inbox-thread.collapsed, .loe-inbox-side.collapsed { flex: 0 0 40px !important; width: 40px !important; min-width: 40px; background: #fff; }
+  .loe-inbox-list.collapsed > :not(.loe-inbox-col-strip), .loe-inbox-thread.collapsed > :not(.loe-inbox-col-strip), .loe-inbox-side.collapsed > :not(.loe-inbox-col-strip) { display: none !important; }
+  .collapsed > .loe-inbox-col-strip { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; height: 100%; padding: 12px 0; border: 0; background: transparent; color: #374151; cursor: pointer; }
+  .loe-inbox-col-strip:hover { background: #f8fafc; }
+  .loe-inbox-col-strip svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-list.collapsed + .loe-inbox-vsplit, .loe-inbox-thread.collapsed + .loe-inbox-vsplit, .loe-inbox-body:has(> .loe-inbox-side.collapsed) > .loe-inbox-vsplit[data-col="side"] { display: none; }
+  .loe-inbox-thread.collapsed { border-right: 1px solid #e3e7ee; }
+  .loe-inbox-list-head .loe-inbox-col-toggle { margin-left: auto; }
+  .loe-inbox-list-head > span { margin-left: auto; }
+  .loe-inbox-list-head > span + .loe-inbox-col-toggle { margin-left: 6px; }
+  .loe-inbox-side-bar { flex: 0 0 auto; display: flex; align-items: center; height: 28px; padding: 0 6px; border-bottom: 1px solid #e3e7ee; background: #f8fafc; }
   .loe-inbox-search { margin: 0 12px 10px; height: 34px; padding: 0 10px; border: 1px solid #d5dbe5; border-radius: 8px; font-size: 13px; }
   .loe-inbox-rail-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 0 8px 12px; }
   .loe-inbox-rail-foot { flex: 0 0 auto; padding: 10px 12px 10px 16px; border-top: 1px solid #e3e7ee; font-size: 11px; color: #6b7280; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -412,7 +425,7 @@ function inboxTakeover() {
     </aside>
     <div class="loe-inbox-vsplit" data-col="rail" role="separator" aria-orientation="vertical" aria-label="拖拉調整官方帳號欄寬度" title="拖拉調整寬度，雙擊回到預設"></div>
     <section class="loe-inbox-list">
-      <div class="loe-inbox-list-head"><strong>官方訊息</strong><span>依最後訊息時間</span></div>
+      <div class="loe-inbox-list-head"><strong>官方訊息</strong><span>依最後訊息時間</span><button type="button" class="loe-inbox-x loe-inbox-col-toggle" data-col-toggle="list" title="收起官方訊息" aria-label="收起官方訊息">${ic("chevron-left")}</button></div>
       <input class="loe-inbox-search loe-inbox-list-search" type="search" placeholder="搜尋客人、訊息內容、官方帳號或群編" aria-label="搜尋官方訊息">
       <div class="loe-inbox-filters"></div>
       <div class="loe-inbox-filters loe-inbox-order-filters" hidden aria-label="依訂單狀態篩選"></div>
@@ -456,6 +469,7 @@ function inboxTakeover() {
     </main>
     <div class="loe-inbox-vsplit" data-col="side" role="separator" aria-orientation="vertical" aria-label="拖拉調整司機對話與記事本欄寬度" title="拖拉調整寬度，雙擊回到預設"></div>
     <aside class="loe-inbox-side" hidden aria-label="司機對話與記事本">
+      <div class="loe-inbox-side-bar"><span class="loe-inbox-spacer"></span><button type="button" class="loe-inbox-x loe-inbox-col-toggle" data-col-toggle="side" title="收起司機對話與記事本" aria-label="收起司機對話與記事本">${ic("chevron-right")}</button></div>
       <div class="loe-inbox-side-empty" hidden></div>
       <div class="loe-inbox-side-split" hidden role="separator" aria-orientation="horizontal" aria-label="拖拉調整司機對話與記事本的高度" title="拖拉調整高度，雙擊回到預設"></div>
       <aside class="loe-inbox-notes" hidden aria-label="記事本"></aside>
