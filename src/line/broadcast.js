@@ -947,7 +947,7 @@ function openLineCustomers() {
     try {
       const result = await saveLineCookie();
       if (!result.cancelled) toast(`已授權至 ${result.account}`);
-    } catch (error) { toast(error.message || "身份授權失敗", "error", 6000); }
+    } catch (error) { toast(error.message || "身份授權失敗", "err", 6000); }
     finally { find("authorize").disabled = false; updateControls(); }
   });
   textInput.addEventListener("input", updateControls);

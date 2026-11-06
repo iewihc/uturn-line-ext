@@ -156,7 +156,7 @@ function enhanceLineAdvancedMenu() {
         }
       } catch (error) {
         if (getOaId() === oaId)
-          toast(error.message || "操作失敗，請稍後重試", "error", 6000);
+          toast(error.message || "操作失敗，請稍後重試", "err", 6000);
       } finally {
         button.disabled = false;
         label.textContent = idleLabel();
