@@ -78,7 +78,7 @@ function inboxTakeover() {
     .loe-inbox-terms-actions { flex-wrap: wrap; }
   }
   @media (max-width: 960px) { .loe-inbox { height: auto; min-height: 100vh; overflow: visible; } .loe-inbox-body { flex-wrap: wrap; } }
-  .loe-inbox-rail { flex: 0 0 272px; min-width: 0; min-height: 0; background: #fff; border-right: 1px solid rgba(145,158,171,.24); display: flex; flex-direction: column; }
+  .loe-inbox-rail { flex: 0 0 272px; min-width: 0; min-height: 0; background: #f4f6f8; border-right: 1px solid rgba(145,158,171,.24); display: flex; flex-direction: column; }
   .loe-inbox-rail-head, .loe-inbox-list-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; font-size: 13px; color: #454f5b; }
   .loe-inbox-rail-head span, .loe-inbox-list-head span { font-size: 11px; color: #6b7280; }
   .loe-inbox-rail-head { gap: 8px; }
@@ -111,7 +111,8 @@ function inboxTakeover() {
   .loe-inbox-rail-foot-all .loe-inbox-x.on { color: #00a76f; }
   .loe-inbox-rail-foot strong { color: #212b36; }
   .loe-inbox-oa { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; }
-  .loe-inbox-oa.on { background: #f9fafb; }
+  .loe-inbox-oa.on { background: #fff; box-shadow: 0 1px 1px rgba(15,23,42,.05); }
+  .loe-inbox-oa:hover { background: rgba(255,255,255,.7); }
   .loe-inbox-oa-avatar { width: 32px; height: 32px; border-radius: 9px; flex: 0 0 auto; object-fit: cover; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
   .loe-inbox-oa-main { flex: 1 1 auto; min-width: 0; }
   .loe-inbox-oa-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #6b7280; }
@@ -129,14 +130,14 @@ function inboxTakeover() {
   .loe-inbox-knob { width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
   .loe-inbox-empty { padding: 28px 16px; text-align: center; color: #6b7280; font-size: 13px; }
   .loe-inbox-empty.err { color: #b91c1c; }
-  .loe-inbox-list { flex: 0 0 400px; min-width: 0; min-height: 0; background: #fff; border-right: 1px solid rgba(145,158,171,.24); display: flex; flex-direction: column; }
+  .loe-inbox-list { flex: 0 0 400px; min-width: 0; min-height: 0; background: #f4f6f8; border-right: 1px solid rgba(145,158,171,.24); display: flex; flex-direction: column; }
   /* 篩選列：緊湊、一排不換行（超出可左右滑、不顯示捲軸） */
   .loe-inbox-filters { flex: 0 0 auto; display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 0 12px 6px; }
   .loe-inbox-filters::-webkit-scrollbar { display: none; }
   .loe-inbox-chip { flex: 0 0 auto; height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid #d5dbe5; background: #fff; color: #454f5b; font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; }
   .loe-inbox-chip.on { background: #00a76f; border-color: #00a76f; color: #fff; }
   .loe-inbox-rows { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
-  .loe-inbox-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; border: 0; border-left: 3px solid transparent; background: #fff; cursor: pointer; color: #212b36; }
+  .loe-inbox-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; border: 0; border-bottom: 1px solid rgba(145,158,171,.16); border-left: 3px solid transparent; background: #fff; cursor: pointer; color: #212b36; }
   .loe-inbox-row:hover { background: #f9fafb; }
   .loe-inbox-row.selected { background: #e6f6ef; }
   .loe-inbox-avatar { width: 40px; height: 40px; border-radius: 50%; background: #e5e7eb; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: #4b5563; flex: 0 0 auto; }
@@ -185,7 +186,7 @@ function inboxTakeover() {
   .loe-inbox-oa-name > .loe-inbox-tag { flex: 0 0 auto; }
   .loe-inbox-oa-status > .loe-inbox-tag.ai { padding: 0 5px; line-height: 16px; }
   .loe-inbox-thread { flex: 1 1 560px; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #f4f6f8; position: relative; }
-  .loe-inbox-notes { position: absolute; top: 57px; right: 0; bottom: 0; width: min(340px, 100%); background: #fff; border-left: 1px solid rgba(145,158,171,.24); box-shadow: -6px 0 18px rgba(15,23,42,.08); display: flex; flex-direction: column; z-index: 4; }
+  .loe-inbox-notes { position: absolute; top: 57px; right: 0; bottom: 0; width: min(340px, 100%); background: #f4f6f8; border-left: 1px solid rgba(145,158,171,.24); box-shadow: -6px 0 18px rgba(15,23,42,.08); display: flex; flex-direction: column; z-index: 4; }
   .loe-inbox-notes-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid rgba(145,158,171,.24); }
   .loe-inbox-note-add { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-bottom: 1px solid rgba(145,158,171,.24); align-items: flex-end; }
   .loe-inbox-note-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; border: 1px solid #d5dbe5; border-radius: 8px; font-size: 13px; }
@@ -265,12 +266,12 @@ function inboxTakeover() {
   .loe-ord-mini { display: inline-flex; align-items: center; gap: 6px; }
   .loe-inbox-orders .err { color: #dc2626; }
   .loe-inbox-sysnoti:disabled { opacity: 1; }
-  .loe-inbox-dchat { position: absolute; top: 57px; right: 0; bottom: 0; width: min(400px, 100%); background: #fff; border-left: 1px solid rgba(145,158,171,.24); box-shadow: -6px 0 18px rgba(15,23,42,.08); display: flex; flex-direction: column; z-index: 5; }
+  .loe-inbox-dchat { position: absolute; top: 57px; right: 0; bottom: 0; width: min(400px, 100%); background: #f4f6f8; border-left: 1px solid rgba(145,158,171,.24); box-shadow: -6px 0 18px rgba(15,23,42,.08); display: flex; flex-direction: column; z-index: 5; }
   .loe-inbox-dchat.dock { position: static; flex: 0 0 400px; width: 400px; min-height: 0; box-shadow: none; }
   .loe-inbox-dchat.dock .loe-dchat-title { cursor: default; }
   @media (max-width: 1400px) { .loe-inbox-dchat.dock { flex-basis: 340px; width: 340px; } }
   /* 右欄：上半司機對話（停靠）、下半記事本，中間可拖拉 */
-  .loe-inbox-side { flex: 0 0 400px; width: 400px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid rgba(145,158,171,.24); background: #fff; }
+  .loe-inbox-side { flex: 0 0 400px; width: 400px; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid rgba(145,158,171,.24); background: #f4f6f8; }
   @media (max-width: 1400px) { .loe-inbox-side { flex-basis: 340px; width: 340px; } }
   .loe-inbox-side .loe-inbox-dchat.dock { flex: 1 1 auto; width: auto; border-left: 0; }
   .loe-inbox-side.split .loe-inbox-dchat.dock { flex: 0 0 55%; }

@@ -622,7 +622,7 @@ const STYLE_CSS = `
     .loe-dchat-quick { display: flex; gap: 6px; flex-wrap: wrap; }
     .loe-dchat-chip { height: 24px; padding: 0 8px; border: 1px solid #e3e7ee; border-radius: 6px; background: #f8fafc; color: #334155; font: inherit; font-size: 12px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .loe-dchat-chip:hover { border-color: ${BLUE}; color: ${BLUE}; }
-    .loe-dchat-msgs { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; background: #f3f5f9; display: flex; flex-direction: column; gap: 4px; }
+    .loe-dchat-msgs { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; background: #f4f6f8; display: flex; flex-direction: column; gap: 4px; }
     .loe-dchat-empty { margin: auto; color: #94a3b8; text-align: center; padding: 16px; }
     .loe-dchat-empty.err { color: #dc2626; margin: 8px 0; }
     .loe-dchat-older { align-self: center; height: 26px; padding: 0 12px; border: 1px solid #d5dbe5; border-radius: 999px; background: #fff; font: inherit; font-size: 12px; cursor: pointer; margin-bottom: 6px; }
