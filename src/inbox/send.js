@@ -55,6 +55,18 @@ async function inboxOpenChat(key) {
   th.loading = false;
   if (inbox.selected === key) renderInboxThread();
 }
+// 重抓這位客人的訊息，把還沒有的補進串裡（輪詢的帳號：清單只給最新一則，期間可能來了好幾則）
+async function inboxRefreshThread(chat) {
+  const th = inbox.threads.get(chat.key);
+  if (!th || th.loading) return;
+  const data = await inboxApi("GET", `/api/v3/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`).catch(() => null);
+  if (!data || inbox.threads.get(chat.key) !== th) return;
+  inboxNoteUserRead(chat, Math.max(0, ...(data.list || []).filter((m) => m?.type === "chatRead").map((m) => m.read?.watermark || m.timestamp || 0)));
+  const have = new Set(th.list.map((m) => m.message?.id).filter(Boolean));
+  const fresh = (data.list || []).filter((m) => m && (m.type === "message" || m.type === "messageSent") && m.message?.id && !have.has(m.message.id)).reverse();
+  if (fresh.length) { th.list = th.list.concat(fresh).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)); inboxNoteMessageIds(chat, lineMessageIds(fresh)); }
+  if (inbox.selected === chat.key) renderInboxThread();
+}
 function inboxAppendToThread(key, payload) {
   const th = inbox.threads.get(key);
   if (!th) return;
@@ -206,4 +218,4 @@ async function inboxSendFiles(files) {
   return results;
 }
 
-export { inboxAppendToThread, inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSend, inboxSendFiles, inboxSendPayload, inboxSendSticker, inboxSetContext, inboxSetReply, inboxTextWithTokens };
+export { inboxAppendToThread, inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxRefreshThread, inboxSelectedChat, inboxSend, inboxSendFiles, inboxSendPayload, inboxSendSticker, inboxSetContext, inboxSetReply, inboxTextWithTokens };

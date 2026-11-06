@@ -2,10 +2,10 @@
 import { storeSet } from "../core/store.js";
 import { inboxProbeAi } from "./ai.js";
 import { inboxMarkRead } from "./chat-tools.js";
-import { INBOX_ENABLED_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_PAGES_PER_BOT, inbox, inboxApi, inboxBotName, inboxKey } from "./core.js";
+import { INBOX_ENABLED_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_PAGES_PER_BOT, INBOX_POLL_MS, inbox, inboxApi, inboxBotName, inboxKey } from "./core.js";
 import { inboxDismissToast, inboxNotify } from "./notify.js";
 import { inboxLoadBoard, inboxQueueLink } from "./order-status.js";
-import { inboxAppendToThread, inboxSetContext } from "./send.js";
+import { inboxAppendToThread, inboxRefreshThread, inboxSetContext } from "./send.js";
 import { inboxRenderAll, renderInboxRail } from "./shell.js";
 import { renderInboxThread } from "./thread.js";
 import { lineChatsPageUrl } from "../line/fetch.js";
@@ -103,10 +103,10 @@ async function inboxLoadBots() {
 }
 // 啟用且目前清單裡有的帳號（實際要監聽的）
 const inboxEnabledIds = () => [...inbox.enabled].filter((id) => inbox.botById.has(id));
-/* ---- SSE：每個帳號一條；失敗退避重連；連線數已滿等一分鐘再試 ---- */
+/* ---- SSE：每個帳號一條；失敗退避重連；連線數已滿改輪詢、隔一陣子再試 SSE ---- */
 function inboxConn(botId) {
   let c = inbox.conns.get(botId);
-  if (!c) { c = { botId, es: null, status: "off", lastEventId: "", retry: 0, timer: 0, error: "", connecting: false }; inbox.conns.set(botId, c); }
+  if (!c) { c = { botId, es: null, status: "off", lastEventId: "", retry: 0, timer: 0, error: "", connecting: false, polling: false, pollTimer: 0 }; inbox.conns.set(botId, c); }
   return c;
 }
 function inboxDrop(c) {
@@ -116,7 +116,7 @@ async function inboxConnect(botId) {
   const c = inboxConn(botId);
   if (c.es || c.connecting) return;
   clearTimeout(c.timer); c.timer = 0;
-  c.connecting = true; c.status = "connecting"; c.error = "";
+  c.connecting = true; c.status = c.polling ? "poll" : "connecting"; c.error = ""; // 輪詢中再試 SSE：畫面維持「輪詢中」
   renderInboxRail();
   let tok;
   try { tok = await inboxApi("POST", `/api/v1/bots/${botId}/streamingApiToken`, {}); }
@@ -131,7 +131,7 @@ async function inboxConnect(botId) {
   });
   const es = new EventSource(`${base}/api/${ver}/sse?${q}`);
   c.es = es;
-  es.addEventListener("init", () => { if (c.es !== es) return; c.status = "live"; c.retry = 0; c.error = ""; renderInboxRail(); });
+  es.addEventListener("init", () => { if (c.es !== es) return; c.status = "live"; c.retry = 0; c.error = ""; inboxStopPoll(c); renderInboxRail(); });
   es.addEventListener("ping", () => { inbox.lastEventAt = Date.now(); });
   es.addEventListener("chat", (ev) => {
     if (c.es !== es) return;
@@ -144,8 +144,9 @@ async function inboxConnect(botId) {
     let sub = "";
     try { sub = JSON.parse(ev.data).subEvent || ""; } catch (_) {}
     inboxDrop(c);
-    if (sub === "too_many_sse_connections") {
-      c.status = "limit"; c.error = "連線數已滿，請關閉一個 LINE 分頁";
+    if (sub === "too_many_sse_connections") { // 名額被別的分頁／帳號用完：改輪詢，隔一陣子再試 SSE
+      c.status = "poll"; c.error = "";
+      inboxStartPoll(c);
       c.timer = setTimeout(() => { c.timer = 0; if (inbox.enabled.has(botId)) inboxConnect(botId); }, INBOX_LIMIT_RETRY_MS);
       renderInboxRail();
     } else inboxScheduleReconnect(c, "LINE 中斷連線");
@@ -153,9 +154,63 @@ async function inboxConnect(botId) {
   es.addEventListener("reload", () => { if (c.es !== es) return; inboxDrop(c); inboxScheduleReconnect(c, "LINE 要求重新連線"); });
   es.onerror = () => { if (c.es !== es) return; inboxDrop(c); inboxScheduleReconnect(c, "連線中斷"); };
 }
+/* ---- 輪詢備援：SSE 名額用完的帳號，每 INBOX_POLL_MS 抓對話清單第一頁，最新事件沒看過就當成 SSE 事件處理 ---- */
+function inboxStartPoll(c) {
+  if (c.polling) return;
+  c.polling = true;
+  c.pollTimer = setTimeout(() => inboxPollOnce(c), Math.floor(Math.random() * INBOX_POLL_MS)); // 錯開各帳號
+}
+function inboxStopPoll(c) {
+  c.polling = false;
+  clearTimeout(c.pollTimer); c.pollTimer = 0;
+}
+const inboxChatSig = (c) => [c.at, c.unread, c.done, c.followedUp, c.pinnedAt, c.assignedBizId, c.preview, c.name].join("|");
+async function inboxPollOnce(c) {
+  c.pollTimer = 0;
+  if (!inbox.enabled.has(c.botId) || !c.polling) return;
+  try {
+    const url = lineChatsPageUrl(c.botId, "");
+    const data = await inboxApi("GET", url.pathname + url.search);
+    if (!inbox.enabled.has(c.botId) || !c.polling) return;
+    let changed = false;
+    for (const item of data?.list || []) {
+      if (!item || typeof item.chatId !== "string") continue;
+      const key = inboxKey(c.botId, item.chatId);
+      const prev = inbox.chats.get(key);
+      const le = item.latestEvent;
+      const id = le?.message?.id;
+      // 沒看過的最新訊息事件：有 id 比 id，沒有就比時間；清單裡本來沒有的對話出現在第一頁＝有新動靜
+      const isNew = !!le && (le.type === "message" || le.type === "messageSent") &&
+        (prev ? (id ? !prev.messageIds.includes(id) : (le.timestamp || 0) > prev.at) : true);
+      const chat = inboxChatFromLine(c.botId, item, prev);
+      inbox.chats.set(key, chat);
+      if (isNew) {
+        inboxOnMessageEvent(chat, key, le.type, le);
+        if (inbox.selected === key) inboxRefreshThread(chat); // 期間可能不只一則
+        changed = true;
+      } else if (!prev || inboxChatSig(prev) !== inboxChatSig(chat)) changed = true;
+    }
+    if (changed) inboxRenderAll();
+  } catch (_) { /* 這輪失敗就等下一輪 */ }
+  if (inbox.enabled.has(c.botId) && c.polling && !c.pollTimer) c.pollTimer = setTimeout(() => inboxPollOnce(c), INBOX_POLL_MS);
+}
+// 客人傳來／官方送出的訊息事件（SSE 與輪詢共用）
+function inboxOnMessageEvent(chat, key, sub, payload) {
+  chat.preview = inboxPreview(payload) || chat.preview;
+  chat.at = payload.timestamp || Date.now();
+  inboxAppendToThread(key, payload);
+  inboxNoteMessageIds(chat, lineMessageIds([payload]));
+  if (sub !== "message") return;
+  chat.unread = true;
+  chat.unreadCount += 1;
+  // 選項「自動標已讀」：正在看的這位客人又傳來，畫面在前景就直接標已讀、不跳通知
+  if (inbox.autoRead && inbox.selected === key && document.visibilityState === "visible") inboxMarkRead(chat);
+  else inboxNotify(chat, payload);
+}
 function inboxScheduleReconnect(c, why) {
   if (!inbox.enabled.has(c.botId)) { c.status = "off"; c.error = ""; return renderInboxRail(); }
-  c.status = "error"; c.error = why || ""; c.retry += 1;
+  if (c.polling) { c.status = "poll"; c.error = ""; } else { c.status = "error"; c.error = why || ""; } // 輪詢中 SSE 再失敗：照常輪詢
+  c.retry += 1;
   const delay = Math.min(30000, 2000 * 2 ** Math.min(c.retry - 1, 4));
   clearTimeout(c.timer);
   c.timer = setTimeout(() => { c.timer = 0; if (inbox.enabled.has(c.botId)) inboxConnect(c.botId); }, delay);
@@ -164,6 +219,7 @@ function inboxScheduleReconnect(c, why) {
 function inboxDisconnect(botId) {
   const c = inboxConn(botId);
   clearTimeout(c.timer); c.timer = 0;
+  inboxStopPoll(c);
   inboxDrop(c);
   c.status = "off"; c.error = ""; c.retry = 0;
 }
@@ -227,22 +283,8 @@ async function inboxOnChatEvent(botId, raw) {
     if (!chat) return;
   }
   switch (sub) {
-    case "message":
-      chat.unread = true;
-      chat.unreadCount += 1;
-      chat.preview = inboxPreview(payload) || chat.preview;
-      chat.at = payload.timestamp || Date.now();
-      inboxAppendToThread(key, payload);
-      inboxNoteMessageIds(chat, lineMessageIds([payload]));
-      // 選項「自動標已讀」：正在看的這位客人又傳來，畫面在前景就直接標已讀、不跳通知
-      if (inbox.autoRead && inbox.selected === key && document.visibilityState === "visible") inboxMarkRead(chat);
-      else inboxNotify(chat, payload);
-      break;
-    case "messageSent":
-      chat.preview = inboxPreview(payload) || chat.preview;
-      chat.at = payload.timestamp || Date.now();
-      inboxAppendToThread(key, payload);
-      inboxNoteMessageIds(chat, lineMessageIds([payload]));
+    case "message": case "messageSent":
+      inboxOnMessageEvent(chat, key, sub, payload);
       break;
     case "chatRead": { // 客人讀到哪：只更新水位，正在看這位才重畫訊息
       if (!inboxNoteUserRead(chat, payload.read?.watermark || payload.timestamp)) return;

@@ -97,7 +97,8 @@ function inboxTakeover() {
   .loe-inbox-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
   .loe-inbox-oa-status.live { color: #16a34a; }
   .loe-inbox-oa-status.connecting { color: #ca8a04; }
-  .loe-inbox-oa-status.limit, .loe-inbox-oa-status.error { color: #dc2626; }
+  .loe-inbox-oa-status.poll { color: #2563eb; }
+  .loe-inbox-oa-status.error { color: #dc2626; }
   .loe-inbox-switch { width: 38px; height: 22px; border-radius: 11px; border: 0; padding: 2px; background: #cbd5e1; cursor: pointer; display: flex; align-items: center; justify-content: flex-start; flex: 0 0 auto; }
   .loe-inbox-switch[aria-checked="true"] { background: #1c6cf3; justify-content: flex-end; }
   .loe-inbox-knob { width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); }

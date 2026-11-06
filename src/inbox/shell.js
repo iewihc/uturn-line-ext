@@ -70,11 +70,14 @@ function renderInboxHeader() {
   if (!host) return;
   host.textContent = "";
   const live = [...inbox.conns.values()].filter((c) => c.status === "live").length;
+  const polled = [...inbox.conns.values()].filter((c) => c.status === "poll").length;
   const stats = ih("div", { class: "loe-inbox-stats" },
     ih("span", { class: "loe-inbox-muted", text: "啟用帳號" }),
     ih("strong", { text: `${inboxEnabledIds().length}／${inbox.bots.length}` }),
     ih("span", { class: "loe-inbox-muted", text: "連線中" }),
     ih("strong", { text: String(live) }),
+    polled ? ih("span", { class: "loe-inbox-muted", text: "輪詢中" }) : null,
+    polled ? ih("strong", { text: String(polled) }) : null,
     ih("span", { class: "loe-inbox-muted", text: "未讀對話" }),
     ih("span", { class: "loe-inbox-badge", text: String(inboxUnreadTotal()) }),
   );
@@ -173,7 +176,7 @@ function renderInboxRail() {
     const on = inbox.enabled.has(b.botId);
     const c = inbox.conns.get(b.botId);
     const status = on ? (c?.status || "connecting") : "off";
-    const label = { live: "連線中", connecting: "連線中…", limit: c?.error || "連線數已滿", error: c?.error ? `重連中：${c.error}` : "重連中", off: "已關閉" }[status] || status;
+    const label = { live: "連線中", connecting: "連線中…", poll: "輪詢中（SSE 名額已滿，每 12 秒更新）", error: c?.error ? `重連中：${c.error}` : "重連中", off: "已關閉" }[status] || status;
     let unread = 0;
     if (on) { for (const ch of inbox.chats.values()) if (ch.botId === b.botId && ch.unread) unread++; }
     else unread = b.unreadCount;

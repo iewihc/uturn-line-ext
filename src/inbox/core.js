@@ -6,7 +6,8 @@ import { makeLineRateLimiter } from "../line/fetch.js";
  * 多開收件匣（https://chat.line.biz/?uturnInbox=1）
  *   頁面在 document-start 就被接管（見檔尾 inboxTakeover），LINE 的 SPA 不啟動；
  *   同網域所以 fetch／EventSource 原生帶 cookie，不需要 CORS 或 GM_xmlhttpRequest。
- *   收訊：每個「啟用」的官方帳號一條 SSE
+ *   收訊：每個「啟用」的官方帳號一條 SSE；LINE 的 SSE 名額是算登入帳號的（跨分頁、跨官方帳號），
+ *         拿不到名額（fail／too_many_sse_connections）的帳號改每 12 秒輪詢對話清單第一頁，有新事件就走同一套處理（慢 12 秒內）
  *         POST /api/v1/bots/{bot}/streamingApiToken → GET {streamingApiBaseUrl}/api/{version}/sse?token=…
  *         事件 chat.subEvent：message（客人傳來）／messageSent（官方送出）／read（客服標已讀）／chatRead（客人已讀，read.watermark＝時間水位）／pin、unpin（釘選）…
  *   發訊：POST /api/v1/bots/{bot}/chats/{chat}/messages/send { type:"text", text, sendId }，帶 X-XSRF-TOKEN
@@ -35,7 +36,8 @@ const INBOX_TERMS_KEY_PREFIX = "loe_inbox_terms_acceptance_v1::"; // 本機依�
 const INBOX_PAGES_PER_BOT = 2; // 每個帳號初始掃幾頁對話（25 位/頁）
 const INBOX_TOAST_MS = 20000; // 通知卡片停留時間；同一位客人再來訊會重新計時
 const INBOX_BOTS_REFRESH_MS = 60000; // 未啟用帳號的未讀數靠 /api/v1/bots 每分鐘更新
-const INBOX_LIMIT_RETRY_MS = 60000; // 連線數已滿時隔多久再試
+const INBOX_LIMIT_RETRY_MS = 120000; // 連線數已滿時隔多久再試 SSE（期間改輪詢）
+const INBOX_POLL_MS = 12000; // 連線數已滿的帳號改輪詢對話清單的間隔
 const INBOX_ORDERS_REFRESH_MS = 15000; // 開著的對話多久重抓一次訂單狀態
 const INBOX_OA_COLORS = ["#1c6cf3", "#0f766e", "#7c3aed", "#b45309", "#be185d", "#0369a1", "#4d7c0f", "#9f1239"];
 const INBOX_FILTERS = [
@@ -155,4 +157,4 @@ async function inboxApi(method, path, body, retried = false) {
   return text ? JSON.parse(text) : null;
 }
 
-export { INBOX_BOTS_REFRESH_MS, INBOX_DCHAT_DOCK_KEY, INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
+export { INBOX_AUTO_READ_KEY, INBOX_BOTS_REFRESH_MS, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
