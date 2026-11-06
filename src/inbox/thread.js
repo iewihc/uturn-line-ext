@@ -23,7 +23,7 @@ import { inboxSearchAfterRender } from "./msearch.js";
 // 回覆（引用）：客人訊息下方的「回覆」鈕（LINE 給了 quoteToken 的才能引用）；官方自己送出的不給回覆
 function inboxReplyButton(chat, m, out) {
   const msg = m.message;
-  if (out || !msg?.id || !msg.quoteToken) return null;
+  if (!msg?.id || !msg.quoteToken) return null; // 客人或自己送的都能回覆（LINE 允許引用自己的訊息）；沒 quoteToken 的（舊訊息、部分類型）不能
   return ih("button", { type: "button", class: "loe-relay-btn", text: "回覆", title: "回覆這則訊息（同 LINE 聊天室的「回覆」，對方會看到引用）",
     onclick: () => inboxSetReply({ id: msg.id, quoteToken: msg.quoteToken, text: inboxPreview(m) || "[訊息]", who: out ? inboxBotName(chat.botId) : chat.name }) });
 }

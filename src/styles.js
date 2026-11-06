@@ -157,7 +157,7 @@ const STYLE_CSS = `
 
     /* 管理視窗 */
     .loe-modal-mask {
-      position: fixed; inset: 0; z-index: 2147483647;
+      position: fixed; inset: 0; z-index: 2147483000; /* 低於收件匣通知卡 */
       display: flex; align-items: center; justify-content: center;
       background: rgba(15, 23, 42, 0.45);
     }
@@ -513,7 +513,7 @@ const STYLE_CSS = `
 
     /* 派單彈出視窗（精簡版，限制高度避免超出畫面） */
     .${DISPATCH_POP_CLASS} {
-      position: fixed; z-index: 2147483647;
+      position: fixed; z-index: 2147483000; /* 低於收件匣通知卡 */
       width: 326px; padding: 12px; box-sizing: border-box; /* border-box：maxHeight 含內距，拖到下緣不會超出畫面 */
       background: #fff; border: 1px solid rgba(15,23,42,.12);
       border-radius: 12px; box-shadow: 0 16px 44px rgba(15,23,42,.24);

@@ -9,7 +9,7 @@ import { inboxConnect, inboxEnabledIds, inboxLoadBots, inboxLoadChats } from "./
 import { closeInboxContents } from "./contents.js";
 import { INBOX_BOTS_REFRESH_MS, INBOX_ORDERS_REFRESH_MS, ih, inbox, inboxApi } from "./core.js";
 import { renderInboxList } from "./list.js";
-import { inboxBeep } from "./notify.js";
+import { inboxUnlockAudio } from "./notify.js";
 import { inboxLoadBoard } from "./order-status.js";
 import { inboxLoadOrders } from "./orders.js";
 import { inboxSend, inboxSendFiles, inboxSetReply } from "./send.js";
@@ -113,7 +113,7 @@ function bootInbox() {
     else if (inbox.notesMax) { inbox.notesMax = false; renderInboxNotes(); }
   });
   // 第一個使用者手勢：建立 AudioContext（瀏覽器規定），之後新訊息才會響
-  const unlock = () => { if (inbox.sound) inboxBeep(); };
+  const unlock = () => inboxUnlockAudio();
   ["pointerdown", "keydown"].forEach((ev) => document.addEventListener(ev, unlock, { once: true, capture: true }));
   setInterval(() => { if (inbox.el.foot) renderInboxRail(); }, 10000); // 「最後事件 n 秒前」
   inboxRenderAll();

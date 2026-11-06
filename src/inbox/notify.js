@@ -60,6 +60,10 @@ function inboxAudio() {
   }
   return inbox.audio;
 }
+// 第一個使用者手勢：只建立／喚醒 AudioContext，不播音（之前 Chrome 已允許自動播放時會白響一聲）
+function inboxUnlockAudio() {
+  try { const ctx = inboxAudio(); if (ctx && ctx.state !== "running") ctx.resume().catch(() => {}); } catch (_) {}
+}
 function inboxBeep() {
   try {
     const ctx = inboxAudio();
@@ -87,4 +91,4 @@ function playTwoTone(ctx) {
 }
 const inboxSoundReady = () => !inbox.sound || (inbox.audio && inbox.audio.state === "running");
 
-export { inboxBeep, inboxDismissToast, inboxNotify, inboxNotifyDriver, inboxSoundReady, playTwoTone };
+export { inboxBeep, inboxDismissToast, inboxUnlockAudio, inboxNotify, inboxNotifyDriver, inboxSoundReady, playTwoTone };
