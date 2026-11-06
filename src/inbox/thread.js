@@ -50,7 +50,7 @@ function renderInboxThread() {
   thHead.hidden = false; thMsgs.hidden = false; thComposer.hidden = false; thEmpty.hidden = true;
   // 選項「不顯示官方帳號名稱」且這個帳號有群編：標題列不放帳號名（群編在右邊那顆齒輪鈕上）
   const oaChip = inbox.hideOaName && getPrefix() ? null : ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId), title: inboxBotName(chat.botId) });
-  if (oaChip) oaChip.style.background = inboxBotColor(chat.botId);
+  if (oaChip) oaChip.style.setProperty("--oa", inboxBotColor(chat.botId));
   const state = [inboxAssigneeLabel(chat), chat.pinnedAt ? "已釘選" : "", chat.followedUp ? "待處理" : "", chat.done ? "處理完畢" : "", `最後訊息 ${inboxTime(chat.at)}`].filter(Boolean).join(" · ");
   if (!inbox.el.aiSlot) { inbox.el.aiSlot = ih("span", { class: "loe-inbox-ai-slot" }); }
   if (!inbox.el.sysNotiSlot) { inbox.el.sysNotiSlot = ih("span", { class: "loe-inbox-ai-slot" }); }
@@ -311,7 +311,7 @@ function inboxToastCard(t) {
   const chat = inbox.chats.get(t.key);
   if (!chat) return null;
   const chip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId).slice(0, 8), title: inboxBotName(chat.botId) });
-  chip.style.background = inboxBotColor(chat.botId);
+  chip.style.setProperty("--oa", inboxBotColor(chat.botId));
   // 群編標籤同對話列（店配覆寫優先，否則此帳號的預設前綴）；選項「不顯示官方帳號名稱」時只留群編
   const overrides = getChatOverrides();
   const group = (overrides[t.key] && overrides[t.key].group) || getPrefixForGid(chat.botId);

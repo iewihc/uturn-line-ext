@@ -575,12 +575,12 @@ const STYLE_CSS = `
     .loe-ord-mismatch { font-weight: 700; color: #b91c1c; }
     .loe-ord-addr-warn { font-size: 10px; padding: 1px 4px; background: #fee2e2; color: #b91c1c; }
     .loe-ord-note { display: inline-flex; align-items: center; gap: 3px; color: #b45309; }
-    .loe-ord-col { padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; font-size: 12px; background: #6b7280; }
-    .loe-ord-col.booking { background: #7c3aed; }
-    .loe-ord-col.pending { background: #f59e0b; }
-    .loe-ord-col.accepted { background: ${BLUE}; }
-    .loe-ord-col.arrived { background: #16a34a; }
-    .loe-ord-col.executing { background: #0d9488; }
+    .loe-ord-col { padding: 1px 8px; border-radius: 4px; color: #637381; font-weight: 700; font-size: 12px; background: transparent; border: 1px solid color-mix(in srgb, currentColor 55%, transparent); }
+    .loe-ord-col.booking { color: #6d28d9; }
+    .loe-ord-col.pending { color: #b45309; }
+    .loe-ord-col.accepted { color: #2f5fd0; }
+    .loe-ord-col.arrived { color: #1b806a; }
+    .loe-ord-col.executing { color: #0f766e; }
     .loe-ord-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
     .loe-ord-btn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid #d5dbe5; background: #fff; color: #1f2937; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
     .loe-ord-btn:hover:not(:disabled) { background: #f8fafc; border-color: #b6c2d6; }

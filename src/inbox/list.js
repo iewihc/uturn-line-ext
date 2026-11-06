@@ -61,7 +61,7 @@ function renderInboxList() {
       ),
     );
     const oaChip = row.querySelector(".loe-inbox-oa-chip");
-    if (oaChip) oaChip.style.background = inboxBotColor(c.botId);
+    if (oaChip) oaChip.style.setProperty("--oa", inboxBotColor(c.botId));
     if (selected) row.style.borderLeftColor = inboxBotColor(c.botId);
     rows.append(row);
   }
