@@ -8,7 +8,7 @@ import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
 import { inboxApplyPollFallback, inboxConnect, inboxEnabledIds, inboxLoadChats, inboxSetEnabled, inboxUnreadTotal } from "./chats.js";
 import { inboxLoadNotes, inboxMarkRead, renderInboxNotes } from "./chat-tools.js";
-import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
+import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
 import { renderInboxList } from "./list.js";
 import { inboxBeep, inboxSoundReady } from "./notify.js";
 import { inboxChatColumns, inboxLoadBoard, inboxQueueLink, inboxScheduleBoard } from "./order-status.js";
@@ -57,6 +57,18 @@ function inboxOptionsButton() {
     ih("div", { class: "loe-inbox-options-group", text: "連線" }),
     row("refresh", "超過連線上限改用輪詢", inbox.pollFallback, (v) => { set(INBOX_POLL_KEY, "pollFallback", v); inboxApplyPollFallback(); },
       "LINE 每個登入約 19 條即時連線，超過官方開啟數 LINE 會限制。不勾＝那些帳號只等名額（收不到新訊息）；勾了＝每 12 秒輪詢一次"),
+    ih("div", { class: "loe-inbox-options-group", text: "通知" }),
+    (() => { // 右上角最多疊幾張（1～5）；其餘摺進鈴鐺
+      const [min, max] = INBOX_TOAST_MAX_RANGE;
+      const setMax = (n) => { inbox.toastMax = Math.min(max, Math.max(min, n)); storeSet(INBOX_TOAST_MAX_KEY, inbox.toastMax); renderInboxHeader(); renderInboxToasts(); };
+      return ih("div", { class: "loe-inbox-option" },
+        ih("span", { class: "loe-inbox-option-icon", html: ic("bell") }),
+        ih("span", { class: "loe-inbox-option-text" }, ih("span", { text: "右上角最多疊幾張通知卡" }), ih("small", { text: `${min}～${max} 張，超過的摺進「通知」鈴鐺；每張露 10 秒後也會縮回鈴鐺` })),
+        ih("span", { class: "loe-inbox-stepper" },
+          ih("button", { type: "button", text: "−", "aria-label": "少一張", disabled: inbox.toastMax <= min, onclick: () => setMax(inbox.toastMax - 1) }),
+          ih("strong", { text: String(inbox.toastMax) }),
+          ih("button", { type: "button", text: "＋", "aria-label": "多一張", disabled: inbox.toastMax >= max, onclick: () => setMax(inbox.toastMax + 1) })));
+    })(),
     ih("div", { class: "loe-inbox-options-group", text: "提示音" }),
     row("bell", "新訊息提示音", inbox.sound, (v) => {
       set(INBOX_SOUND_KEY, "sound", v);
@@ -106,6 +118,12 @@ function renderInboxHeader() {
     ih("div", { class: "loe-inbox-spacer" }),
     authed
       ? ih("div", { class: "loe-inbox-actions" },
+        (() => { // 鈴鐺：還沒處理的通知數；點開清單
+          const n = inbox.toasts.size;
+          return ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-bell" + (inbox.notifOpen ? " on" : ""), html: ic("bell"), "aria-pressed": inbox.notifOpen ? "true" : "false",
+            title: n ? `${n} 則通知還沒處理` : "沒有新通知", onclick: (e) => { e.stopPropagation(); inbox.notifOpen = !inbox.notifOpen; renderInboxToasts(); } },
+            ih("span", { text: "通知" }), n ? ih("span", { class: "loe-inbox-badge loe-inbox-bell-n", text: String(n) }) : null);
+        })(),
         ih("button", { type: "button", class: "loe-inbox-btn" + (board.open ? " on" : ""), html: ic(board.open ? "inbox" : "truck"),
           "aria-pressed": board.open ? "true" : "false", onclick: () => (board.open ? closeBoard() : openBoard()) },
           ih("span", { text: board.open ? "回到對話" : "訂單看板" })),

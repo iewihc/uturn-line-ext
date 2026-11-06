@@ -16,7 +16,7 @@ import { inboxSend, inboxSendFiles, inboxSetReply } from "./send.js";
 import { inboxApplyRail, inboxRenderAll, inboxToggleRail, renderInboxGate, renderInboxHeader, renderInboxRail } from "./shell.js";
 import { hasAcceptedInboxTerms, showInboxTerms } from "./terms.js";
 import { renderInboxNotes } from "./chat-tools.js";
-import { renderInboxContents, renderInboxPicker } from "./thread.js";
+import { renderInboxContents, renderInboxPicker, renderInboxToasts } from "./thread.js";
 import { closePrefixPopover } from "../prefix.js";
 import { initInboxSearch } from "./msearch.js";
 
@@ -35,7 +35,7 @@ function bootInbox() {
     thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
     reply: $(".loe-inbox-reply"), replyWho: $(".loe-inbox-reply-who"), replyText: $(".loe-inbox-reply-text"),
     msearch: $(".loe-inbox-msearch"), msearchInput: $(".loe-inbox-msearch-input"), msearchCount: $(".loe-inbox-msearch-count"), msearchPrev: $(".loe-inbox-msearch-prev"), msearchNext: $(".loe-inbox-msearch-next"), msearchClose: $(".loe-inbox-msearch-close"), msearchList: $(".loe-inbox-msearch-list"),
-    quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
+    quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notif: $(".loe-inbox-notif"), notes: $(".loe-inbox-notes"),
     orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
     side: $(".loe-inbox-side"), sideSplit: $(".loe-inbox-side-split"), sideEmpty: $(".loe-inbox-side-empty"),
     picker: $(".loe-inbox-picker"), tools: $(".loe-inbox-tools"), toolsRight: $(".loe-inbox-tools-right"), fileInput: $(".loe-inbox-file"), modal: $(".loe-inbox-modal"),
@@ -65,6 +65,8 @@ function bootInbox() {
   document.addEventListener("click", (e) => {
     closePrefixPopover();
     if (inbox.optionsOpen) { inbox.optionsOpen = false; renderInboxHeader(); } // 點選單外面收起「選項」
+    // 通知清單抽屜：點抽屜和鈴鐺以外的地方就關
+    if (inbox.notifOpen && !e.composedPath().some((n) => n instanceof Element && n.matches(".loe-inbox-notif, .loe-inbox-bell, .loe-inbox-toast-fold"))) { inbox.notifOpen = false; renderInboxToasts(); }
     // 貼圖／表情貼面板：點面板和輸入區以外的地方就收起（工具列那顆笑臉自己會 stopPropagation 切換）。
     // 用 composedPath：點貼圖包分頁會立刻重畫面板，事件冒泡到這裡時被點的按鈕已不在 DOM，closest 會誤判成「點到外面」
     if (inbox.picker && !e.composedPath().some((n) => n instanceof Element && n.matches(".loe-inbox-picker, .loe-inbox-composer-row, .loe-inbox-tools"))) { inbox.picker = null; renderInboxPicker(); }
@@ -112,6 +114,7 @@ function bootInbox() {
     if (inbox.contents) closeInboxContents();
     else if (inbox.picker) { inbox.picker = null; renderInboxPicker(); }
     else if (inbox.notesMax) { inbox.notesMax = false; renderInboxNotes(); }
+    else if (inbox.notifOpen) { inbox.notifOpen = false; renderInboxToasts(); }
   });
   // 第一個使用者手勢：建立 AudioContext（瀏覽器規定），之後新訊息才會響
   const unlock = () => inboxUnlockAudio();

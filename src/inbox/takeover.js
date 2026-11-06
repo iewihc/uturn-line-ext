@@ -373,6 +373,33 @@ function inboxTakeover() {
   .loe-inbox-toast-ori { font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
   .loe-inbox-toast-body { color: #374151; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .loe-inbox-toast-actions { display: flex; gap: 6px; }
+  .loe-inbox-toast { position: relative; overflow: hidden; }
+  .loe-inbox-toast-time { flex: 0 0 auto; font-size: 11px; color: #94a3b8; }
+  .loe-inbox-toast-top > .loe-inbox-x { flex: 0 0 auto; }
+  /* 右上角的卡：露出期間底部一條藍線倒數（CSS 動畫，時間同 INBOX_TOAST_MS） */
+  .loe-inbox-toasts .loe-inbox-toast-timer { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: #1c6cf3; opacity: .45; transform-origin: left; animation: loe-inbox-toast-timer 10s linear forwards; }
+  @keyframes loe-inbox-toast-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+  .loe-inbox-notif .loe-inbox-toast-timer { display: none; }
+  /* 第 4 張起摺成一列 */
+  .loe-inbox-toast-fold { display: flex; align-items: center; gap: 6px; background: #f8fafc; border: 1px dashed #c7cdd8; border-radius: 10px; padding: 4px 6px 4px 10px; font-size: 12px; color: #64748b; }
+  .loe-inbox-toast-fold-open { flex: 1 1 auto; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #374151; font-size: 12px; cursor: pointer; text-align: left; }
+  .loe-inbox-toast-fold-open svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-toast-fold-clear { flex: 0 0 auto; border: 1px solid #d5dbe5; background: #fff; border-radius: 6px; height: 24px; padding: 0 8px; font-size: 11px; color: #374151; cursor: pointer; }
+  .loe-inbox-toast-fold-clear:hover { background: #f1f5f9; }
+  /* 標頭鈴鐺 */
+  .loe-inbox-bell { position: relative; }
+  .loe-inbox-stepper { display: inline-flex; align-items: center; gap: 4px; }
+  .loe-inbox-stepper button { width: 26px; height: 26px; border: 1px solid #d5dbe5; border-radius: 6px; background: #fff; color: #374151; cursor: pointer; font-size: 14px; line-height: 1; }
+  .loe-inbox-stepper button:disabled { opacity: .4; cursor: default; }
+  .loe-inbox-stepper strong { min-width: 18px; text-align: center; }
+  .loe-inbox-bell-n { margin-left: 4px; }
+  /* 鈴鐺清單抽屜：從收件匣主體上緣蓋到底、靠右 */
+  .loe-inbox-notif { position: fixed; top: var(--loe-notif-top, 57px); right: 0; bottom: 0; width: min(380px, 100vw); background: #fff; border-left: 1px solid #e3e7ee; box-shadow: -12px 0 32px rgba(15,23,42,.18); z-index: 2147483646; display: flex; flex-direction: column; }
+  .loe-inbox-notif-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #e3e7ee; font-size: 13px; }
+  .loe-inbox-notif-head svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-notif-head .loe-inbox-btn { height: 26px; font-size: 12px; }
+  .loe-inbox-notif-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+  .loe-inbox-notif .loe-inbox-toast { box-shadow: none; }
   .loe-inbox-toast-actions .loe-inbox-btn { height: 28px; font-size: 12px; }
   .loe-inbox-x { width: 24px; height: 24px; border: 0; background: transparent; cursor: pointer; color: #6b7280; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
   .loe-inbox-x:hover { background: #f1f5f9; }
@@ -496,6 +523,7 @@ function inboxTakeover() {
   </section>
   <div class="loe-inbox-modal" hidden></div>
   <div class="loe-inbox-toasts" aria-live="polite"></div>
+  <aside class="loe-inbox-notif" hidden aria-label="通知清單"></aside>
 </div>
 </body>`;
 }

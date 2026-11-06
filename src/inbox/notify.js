@@ -1,6 +1,6 @@
 // 收件匣通知：右上卡片、提示音、背景時的桌面通知。
 import { inboxPreview } from "./chats.js";
-import { INBOX_TOAST_MS, inbox, inboxBotName } from "./core.js";
+import { INBOX_TOAST_MAX_KEPT, INBOX_TOAST_MS, inbox, inboxBotName } from "./core.js";
 import { inboxOpenChat } from "./send.js";
 import { renderInboxHeader } from "./shell.js";
 import { renderInboxToasts } from "./thread.js";
@@ -12,15 +12,26 @@ function inboxDismissToast(key) {
   clearTimeout(t.timer);
   inbox.toasts.delete(key);
 }
+function inboxDismissAllToasts() {
+  for (const t of inbox.toasts.values()) clearTimeout(t.timer);
+  inbox.toasts.clear();
+  inbox.notifOpen = false;
+}
+// 新通知／同一則又來：重新露出、重新計時；到時縮回鈴鐺（留在清單裡，按處理或 × 才消失）；清單太長丟最舊的
+function inboxToastTouch(t) {
+  t.at = Date.now(); t.folded = false;
+  clearTimeout(t.timer);
+  t.timer = setTimeout(() => { t.folded = true; renderInboxToasts(); }, INBOX_TOAST_MS);
+  inbox.toasts.delete(t.key); inbox.toasts.set(t.key, t); // 重新插到最後＝最新
+  while (inbox.toasts.size > INBOX_TOAST_MAX_KEPT) { const oldest = inbox.toasts.keys().next().value; clearTimeout(inbox.toasts.get(oldest)?.timer); inbox.toasts.delete(oldest); }
+}
 function inboxNotify(chat, payload) {
   const key = chat.key;
   const t = inbox.toasts.get(key) || { key, count: 0, lines: [], timer: 0 };
   t.count += 1;
   t.lines.push(inboxPreview(payload) || "[訊息]");
   if (t.lines.length > 3) t.lines.shift();
-  clearTimeout(t.timer);
-  t.timer = setTimeout(() => { inbox.toasts.delete(key); renderInboxToasts(); }, INBOX_TOAST_MS);
-  inbox.toasts.set(key, t);
+  inboxToastTouch(t);
   if (inbox.sound) inboxBeep();
   if (document.hidden && typeof Notification === "function" && Notification.permission === "granted") {
     try {
@@ -38,9 +49,7 @@ function inboxNotifyDriver({ orderId, shortId, oriText, driverNo, text, chatKey 
   t.count += 1;
   t.lines.push(text || "[訊息]");
   if (t.lines.length > 3) t.lines.shift();
-  clearTimeout(t.timer);
-  t.timer = setTimeout(() => { inbox.toasts.delete(key); renderInboxToasts(); }, INBOX_TOAST_MS);
-  inbox.toasts.set(key, t);
+  inboxToastTouch(t);
   renderInboxToasts();
   if (inbox.sound) inboxBeep();
   if (document.hidden && typeof Notification === "function" && Notification.permission === "granted") {
@@ -91,4 +100,4 @@ function playTwoTone(ctx) {
 }
 const inboxSoundReady = () => !inbox.sound || (inbox.audio && inbox.audio.state === "running");
 
-export { inboxBeep, inboxDismissToast, inboxUnlockAudio, inboxNotify, inboxNotifyDriver, inboxSoundReady, playTwoTone };
+export { inboxBeep, inboxDismissAllToasts, inboxDismissToast, inboxUnlockAudio, inboxNotify, inboxNotifyDriver, inboxSoundReady, playTwoTone };

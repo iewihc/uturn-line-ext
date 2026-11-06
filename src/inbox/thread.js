@@ -8,11 +8,11 @@ import { inboxColToggleButton } from "./collapse.js";
 import { INBOX_CONTENT_TABS, closeInboxContents, inboxLoadContents, inboxLoadPacks, inboxUseContent } from "./contents.js";
 import { ih, inbox, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxTime } from "./core.js";
 import { inboxEmojiUrl, inboxMediaNode, inboxPackTabUrl, inboxStickerUrl, inboxTextNodes } from "./media.js";
-import { inboxDismissToast } from "./notify.js";
+import { inboxDismissAllToasts, inboxDismissToast } from "./notify.js";
 import { inboxRelayControls } from "./relay.js";
 import { inboxOpenDriverChatFor, renderInboxOrders } from "./orders.js";
 import { inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSendSticker, inboxSetReply } from "./send.js";
-import { inboxAvatar } from "./shell.js";
+import { inboxAvatar, renderInboxHeader } from "./shell.js";
 import { GEAR_ICON, closePrefixPopover, openPrefixPopover } from "../prefix.js";
 import { renderQuickBar } from "../quick-reply/bar.js";
 import { getChatOverrides, getPrefix, getPrefixForGid } from "../settings.js";
@@ -48,8 +48,9 @@ function renderInboxThread() {
     return;
   }
   thHead.hidden = false; thMsgs.hidden = false; thComposer.hidden = false; thEmpty.hidden = true;
-  const oaChip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId), title: inboxBotName(chat.botId) });
-  oaChip.style.background = inboxBotColor(chat.botId);
+  // 選項「不顯示官方帳號名稱」且這個帳號有群編：標題列不放帳號名（群編在右邊那顆齒輪鈕上）
+  const oaChip = inbox.hideOaName && getPrefix() ? null : ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId), title: inboxBotName(chat.botId) });
+  if (oaChip) oaChip.style.background = inboxBotColor(chat.botId);
   const state = [inboxAssigneeLabel(chat), chat.pinnedAt ? "已釘選" : "", chat.followedUp ? "待處理" : "", chat.done ? "處理完畢" : "", `最後訊息 ${inboxTime(chat.at)}`].filter(Boolean).join(" · ");
   if (!inbox.el.aiSlot) { inbox.el.aiSlot = ih("span", { class: "loe-inbox-ai-slot" }); }
   if (!inbox.el.sysNotiSlot) { inbox.el.sysNotiSlot = ih("span", { class: "loe-inbox-ai-slot" }); }
@@ -268,33 +269,71 @@ function renderInboxToasts() {
   const host = inbox.el.toasts;
   if (!host) return;
   host.textContent = "";
-  const overrides = getChatOverrides();
-  for (const t of inbox.toasts.values()) {
-    if (t.kind === "driver") { host.append(inboxDriverToastCard(t)); continue; }
-    const chat = inbox.chats.get(t.key);
-    if (!chat) continue;
-    const chip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId).slice(0, 8), title: inboxBotName(chat.botId) });
-    chip.style.background = inboxBotColor(chat.botId);
-    // 群編標籤同對話列（店配覆寫優先，否則此帳號的預設前綴）；選項「不顯示官方帳號名稱」時同樣只留群編
-    const group = (overrides[t.key] && overrides[t.key].group) || getPrefixForGid(chat.botId);
-    const card = ih("div", { class: "loe-inbox-toast", role: "status" },
-      ih("div", { class: "loe-inbox-toast-top" },
-        inbox.hideOaName && group ? null : chip,
-        group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `${inboxBotName(chat.botId)}・派單預設群編：${group}` }) : null,
-        ih("strong", { class: "loe-inbox-row-name", text: chat.name }),
-        t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則新訊息` }) : null,
-        ih("span", { class: "loe-inbox-spacer" }),
-        ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知", html: ic("x"), onclick: () => { inboxDismissToast(t.key); renderInboxToasts(); } }),
-      ),
-      ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
-      ih("div", { class: "loe-inbox-toast-actions" },
-        ih("button", { type: "button", class: "loe-inbox-btn primary", text: "在收件匣回覆", onclick: () => inboxOpenChat(t.key) }),
-        ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", text: "開官方視窗" }),
-      ),
-    );
-    card.style.borderLeftColor = inboxBotColor(chat.botId);
-    host.append(card);
+  const all = [...inbox.toasts.values()].sort((a, b) => (b.at || 0) - (a.at || 0)); // 最新在前
+  // 右上角只露最新幾張沒縮回的；其餘（含縮回鈴鐺的）摺成一列
+  const shown = inbox.notifOpen ? [] : all.filter((t) => !t.folded).slice(0, inbox.toastMax);
+  for (const t of shown) { const card = inboxToastCard(t); if (card) host.append(card); }
+  const rest = all.length - shown.length;
+  if (rest > 0 && !inbox.notifOpen) {
+    host.append(ih("div", { class: "loe-inbox-toast-fold" },
+      ih("button", { type: "button", class: "loe-inbox-toast-fold-open", onclick: () => { inbox.notifOpen = true; renderInboxToasts(); } },
+        ih("span", { html: ic("chevron-down") }), ih("span", { text: shown.length ? `還有 ${rest} 則，點開看全部` : `${rest} 則通知，點開看全部` })),
+      ih("button", { type: "button", class: "loe-inbox-toast-fold-clear", text: "全部關閉", onclick: () => { inboxDismissAllToasts(); renderInboxToasts(); } }),
+    ));
   }
+  renderInboxNotifDrawer(all);
+  renderInboxHeader(); // 鈴鐺數字
+}
+// 鈴鐺打開的通知清單：所有還沒處理的通知，最新在上；處理（在收件匣回覆／司機對話／×）才消失
+function renderInboxNotifDrawer(all) {
+  const host = inbox.el.notif;
+  if (!host) return;
+  host.textContent = "";
+  host.hidden = !inbox.notifOpen;
+  if (host.hidden) return;
+  const body = inbox.el.body?.getBoundingClientRect();
+  if (body) host.style.setProperty("--loe-notif-top", `${Math.round(body.top)}px`);
+  host.append(ih("div", { class: "loe-inbox-notif-head" },
+    ih("span", { html: ic("bell") }),
+    ih("strong", { text: all.length ? `通知 ${all.length} 則` : "沒有新通知" }),
+    ih("span", { class: "loe-inbox-spacer" }),
+    all.length ? ih("button", { type: "button", class: "loe-inbox-btn", text: "全部關閉", onclick: () => { inboxDismissAllToasts(); renderInboxToasts(); } }) : null,
+    ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知清單", html: ic("x"), onclick: () => { inbox.notifOpen = false; renderInboxToasts(); } }),
+  ));
+  const list = ih("div", { class: "loe-inbox-notif-list" });
+  for (const t of all) { const card = inboxToastCard(t); if (card) list.append(card); }
+  if (!all.length) list.append(ih("div", { class: "loe-inbox-empty", text: "客人或司機來訊會出現在這裡" }));
+  host.append(list);
+}
+// 一張通知卡（右上角堆疊與鈴鐺清單共用）
+function inboxToastCard(t) {
+  if (t.kind === "driver") return inboxDriverToastCard(t);
+  const chat = inbox.chats.get(t.key);
+  if (!chat) return null;
+  const chip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId).slice(0, 8), title: inboxBotName(chat.botId) });
+  chip.style.background = inboxBotColor(chat.botId);
+  // 群編標籤同對話列（店配覆寫優先，否則此帳號的預設前綴）；選項「不顯示官方帳號名稱」時只留群編
+  const overrides = getChatOverrides();
+  const group = (overrides[t.key] && overrides[t.key].group) || getPrefixForGid(chat.botId);
+  const open = () => { inbox.notifOpen = false; inboxOpenChat(t.key); };
+  const card = ih("div", { class: "loe-inbox-toast", role: "status" },
+    ih("div", { class: "loe-inbox-toast-top" },
+      inbox.hideOaName && group ? null : chip,
+      group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `${inboxBotName(chat.botId)}・派單預設群編：${group}` }) : null,
+      ih("strong", { class: "loe-inbox-row-name", text: chat.name, title: chat.name }),
+      t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則` }) : null,
+      ih("span", { class: "loe-inbox-toast-time", text: inboxTime(t.at || Date.now()) }),
+      ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知", html: ic("x"), onclick: () => { inboxDismissToast(t.key); renderInboxToasts(); } }),
+    ),
+    ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
+    ih("div", { class: "loe-inbox-toast-actions" },
+      ih("button", { type: "button", class: "loe-inbox-btn primary", text: "在收件匣回覆", onclick: open }),
+      ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", text: "開官方" }),
+    ),
+    t.folded ? null : ih("span", { class: "loe-inbox-toast-timer" }),
+  );
+  card.style.borderLeftColor = inboxBotColor(chat.botId);
+  return card;
 }
 
 // 司機對話通知卡：單號＋司機、最近幾則；「司機對話」開那位客人的對話並打開這一台的司機對話
@@ -306,19 +345,20 @@ function inboxDriverToastCard(t) {
     ih("div", { class: "loe-inbox-toast-top" },
       ih("span", { class: "loe-inbox-tag ord", text: "司機" }),
       ih("strong", { class: "loe-inbox-row-name", text: t.driverNo || "司機", title: t.driverNo || "" }),
-      ih("span", { class: "loe-inbox-spacer" }),
+      ih("span", { class: "loe-inbox-toast-time", text: inboxTime(t.at || Date.now()) }),
       ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知", html: ic("x"), onclick: close }),
     ),
     ih("div", { class: "loe-inbox-toast-sub" },
       t.shortId ? ih("span", { class: "loe-inbox-toast-order", text: t.shortId, title: "訂單" }) : null,
       chat ? ih("span", { class: "loe-inbox-toast-who", text: chat.name, title: chat.name }) : null,
-      t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則新訊息` }) : null,
+      t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則` }) : null,
     ),
     t.oriText ? ih("div", { class: "loe-inbox-toast-ori", text: t.oriText, title: t.oriText }) : null, // 派單原文（小字，一行）
     ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
     chat ? ih("div", { class: "loe-inbox-toast-actions" },
-      ih("button", { type: "button", class: "loe-inbox-btn primary", text: "司機對話", onclick: () => { close(); inboxOpenDriverChatFor(chat.key, t.orderId); } }),
+      ih("button", { type: "button", class: "loe-inbox-btn primary", text: "司機對話", onclick: () => { close(); inbox.notifOpen = false; inboxOpenDriverChatFor(chat.key, t.orderId); } }),
     ) : null,
+    t.folded ? null : ih("span", { class: "loe-inbox-toast-timer" }),
   );
   if (chat) card.style.borderLeftColor = inboxBotColor(chat.botId);
   return card;
