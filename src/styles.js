@@ -566,6 +566,15 @@ const STYLE_CSS = `
     .loe-ord a { color: ${BLUE}; }
     .loe-ord-src { padding: 1px 6px; border-radius: 4px; background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 600; }
     .loe-ord-text { color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; min-width: 0; }
+    /* 上車地址行（同 admin）：整行獨佔，行政區底線，門牌不一致紅字＋提醒，筆記 */
+    .loe-ord-addr { flex: 1 0 100%; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: #374151; min-width: 0; }
+    .loe-ord-addr-pin { display: inline-flex; color: ${BLUE}; }
+    .loe-ord-addr-pin svg, .loe-ord-note svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .loe-ord-addr.bad .loe-ord-addr-pin, .loe-ord-addr.bad .loe-ord-addr-text { color: #b91c1c; }
+    .loe-ord-district { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+    .loe-ord-mismatch { font-weight: 700; color: #b91c1c; }
+    .loe-ord-addr-warn { font-size: 10px; padding: 1px 4px; background: #fee2e2; color: #b91c1c; }
+    .loe-ord-note { display: inline-flex; align-items: center; gap: 3px; color: #b45309; }
     .loe-ord-col { padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; font-size: 12px; background: #6b7280; }
     .loe-ord-col.booking { background: #7c3aed; }
     .loe-ord-col.pending { background: #f59e0b; }

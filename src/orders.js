@@ -1,4 +1,5 @@
 // 訂單列共用：聊天室↔乘客對應、訂單狀態／系統自動通知／取消、orderRow() 畫一張訂單。
+import { getPickupAddressMismatchSegments, splitAddressPieces } from "./core/address.js";
 import { lineExtApi, lineExtOrderApi } from "./core/backend.js";
 import { ic } from "./core/icons.js";
 import { driverChat, driverChatUnread } from "./driver-chat.js";
@@ -54,21 +55,33 @@ function cancelLineExtOrder(order, onChange) {
 }
 const liveOrders = (list) => (list || []).filter((o) => !o.cancelled);
 // 一張訂單一列：狀態、單號、派單原文（滑過看解析出的地址）、車輛、追蹤、自動通知開關、司機對話、取消
+// 上車地址那一行：📍 地址（行政區底線、門牌不一致紅字）＋「地址可能不正確」＋📝 筆記
+function orderAddressLine(o) {
+  const mismatch = getPickupAddressMismatchSegments(o.oriText || "", o.pickupAddress || "");
+  const pieces = splitAddressPieces(o.pickupAddress, mismatch);
+  return ih("span", { class: "loe-ord-addr" + (mismatch.length ? " bad" : ""), title: o.pickupAddress },
+    ih("span", { class: "loe-ord-addr-pin", html: ic("map-pin") }),
+    ih("span", { class: "loe-ord-addr-text" }, ...pieces.map((p) => ih("span", { class: (p.district ? "loe-ord-district" : "") + (p.mismatch ? " loe-ord-mismatch" : ""), text: p.text }))),
+    mismatch.length ? ih("span", { class: "loe-ord-addr-warn", text: "地址可能不正確，請補齊", title: "此地址與派單地址的門牌號碼不一致" }) : null,
+    o.note ? ih("span", { class: "loe-ord-note", title: "筆記（司機看不到）" }, ih("span", { html: ic("notebook") }), ih("span", { text: o.note })) : null);
+}
 function orderRow(o, { onChange, onChat }) {
   const busy = orderActionBusy.has(o.id);
   const car = o.carPlate ? `${o.carPlate}${o.carColor ? `(${o.carColor})` : ""}` : "";
   const eta = o.column === "accepted" && o.estPickupMins > 0 ? `約${o.estPickupMins}分抵達` : "";
   const noti = o.isSystemNoti ? orderNotiSummary(o) || "等待承接" : "";
   const ori = o.oriTextDisplay || o.oriText || "";
-  const addrTip = o.pickupAddress && o.pickupAddress !== ori ? `地址：${o.pickupAddress}` : "";
-  return ih("div", { class: "loe-ord", title: addrTip },
+  // 同 admin 調度中心：Google 上車地址另起一行，行政區加底線；門牌和派單文字不一致的片段紅字加粗＋提醒；後面接筆記
+  const addrLine = o.pickupAddress ? orderAddressLine(o) : null;
+  return ih("div", { class: "loe-ord" + (addrLine ? " has-addr" : "") },
     ...[
       ih("span", { class: `loe-ord-col ${o.column || ""}`, text: o.columnLabel || o.status }),
       ih("strong", { text: o.shortId || "" }),
       o.sourceLabel ? ih("span", { class: "loe-ord-src", text: o.sourceLabel }) : null,
-      ih("span", { class: "loe-ord-text", text: ori || o.pickupAddress || "", title: addrTip }),
+      ih("span", { class: "loe-ord-text", text: ori || o.pickupAddress || "", title: ori }),
       car ? ih("span", { text: `🚗 ${car}${eta ? " · " + eta : ""}` }) : null,
       o.trackingUrl ? ih("a", { href: o.trackingUrl, target: "_blank", rel: "noopener", text: "追蹤" }) : null,
+      addrLine,
       ih("span", { class: "loe-ord-actions" },
         ...[
           o.systemNotiAvailable === false ? null : ih("button", { type: "button", class: "loe-ord-btn noti" + (o.isSystemNoti ? " on" : ""), html: ic("bell"), disabled: busy,
