@@ -1,7 +1,9 @@
 // 收件匣訂單狀態計數（預約／未派／承接／抵達／執行）與聊天室↔乘客連結。
+import { ic } from "../core/icons.js";
+import { storeSet } from "../core/store.js";
 import { hasLineExtAuth, lineExtApi } from "../core/backend.js";
 import { inboxEnabledIds, inboxFetchChat } from "./chats.js";
-import { ih, inbox, inboxKey } from "./core.js";
+import { ih, inbox, INBOX_ORDER_FILTERS_COLLAPSED_KEY, inboxKey } from "./core.js";
 import { renderInboxList } from "./list.js";
 import { inboxLoadOrders } from "./orders.js";
 import { inboxVisibleChats } from "./shell.js";
@@ -60,9 +62,17 @@ function renderInboxOrderFilters() {
   const host = inbox.el.orderFilters;
   if (!host) return;
   host.textContent = "";
-  const boards = inboxEnabledIds().map((id) => inbox.board.get(id)).filter(Boolean);
-  host.hidden = !boards.length || inbox.orderFiltersCollapsed; // 收起：整排不畫，篩選照常生效
+  // 已授權就先畫出來（看板還沒回來前也能點，數字之後補上）
+  host.hidden = !hasLineExtAuth() || !inboxEnabledIds().length;
   if (host.hidden) return;
+  // 最前面一顆收起／展開：收起時整排只剩它（篩選照常生效；有選狀態就顯示在上面提醒）
+  const collapsed = inbox.orderFiltersCollapsed;
+  const active = collapsed && inbox.orderFilter ? orderColumnLabel(inbox.orderFilter) : "";
+  host.append(ih("button", { type: "button", class: "loe-inbox-chip loe-inbox-chip-fold" + (active ? " on" : ""), "aria-expanded": collapsed ? "false" : "true",
+    title: collapsed ? "展開訂單狀態篩選" : "收起訂單狀態篩選",
+    onclick: () => { inbox.orderFiltersCollapsed = !collapsed; storeSet(INBOX_ORDER_FILTERS_COLLAPSED_KEY, inbox.orderFiltersCollapsed); renderInboxList(); } },
+    ih("span", { class: "loe-inbox-chip-fold-icon", html: ic(collapsed ? "chevron-down" : "chevron-up") }), collapsed ? ih("span", { class: "loe-inbox-chip-fold-text", text: active || "訂單狀態" }) : null));
+  if (collapsed) return;
   // 只算收件匣列得出來的官方對話（同上方篩選與搜尋）：數字＝點下去看到的列數；沒有對應對話的訂單不算
   const count = (col) => inboxVisibleChats(col).length;
   const chip = (id, label, n) => ih("button", {

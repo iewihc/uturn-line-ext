@@ -128,8 +128,10 @@ function inboxTakeover() {
   .loe-inbox-empty { padding: 28px 16px; text-align: center; color: #6b7280; font-size: 13px; }
   .loe-inbox-empty.err { color: #b91c1c; }
   .loe-inbox-list { flex: 0 0 400px; min-width: 0; min-height: 0; background: #fff; border-right: 1px solid #e3e7ee; display: flex; flex-direction: column; }
-  .loe-inbox-filters { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 10px; }
-  .loe-inbox-chip { height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid #d5dbe5; background: #fff; color: #374151; font-size: 12px; cursor: pointer; }
+  /* 篩選列：緊湊、一排不換行（超出可左右滑、不顯示捲軸） */
+  .loe-inbox-filters { flex: 0 0 auto; display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 0 12px 6px; }
+  .loe-inbox-filters::-webkit-scrollbar { display: none; }
+  .loe-inbox-chip { flex: 0 0 auto; height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid #d5dbe5; background: #fff; color: #374151; font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; }
   .loe-inbox-chip.on { background: #1c6cf3; border-color: #1c6cf3; color: #fff; }
   .loe-inbox-rows { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
   .loe-inbox-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; border: 0; border-left: 3px solid transparent; background: #fff; cursor: pointer; color: #1f2937; }
@@ -156,12 +158,14 @@ function inboxTakeover() {
   .loe-inbox-tag.ord.executing { background: #0d9488; }
   .loe-inbox-order-filters { padding-top: 0; }
   .loe-inbox-chip .n { margin-left: 4px; opacity: .75; }
-  .loe-inbox-chip-refresh { width: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #6b7280; }
+  .loe-inbox-chip-refresh { width: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; color: #6b7280; }
   .loe-inbox-chip-refresh svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .loe-inbox-chip-refresh:disabled { opacity: .6; cursor: progress; }
-  .loe-inbox-chip-fold { width: auto; padding: 0 8px; gap: 4px; }
+  .loe-inbox-chip-fold { width: 26px; padding: 0; justify-content: center; color: #6b7280; gap: 3px; }
+  .loe-inbox-chip-fold[aria-expanded="false"] { width: auto; padding: 0 9px 0 6px; }
   .loe-inbox-chip-fold.on { color: #fff; }
-  .loe-inbox-chip-fold-active { font-size: 12px; }
+  .loe-inbox-chip-fold-icon { display: inline-flex; }
+  .loe-inbox-chip-fold svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .loe-inbox-chip-refresh:disabled svg { animation: loe-inbox-spin 1s linear infinite; }
   @keyframes loe-inbox-spin { to { transform: rotate(360deg); } }
   .loe-inbox-tag.ai { background: #eef2ff; color: #4f46e5; font-weight: 700; }
