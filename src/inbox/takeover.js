@@ -300,7 +300,8 @@ function inboxTakeover() {
   .loe-inbox-side-empty { padding: 12px 14px; font-size: 13px; color: var(--loe-muted); background: var(--loe-raise); border-bottom: 1px solid var(--loe-line); }
   /* 右上「選項」 */
   .loe-inbox-options { position: relative; }
-  .loe-inbox-options-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; width: 320px; background: var(--loe-paper); border-radius: 12px; box-shadow: 0 12px 32px rgba(15,23,42,.2); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+  .loe-inbox-options-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; width: 320px; background: var(--loe-paper); border-radius: 12px; box-shadow: 0 12px 32px rgba(15,23,42,.2); padding: 6px; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 80px); overflow-y: auto; overscroll-behavior: contain; }
+  .loe-inbox-options-menu > * { flex: 0 0 auto; } /* 選項多到超過視窗時在選單內捲動，不被切掉 */
   .loe-inbox-options-group { padding: 8px 10px 4px; font-size: 12px; font-weight: 700; color: var(--loe-muted); }
   .loe-inbox-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
   .loe-inbox-option:hover { background: var(--loe-primary-soft); }
