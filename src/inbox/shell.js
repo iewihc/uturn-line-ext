@@ -10,7 +10,7 @@ import { inboxApplyPollFallback, inboxConnect, inboxEnabledIds, inboxLoadChats, 
 import { inboxLoadNotes, inboxMarkRead, renderInboxNotes } from "./chat-tools.js";
 import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
 import { renderInboxList } from "./list.js";
-import { inboxBeep, inboxSoundReady } from "./notify.js";
+import { inboxBeep, inboxDismissAllToasts, inboxSoundReady } from "./notify.js";
 import { inboxChatColumns, inboxLoadBoard, inboxQueueLink, inboxScheduleBoard } from "./order-status.js";
 import { inboxLoadOrders, renderInboxOrders } from "./orders.js";
 import { renderInboxThread, renderInboxToasts } from "./thread.js";
@@ -118,6 +118,14 @@ function renderInboxHeader() {
     ih("div", { class: "loe-inbox-spacer" }),
     authed
       ? ih("div", { class: "loe-inbox-actions" },
+        (() => { // 全部縮回鈴鐺時：鈴鐺左邊一條「N 則通知，點開看全部｜全部關閉」
+          const all = [...inbox.toasts.values()];
+          if (!all.length || inbox.notifOpen || all.some((t) => !t.folded)) return null;
+          return ih("span", { class: "loe-inbox-fold-inline" },
+            ih("button", { type: "button", class: "loe-inbox-fold-inline-open", onclick: (e) => { e.stopPropagation(); inbox.notifOpen = true; renderInboxToasts(); } },
+              ih("span", { html: ic("chevron-down") }), ih("span", { text: `${all.length} 則通知，點開看全部` })),
+            ih("button", { type: "button", class: "loe-inbox-fold-inline-clear", text: "全部關閉", onclick: (e) => { e.stopPropagation(); inboxDismissAllToasts(); renderInboxToasts(); } }));
+        })(),
         (() => { // 鈴鐺：還沒處理的通知數；點開清單
           const n = inbox.toasts.size;
           return ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-bell" + (inbox.notifOpen ? " on" : ""), html: ic("bell"), "aria-pressed": inbox.notifOpen ? "true" : "false",

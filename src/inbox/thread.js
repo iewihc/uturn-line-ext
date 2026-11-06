@@ -273,7 +273,7 @@ function renderInboxToasts() {
   const shown = inbox.notifOpen ? [] : all.filter((t) => !t.folded).slice(0, inbox.toastMax);
   for (const t of shown) { const card = inboxToastCard(t); if (card) host.append(card); }
   const rest = all.length - shown.length;
-  if (rest > 0 && !inbox.notifOpen) {
+  if (rest > 0 && shown.length && !inbox.notifOpen) { // 還有卡露著才在底下接一列；全部縮回時改顯示在標頭鈴鐺旁
     host.append(ih("div", { class: "loe-inbox-toast-fold" },
       ih("button", { type: "button", class: "loe-inbox-toast-fold-open", onclick: () => { inbox.notifOpen = true; renderInboxToasts(); } },
         ih("span", { html: ic("chevron-down") }), ih("span", { text: shown.length ? `還有 ${rest} 則，點開看全部` : `${rest} 則通知，點開看全部` })),

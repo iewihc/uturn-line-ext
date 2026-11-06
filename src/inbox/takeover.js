@@ -405,6 +405,12 @@ function inboxTakeover() {
   .loe-inbox-toast-fold-open svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .loe-inbox-toast-fold-clear { flex: 0 0 auto; border: 1px solid #d5dbe5; background: #fff; border-radius: 6px; height: 24px; padding: 0 8px; font-size: 11px; color: #454f5b; cursor: pointer; }
   .loe-inbox-toast-fold-clear:hover { background: #f1f5f9; }
+  /* 標頭：全部縮回時鈴鐺左邊的摺疊列 */
+  .loe-inbox-fold-inline { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px 0 8px; border: 1px dashed #c7cdd8; border-radius: 8px; background: #f9fafb; font-size: 12px; color: #637381; }
+  .loe-inbox-fold-inline-open { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #454f5b; font-size: 12px; cursor: pointer; padding: 0 4px; }
+  .loe-inbox-fold-inline-open svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-fold-inline-clear { border: 1px solid #d5dbe5; background: #fff; border-radius: 6px; height: 24px; padding: 0 8px; font-size: 11px; color: #454f5b; cursor: pointer; }
+  .loe-inbox-fold-inline-clear:hover { background: #f1f5f9; }
   /* 標頭鈴鐺 */
   .loe-inbox-bell { position: relative; }
   .loe-inbox-stepper { display: inline-flex; align-items: center; gap: 4px; }
