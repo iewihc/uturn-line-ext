@@ -117,6 +117,8 @@ function inboxTakeover() {
   .loe-inbox-oa-chip { font-size: 11px; padding: 1px 6px; border-radius: 4px; color: #fff; white-space: nowrap; flex: 0 0 auto; }
   .loe-inbox-row-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
   .loe-inbox-row-time { font-size: 11px; color: #6b7280; white-space: nowrap; }
+  .loe-inbox-pin { display: inline-flex; flex: 0 0 auto; color: #1c6cf3; }
+  .loe-inbox-pin svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .loe-inbox-row-preview { flex: 1 1 auto; min-width: 0; color: #4b5563; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .loe-inbox-unread { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #dc2626; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
   .loe-inbox-unread.dot { min-width: 10px; width: 10px; height: 10px; padding: 0; }

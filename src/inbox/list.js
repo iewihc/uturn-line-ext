@@ -40,6 +40,7 @@ function renderInboxList() {
           // 選項「不顯示官方帳號名稱」：有群編就只顯示群編（沒群編仍顯示名稱，才分得出是哪個帳號）
           inbox.hideOaName && group ? null : ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(c.botId).slice(0, 6), title: inboxBotName(c.botId) }),
           group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `${inboxBotName(c.botId)}・派單預設群編：${group}` }) : null,
+          c.pinnedAt ? ih("span", { class: "loe-inbox-pin", html: ic("pin"), title: "已釘選" }) : null,
           ih("span", { class: "loe-inbox-row-name", text: c.name }),
           ih("span", { class: "loe-inbox-row-time", text: inboxTime(c.at) }),
         ),

@@ -54,6 +54,7 @@ function inboxChatFromLine(botId, item, prev) {
     assignedBizId: item.assignedBizId || "",
     done: !!item.done,
     followedUp: !!item.followedUp, // LINE 的「待處理」標記
+    pinnedAt: item.pinnedAt || 0, // LINE 的「釘選」：有時間＝釘在清單最上面
     avatarUrl: p.iconHash && p.iconHash !== "biz-app"
       ? `https://profile.line-scdn.net/${encodeURIComponent(p.iconHash)}/preview` : "",
     chatType: item.chatType || "",
@@ -257,6 +258,7 @@ async function inboxOnChatEvent(botId, raw) {
     case "followedUp": chat.followedUp = true; break;
     case "unfollowedUp": chat.followedUp = false; break;
     case "assigneeRemoved": chat.assignedBizId = ""; break;
+    case "pin": case "unpin": // 釘選（任一分頁）：重抓拿 pinnedAt
     case "assigneeUpdated": case "nicknameUpdated": case "spam": case "unspam": case "delete": case "leave": case "botLeave": {
       const fresh = await inboxFetchChat(botId, chatId);
       if (!fresh) { inbox.chats.delete(key); inbox.threads.delete(key); inboxDismissToast(key); if (inbox.selected === key) inbox.selected = null; }

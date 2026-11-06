@@ -1,4 +1,4 @@
-// 收件匣對話的工具：待處理／處理完畢、改暱稱、記事本、標為已讀。
+// 收件匣對話的工具：待處理／處理完畢／釘選、改暱稱、記事本、標為已讀。
 import { renderInboxSide } from "./side.js";
 import { ic } from "../core/icons.js";
 import { pageContext } from "../core/page-context.js";
@@ -14,20 +14,20 @@ async function inboxFollowUp() {
   const chat = inbox.selected && inbox.chats.get(inbox.selected);
   if (chat) await inboxSetChatFlag(chat, "followUp", true);
 }
-// LINE 的對話狀態（同 LINE 聊天室頂端那兩顆）：PUT／DELETE …/followUp（待處理）、…/done（處理完畢）
-const INBOX_FLAG_LABEL = { followUp: "待處理", done: "處理完畢" };
+// LINE 的對話狀態（同 LINE 聊天室頂端那兩顆與「⋯」選單的釘選）：PUT／DELETE …/followUp（待處理）、…/done（處理完畢）、…/pin（釘選）
+const INBOX_FLAG_LABEL = { followUp: "待處理", done: "處理完畢", pin: "釘選" };
 async function inboxSetChatFlag(chat, flag, on) {
   if (inbox.flagBusy) return;
   inbox.flagBusy = chat.key;
   renderInboxToolsRight(chat);
   try {
     await inboxApi(on ? "PUT" : "DELETE", `/api/v1/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/${flag}`, on ? {} : undefined);
-    if (flag === "followUp") chat.followedUp = on; else chat.done = on;
+    if (flag === "followUp") chat.followedUp = on; else if (flag === "done") chat.done = on; else chat.pinnedAt = on ? Date.now() : 0;
   } catch (e) { toast(`${on ? "設為" : "取消"}「${INBOX_FLAG_LABEL[flag]}」失敗：${e.message}`, "err", 3000); }
   inbox.flagBusy = "";
   inboxRenderAll();
 }
-// 輸入框下方右側：待處理／處理完畢（LINE 的對話狀態）＋在官方視窗開啟
+// 輸入框下方右側：待處理／處理完畢／釘選（LINE 的對話狀態）＋在官方視窗開啟
 function renderInboxToolsRight(chat) {
   const host = inbox.el.toolsRight;
   if (!host) return;
@@ -36,12 +36,13 @@ function renderInboxToolsRight(chat) {
   const busy = inbox.flagBusy === chat.key;
   const flagBtn = (flag, on, icon) => ih("button", {
     type: "button", class: "loe-inbox-btn loe-inbox-flag" + (on ? " on" : ""), html: ic(icon), disabled: busy, "aria-pressed": on ? "true" : "false",
-    title: on ? `取消「${INBOX_FLAG_LABEL[flag]}」` : `設為「${INBOX_FLAG_LABEL[flag]}」（同 LINE 聊天室的對話狀態）`,
+    title: on ? `取消「${INBOX_FLAG_LABEL[flag]}」` : flag === "pin" ? "釘選：這位客人固定在清單最上面（同 LINE 聊天室）" : `設為「${INBOX_FLAG_LABEL[flag]}」（同 LINE 聊天室的對話狀態）`,
     onclick: () => inboxSetChatFlag(chat, flag, !on),
   }, ih("span", { text: INBOX_FLAG_LABEL[flag] }));
   host.append(
     flagBtn("followUp", !!chat.followedUp, "message-circle"),
     flagBtn("done", !!chat.done, "circle-check"),
+    flagBtn("pin", !!chat.pinnedAt, "pin"),
     ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", html: ic("external-link"), title: "在 LINE 官方聊天室開啟這位客人（新分頁）" }, ih("span", { text: "在官方視窗開啟" })));
 }
 // 改客人暱稱：LINE 的 nickname API；空字串＝清掉暱稱、恢復顯示原名

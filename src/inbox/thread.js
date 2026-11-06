@@ -35,7 +35,7 @@ function renderInboxThread() {
   thHead.hidden = false; thMsgs.hidden = false; thComposer.hidden = false; thEmpty.hidden = true;
   const oaChip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId), title: inboxBotName(chat.botId) });
   oaChip.style.background = inboxBotColor(chat.botId);
-  const state = [inboxAssigneeLabel(chat), chat.followedUp ? "待處理" : "", chat.done ? "處理完畢" : "", `最後訊息 ${inboxTime(chat.at)}`].filter(Boolean).join(" · ");
+  const state = [inboxAssigneeLabel(chat), chat.pinnedAt ? "已釘選" : "", chat.followedUp ? "待處理" : "", chat.done ? "處理完畢" : "", `最後訊息 ${inboxTime(chat.at)}`].filter(Boolean).join(" · ");
   if (!inbox.el.aiSlot) { inbox.el.aiSlot = ih("span", { class: "loe-inbox-ai-slot" }); }
   if (!inbox.el.sysNotiSlot) { inbox.el.sysNotiSlot = ih("span", { class: "loe-inbox-ai-slot" }); }
   let title;

@@ -235,7 +235,7 @@ function inboxVisibleChats(orderFilter = inbox.orderFilter) {
       return true;
     })
     .filter((c) => !orderFilter || inboxChatColumns(c).includes(orderFilter))
-    .sort((a, b) => b.at - a.at);
+    .sort((a, b) => (b.pinnedAt ? 1 : 0) - (a.pinnedAt ? 1 : 0) || b.at - a.at); // 釘選的固定在最上面（同 LINE）
 }
 // 客人頭像：LINE 的 preview 圖；沒有或載入失敗就退回名字第一個字
 function inboxAvatar(chat) {
