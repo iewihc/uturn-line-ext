@@ -41,9 +41,12 @@ function refreshAllQuickMenus() {
 }
 // 輸入框上方的快捷氣泡列（最多前 5 個；點了帶入對話框）
 // onPick：點氣泡時要把範本塞到哪裡（LINE 聊天室＝原生輸入框；收件匣＝自己的 textarea）
-function renderQuickBar(bar, onPick = fillReplyTextarea) {
+function renderQuickBar(bar, onPick) {
   bar = bar || document.querySelector(`.${QR_BAR_CLASS}`);
   if (!bar) return;
+  // 收件匣的氣泡列第一次會帶自己的 onPick；之後管理視窗存檔觸發的 renderQuickBar() 沒帶參數，沿用上次的
+  if (onPick) bar._loePick = onPick;
+  onPick = onPick || bar._loePick || fillReplyTextarea;
   bar.textContent = "";
   const addChip = (r, isFleet) => {
     const chip = document.createElement("button");

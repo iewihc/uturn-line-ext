@@ -16,7 +16,7 @@ function renderInboxSide() {
   const noDriver = !!chat && inbox.pinDchat && !dchatDocked && !!st && !st.loading && !liveOrders(st.list).some((o) => o.hasDriver);
   side.hidden = !(dchatDocked || notesShown || noDriver);
   sideEmpty.hidden = !noDriver;
-  sideEmpty.textContent = noDriver ? "司機對話　這位客人沒有已派到司機的進行中訂單" : "";
+  sideEmpty.textContent = noDriver ? "司機對話　尚無司機承接的此筆訂單" : "";
   const both = dchatDocked && notesShown && !inbox.notesCollapsed;
   sideSplit.hidden = !both;
   side.classList.toggle("split", both);

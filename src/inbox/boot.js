@@ -1,4 +1,5 @@
 // 收件匣啟動：條款 → 綁定畫面事件 → 讀官方帳號 → 授權閘門 → 連線與輪詢。
+import { openManager } from "../quick-reply/manager.js";
 import { initInboxCollapse } from "./collapse.js";
 import { initInboxColumns } from "./columns.js";
 import { initInboxSide } from "./side.js";
@@ -97,6 +98,7 @@ function bootInbox() {
     if (tool === "sticker") { inbox.picker = inbox.picker ? null : { kind: "sticker", pkg: "" }; renderInboxPicker(); }
     else if (tool === "file") inbox.el.fileInput.click();
     else if (tool === "contents") { inbox.contents = { tab: "saved", selected: null }; renderInboxContents(); }
+    else if (tool === "quick") openManager(); // 懶惰蟲自己的「快捷回覆管理」（同 LINE 聊天室那顆）
   });
   inbox.el.fileInput.addEventListener("change", () => {
     const files = Array.from(inbox.el.fileInput.files || []);

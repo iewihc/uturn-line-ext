@@ -461,6 +461,7 @@ function inboxTakeover() {
           <button type="button" class="loe-inbox-tool" data-tool="sticker" title="貼圖、表情貼" aria-label="貼圖、表情貼"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></button>
           <button type="button" class="loe-inbox-tool" data-tool="file" title="檔案：圖片、影片、語音或其他檔案（圖片 20MB、其他 100MB 以內）" aria-label="檔案"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></button>
           <button type="button" class="loe-inbox-tool" data-tool="contents" title="選擇內容：預設訊息、多頁訊息、優惠券" aria-label="選擇內容"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 12h8"></path><path d="M12 8v8"></path></svg></button>
+          <button type="button" class="loe-inbox-tool" data-tool="quick" title="快捷回覆管理：新增、編輯、排序個人模板（和 LINE 聊天室那顆一樣）" aria-label="快捷回覆管理">${ic("message-square")}</button>
           <input type="file" class="loe-inbox-file" multiple hidden tabindex="-1" aria-hidden="true">
           <span class="loe-inbox-tools-right"></span>
         </div>

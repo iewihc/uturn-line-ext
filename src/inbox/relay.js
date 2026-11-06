@@ -72,7 +72,7 @@ function relayDrawJpeg(bitmap) {
 // item：{ id, text } 或 { id, imageUrl }；anchor：多台時選單掛在哪顆按鈕旁
 function relayToDriver(item, anchor) {
   const targets = relayTargets();
-  if (!targets.length) return toast("這位客人沒有已派到司機的進行中訂單", "warn", 3000);
+  if (!targets.length) return toast("尚無司機承接的此筆訂單", "warn", 3000);
   if (targets.length === 1) return relaySendToDrivers(item, targets);
   relayPickCars(anchor, targets, (picked) => relaySendToDrivers(item, picked));
 }
