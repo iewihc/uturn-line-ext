@@ -53,7 +53,7 @@ const OA_BOT_NAMES_KEY = "loe_oa_bot_names_v1"; // 官方帳號名稱快取 { bo
  *     填入對話框 → 點送出 → POST .../ack（回報結果）→ 清掉網址 ?send
  *   ※ 腳本不含任何訊息模板：要送的文字一律由後台 getCopyText() 組好、存在後端，這裡只搬運。
  * ---------------------------------------------------------------------- */
-const API_BASE = "https://right.mr-chi-tech.com"; // 後端網域（@connect mr-chi-tech.com 已涵蓋子網域）
+const API_BASE = "https://right-tw.mr-chi-tech.com"; // 後端網域（台灣環境；SignalR 同樣是 right-signalr-tw）（@connect mr-chi-tech.com 已涵蓋子網域）
 const SIGNALR_CHAT_HUB = "https://right-signalr-tw.mr-chi-tech.com/hubs/chat"; // 即時聊天（司機訊息即時通知；同 admin）
 
 export { API_BASE, AUTOREPLY_KEY, BLUE, BLUE_HOVER, BLUE_SOFT, BUBBLE_CLASS, BUTTON_CLASS, CHAT_OVERRIDE_KEY, COPIED_CLASS, DISPATCHER_KEY, DISPATCH_BUTTON_CLASS, DISPATCH_POP_CLASS, DISPATCH_TEMPLATE_KEY, ESTIMATE_BUTTON_CLASS, FLEET_KEY, FLEET_STORE_KEY, FLEET_SYSTEM_NOTI_KEY, FORWARD_BUTTON_CLASS, ICON_CLASS, LINE_HOURLY_LIMIT_KEY, MARK_FOLLOWUP_KEY, MEMO_INCLUDE_KEY, OA_BOT_NAMES_KEY, PREFIX_CHIP_CLASS, PREFIX_KEY, QR_BAR_CLASS, QR_CHIP_CLASS, QR_MODE_KEY, QUICK_BUTTON_CLASS, QUICK_MENU_CLASS, QUICK_MENU_OPEN_CLASS, SEND_KEY_STORE_PREFIX, SIGNALR_CHAT_HUB, SKIP_GROUP_CHATS_KEY, STORE_KEY, SYSTEM_NOTI_KEY, TEXT_PAD_CLASS, UTURN_BUILD, WEBHOOK_KEY };
