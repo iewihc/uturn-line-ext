@@ -2,7 +2,7 @@
 import { BUBBLE_CLASS, BUTTON_CLASS, FORWARD_BUTTON_CLASS, TEXT_PAD_CLASS } from "../core/constants.js";
 import { COPY_ICON, FORWARD_ICON, ic } from "../core/icons.js";
 import { openDispatchPopover } from "../dispatch.js";
-import { inboxLoadNotes, inboxMarkRead, inboxRename, renderInboxNotes, renderInboxToolsRight } from "./chat-tools.js";
+import { inboxFlagButton, inboxLoadNotes, inboxMarkRead, inboxRename, renderInboxNotes, renderInboxToolsRight } from "./chat-tools.js";
 import { inboxAssigneeLabel, inboxPreview } from "./chats.js";
 import { INBOX_CONTENT_TABS, closeInboxContents, inboxLoadContents, inboxLoadPacks, inboxUseContent } from "./contents.js";
 import { ih, inbox, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxTime } from "./core.js";
@@ -95,7 +95,9 @@ function renderInboxThread() {
         ih("span", { text: inboxGroupLabel(prefix) || (prefix ? prefix : "設定群編") }));
     })(),
     inbox.el.aiSlot, // AI處理／轉人工（renderAiToggle 掛進來；沒有 AI 的帳號是空的）
-    ih("button", { type: "button", class: "loe-inbox-btn", text: "標為已讀", disabled: !chat.unread, onclick: () => inboxMarkRead(chat) }),
+    // 選項「開啟對話自動標已讀」勾了就會自動標，手動鈕不再顯示
+    inbox.autoRead ? null : ih("button", { type: "button", class: "loe-inbox-btn", text: "標為已讀", disabled: !chat.unread, onclick: () => inboxMarkRead(chat) }),
+    inboxFlagButton(chat, "pin", "pin"),
   );
   renderInboxToolsRight(chat);
   const th = inbox.threads.get(chat.key);
@@ -128,7 +130,7 @@ function renderInboxThread() {
         quote, isCard ? ih("span", { class: "loe-inbox-card-label", text: "AI 卡片回覆" }) : null, ...inboxTextNodes(m.message, text));
     if (withActions && !mediaNode) {
       bubble.append(
-        ih("button", { type: "button", class: FORWARD_BUTTON_CLASS, html: FORWARD_ICON, "aria-label": "帶入派單", "data-loe-tip": "派單",
+        ih("button", { type: "button", class: FORWARD_BUTTON_CLASS, html: FORWARD_ICON, "aria-label": "帶入派車", "data-loe-tip": "派車",
           onclick: (e) => { e.stopPropagation(); openDispatchPopover(text); } }),
         ih("button", { type: "button", class: BUTTON_CLASS, html: COPY_ICON, "aria-label": "複製這則訊息", "data-loe-tip": "複製",
           onclick: async (e) => { e.stopPropagation(); const btn = e.currentTarget; try { flashCopied(btn, await copyText(text)); } catch (_) { flashCopied(btn, false); } } }),

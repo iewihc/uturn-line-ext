@@ -380,7 +380,7 @@ function inboxTakeover() {
         <div class="loe-inbox-composer-row">
           <textarea class="loe-inbox-textarea" rows="2" placeholder="輸入回覆 (Enter傳送，Shift+Enter可換行)" aria-label="回覆內容"></textarea>
           <div class="loe-inbox-composer-btns">
-            <button type="button" class="loe-inbox-dispatch" title="派單：開啟派單視窗（上車地址自行填寫，或點訊息旁的派單帶入）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17h4V5H2v12h3"></path><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg><span>派單</span></button>
+            <button type="button" class="loe-inbox-dispatch" title="派車：開啟派車視窗（上車地址自行填寫，或點訊息旁的派車帶入）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17h4V5H2v12h3"></path><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"></path><circle cx="7.5" cy="17.5" r="2.5"></circle><circle cx="17.5" cy="17.5" r="2.5"></circle></svg><span>派車</span></button>
             <button type="button" class="loe-inbox-send"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg><span>傳送</span></button>
           </div>
         </div>

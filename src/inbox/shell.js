@@ -52,8 +52,8 @@ function inboxOptionsButton() {
     ih("div", { class: "loe-inbox-options-group", text: "列表" }),
     row("eye-off", "不顯示官方帳號名稱", inbox.hideOaName, (v) => { set(INBOX_HIDE_OA_NAME_KEY, "hideOaName", v); renderInboxList(); }, "官方訊息每列只顯示群編（例如 0/），沒設群編的帳號仍顯示名稱"),
     ih("div", { class: "loe-inbox-options-group", text: "已讀" }),
-    row("check-check", "開啟對話自動標已讀", inbox.autoRead, (v) => { set(INBOX_AUTO_READ_KEY, "autoRead", v); if (v && chat?.unread) inboxMarkRead(chat); },
-      "不勾＝永遠不自動標，只有按「標為已讀」才標（回覆後也不標）"),
+    row("check-check", "開啟對話自動標已讀", inbox.autoRead, (v) => { set(INBOX_AUTO_READ_KEY, "autoRead", v); if (v && chat?.unread) inboxMarkRead(chat); renderInboxThread(); }, // 標題列「標為已讀」鈕跟著出現／消失
+      "不勾＝永遠不自動標，只有按「標為已讀」才標（回覆後也不標）；勾了就不顯示「標為已讀」鈕"),
     ih("div", { class: "loe-inbox-options-group", text: "提示音" }),
     row("bell", "新訊息提示音", inbox.sound, (v) => {
       set(INBOX_SOUND_KEY, "sound", v);
