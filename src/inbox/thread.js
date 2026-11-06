@@ -185,15 +185,17 @@ function renderInboxPicker() {
   const pack = packs.find((x) => x.id === p.pkg);
   const isSticker = p.kind === "sticker";
   host.append(
+    // 分頁列：貼圖包多時只有中間那段橫向捲動，✕ 固定在最右邊（之前 ✕ 跟著捲、欄窄就被推到看不見，面板關不掉）
     ih("div", { class: "loe-inbox-picker-tabs" },
-      ...[["sticker", "貼圖"], ["emoji", "表情貼"]].map(([k, label]) => ih("button", { type: "button", class: "loe-inbox-picker-kind" + (p.kind === k ? " on" : ""), text: label,
-        onclick: () => { inbox.picker = { kind: k, pkg: "" }; renderInboxPicker(); } })),
-      ih("span", { class: "loe-inbox-picker-sep" }),
-      ...packs.map((x) => ih("button", { type: "button", class: "loe-inbox-picker-tab" + (p.pkg === x.id ? " on" : ""), title: x.id,
-        onclick: () => { p.pkg = x.id; renderInboxPicker(); } },
-        ih("img", { src: inboxPackTabUrl(p.kind, x.id), alt: "", loading: "lazy" }))),
-      ih("span", { class: "loe-inbox-spacer" }),
-      ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "收起", html: ic("x"), onclick: () => { inbox.picker = null; renderInboxPicker(); } }),
+      ih("div", { class: "loe-inbox-picker-scroll" },
+        ...[["sticker", "貼圖"], ["emoji", "表情貼"]].map(([k, label]) => ih("button", { type: "button", class: "loe-inbox-picker-kind" + (p.kind === k ? " on" : ""), text: label,
+          onclick: () => { inbox.picker = { kind: k, pkg: "" }; renderInboxPicker(); } })),
+        ih("span", { class: "loe-inbox-picker-sep" }),
+        ...packs.map((x) => ih("button", { type: "button", class: "loe-inbox-picker-tab" + (p.pkg === x.id ? " on" : ""), title: x.id,
+          onclick: () => { p.pkg = x.id; renderInboxPicker(); } },
+          ih("img", { src: inboxPackTabUrl(p.kind, x.id), alt: "", loading: "lazy" }))),
+      ),
+      ih("button", { type: "button", class: "loe-inbox-x loe-inbox-picker-close", "aria-label": "收起", title: "收起（Esc）", html: ic("x"), onclick: () => { inbox.picker = null; renderInboxPicker(); } }),
     ),
     ih("div", { class: "loe-inbox-picker-grid" },
       st.loading && !packs.length ? ih("div", { class: "loe-inbox-empty", text: "讀取中…" })

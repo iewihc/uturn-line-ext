@@ -295,7 +295,10 @@ function inboxTakeover() {
   .loe-inbox-tool:hover, .loe-inbox-tool.on { background: #e8eefb; color: #1c6cf3; }
   .loe-inbox-tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .loe-inbox-picker { border: 1px solid #e3e7ee; border-radius: 10px; background: #fafbfd; display: flex; flex-direction: column; height: 280px; }
-  .loe-inbox-picker-tabs { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; padding: 6px 8px; border-bottom: 1px solid #e3e7ee; overflow-x: auto; }
+  .loe-inbox-picker-tabs { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid #e3e7ee; min-width: 0; }
+  .loe-inbox-picker-scroll { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+  .loe-inbox-picker-close { flex: 0 0 auto; border: 1px solid #d5dbe5; background: #fff; }
+  .loe-inbox-picker-close:hover { background: #f1f5f9; color: #1f2937; }
   .loe-inbox-picker-kind { flex: 0 0 auto; height: 28px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #6b7280; font-size: 13px; cursor: pointer; }
   .loe-inbox-picker-kind.on { background: #fff; border-color: #d5dbe5; color: #1f2937; font-weight: 600; }
   .loe-inbox-picker-sep { flex: 0 0 auto; width: 1px; height: 22px; margin: 0 6px; background: #e3e7ee; }

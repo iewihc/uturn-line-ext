@@ -58,9 +58,11 @@ function bootInbox() {
   inbox.el.railStrip.addEventListener("click", inboxToggleRail);
   inboxApplyRail();
   inbox.el.listSearch.addEventListener("input", renderInboxList);
-  document.addEventListener("click", () => {
+  document.addEventListener("click", (e) => {
     closePrefixPopover();
     if (inbox.optionsOpen) { inbox.optionsOpen = false; renderInboxHeader(); } // 點選單外面收起「選項」
+    // 貼圖／表情貼面板：點面板和輸入區以外的地方就收起（工具列那顆笑臉自己會 stopPropagation 切換）
+    if (inbox.picker && e.target instanceof Element && !e.target.closest(".loe-inbox-picker, .loe-inbox-composer-row, .loe-inbox-tools")) { inbox.picker = null; renderInboxPicker(); }
   });
   const sendBtn = $(".loe-inbox-send");
   const doSend = async () => {
