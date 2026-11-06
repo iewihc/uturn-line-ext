@@ -1,6 +1,7 @@
 // 收件匣啟動：條款 → 綁定畫面事件 → 讀官方帳號 → 授權閘門 → 連線與輪詢。
 import { openManager } from "../quick-reply/manager.js";
 import { initInboxCollapse } from "./collapse.js";
+import { initInboxMention } from "./mention.js";
 import { initInboxColumns } from "./columns.js";
 import { initInboxSide } from "./side.js";
 import { initInboxRelay } from "./relay.js";
@@ -33,7 +34,7 @@ function bootInbox() {
     body: $(".loe-inbox-body"), listSection: $(".loe-inbox-list"),
     filters: $(".loe-inbox-filters"), rows: $(".loe-inbox-rows"), listSearch: $(".loe-inbox-list-search"),
     thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
-    reply: $(".loe-inbox-reply"), replyWho: $(".loe-inbox-reply-who"), replyText: $(".loe-inbox-reply-text"),
+    reply: $(".loe-inbox-reply"), replyWho: $(".loe-inbox-reply-who"), replyText: $(".loe-inbox-reply-text"), mention: $(".loe-inbox-mention-list"),
     msearch: $(".loe-inbox-msearch"), msearchInput: $(".loe-inbox-msearch-input"), msearchCount: $(".loe-inbox-msearch-count"), msearchPrev: $(".loe-inbox-msearch-prev"), msearchNext: $(".loe-inbox-msearch-next"), msearchClose: $(".loe-inbox-msearch-close"), msearchList: $(".loe-inbox-msearch-list"),
     quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notif: $(".loe-inbox-notif"), notes: $(".loe-inbox-notes"),
     orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
@@ -82,6 +83,7 @@ function bootInbox() {
   };
   sendBtn.addEventListener("click", doSend);
   $(".loe-inbox-dispatch").addEventListener("click", (e) => { e.stopPropagation(); openDispatchPopover(""); });
+  initInboxMention(); // 群組 @標記清單（先註冊：清單開著時 Enter／↑↓／Esc 由它接手）
   inbox.el.textarea.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); doSend(); }
     if (e.key === "Escape" && inbox.replyTo) { e.preventDefault(); inboxSetReply(null); }

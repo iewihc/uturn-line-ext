@@ -105,6 +105,7 @@ const inbox = {
   packs: new Map(), // "botId/sticker"｜"botId/emoji" → { list: [{ id, items }], loading, error }
   replyTo: null, // 回覆（引用）哪一則：{ id, quoteToken, text, who }；送出時帶 quoteToken，換對話或送出後清掉
   emojiTokens: new Map(), // 輸入框裡 [表情貼N] 的 N → { productId, emojiId }（送出時換成 textV2 的 substitution）
+  members: new Map(), // 群組成員（chatKey → { list:[{ userId, name, type }], loading, error }），@標記用
   contents: null, // 選擇內容視窗：{ tab: "saved"|"card"|"coupon", selected }（null＝關閉）
   contentLists: new Map(), // "botId/tab" → { list, page, next, done, loading, error }
   csrf: null,

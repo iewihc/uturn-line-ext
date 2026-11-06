@@ -348,6 +348,18 @@ function inboxTakeover() {
   .loe-inbox-lightbox-img { max-width: 96vw; max-height: 92vh; object-fit: contain; border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,.5); cursor: zoom-out; }
   .loe-inbox-lightbox-bar { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; cursor: default; }
   .loe-inbox-lightbox-bar .loe-inbox-btn { background: rgba(255,255,255,.92); }
+  /* 群組 @標記：輸入框上方的成員清單；泡泡裡被標記的藍字 */
+  .loe-inbox-mention-list { max-height: 220px; overflow-y: auto; border: 1px solid #e3e7ee; border-radius: 10px; background: #fff; box-shadow: 0 -4px 16px rgba(15,23,42,.08); display: flex; flex-direction: column; padding: 4px; }
+  .loe-inbox-mention-head { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 11px; color: #64748b; }
+  .loe-inbox-mention-head svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-mention-item { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: #1f2937; font-size: 13px; cursor: pointer; text-align: left; }
+  .loe-inbox-mention-item:hover, .loe-inbox-mention-item.on { background: #e8eefb; }
+  .loe-inbox-mention-at { color: #1c6cf3; font-weight: 700; }
+  .loe-inbox-mention-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loe-inbox-mention-empty { padding: 8px 10px; font-size: 12px; color: #64748b; }
+  .loe-inbox-mention { color: #1c6cf3; font-weight: 600; }
+  .loe-inbox-bubble .loe-inbox-mention { color: #1c6cf3; }
+  .loe-inbox-msg.out .loe-inbox-bubble .loe-inbox-mention { color: #dbe7ff; text-decoration: underline; }
   .loe-inbox-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 60; }
   .loe-inbox-modal-box { width: min(760px, calc(100vw - 32px)); height: min(640px, calc(100vh - 48px)); background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(15,23,42,.25); display: flex; flex-direction: column; }
   .loe-inbox-modal-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 14px 18px 8px; font-size: 16px; font-weight: 700; }
@@ -493,6 +505,7 @@ function inboxTakeover() {
         <div class="loe-inbox-quick loe-qr-bar"></div>
         <div class="loe-inbox-picker" hidden></div>
         <div class="loe-inbox-reply" hidden aria-label="回覆的訊息"><span class="loe-inbox-reply-body"><strong class="loe-inbox-reply-who"></strong><span class="loe-inbox-reply-text"></span></span><button type="button" class="loe-inbox-x loe-inbox-reply-x" title="取消回覆（Esc）" aria-label="取消回覆">${ic("x")}</button></div>
+        <div class="loe-inbox-mention-list" hidden role="listbox" aria-label="標記成員"></div>
         <div class="loe-inbox-composer-row">
           <textarea class="loe-inbox-textarea" rows="2" placeholder="輸入回覆 (Enter傳送，Shift+Enter可換行)" aria-label="回覆內容"></textarea>
           <div class="loe-inbox-composer-btns">

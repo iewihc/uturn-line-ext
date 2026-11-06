@@ -14,6 +14,7 @@ import { firstText } from "../line/sync.js";
 import { LINE_CHAT_PROBE_MAX_IDS, lineMessageIds } from "../orders.js";
 import { toast } from "../ui/toast.js";
 import { closeInboxSearch } from "./msearch.js";
+import { closeInboxMention, inboxIsGroup, inboxMentionTargets } from "./mention.js";
 
 /* ---- 訊息串 ---- */
 function inboxSetContext(chat) {
@@ -27,6 +28,7 @@ async function inboxOpenChat(key) {
   if (inbox.selected !== key) {
     inboxSetReply(null); // 回覆是對著這位客人的，換人就清掉
     closeInboxSearch(); // 訊息搜尋也是
+    closeInboxMention();
     if (driverChat.host === inbox.el.dchat) closeDriverChat();
     inbox.dchatAutoFor = ""; // 換一位客人：有司機的單再自動開司機對話
   }
@@ -171,23 +173,46 @@ function inboxSetReply(item) {
 // shown 用「文字＋emojis[]」（跟收到的訊息同形）讓泡泡立刻顯示表情貼圖
 const INBOX_EMOJI_TOKEN_RE = /\[表情貼(\d+)\]/g;
 const inboxEscapeBraces = (t) => t.replaceAll("{", "{{").replaceAll("}", "}}");
+// 群組：「@名字」（名字是這個群組的成員或 All）→ {mention_i}＋substitution { type:"mention", mentionee }，同 LINE 自家前端
 function inboxTextMessage(text) {
-  const substitution = {}, emojis = [];
-  let shown = "", wire = "", last = 0, i = 0;
-  for (const m of text.matchAll(INBOX_EMOJI_TOKEN_RE)) {
-    const e = inbox.emojiTokens.get(m[1]);
-    if (!e) continue;
-    const plain = text.slice(last, m.index);
-    shown += plain; wire += inboxEscapeBraces(plain);
-    const key = `emoji_${i++}`;
-    substitution[key] = { type: "emoji", productId: e.productId, emojiId: e.emojiId };
-    emojis.push({ index: shown.length, length: 1, productId: e.productId, emojiId: e.emojiId });
-    shown += "$"; wire += `{${key}}`;
-    last = m.index + m[0].length;
+  const chat = inboxSelectedChat();
+  const targets = chat && inboxIsGroup(chat) ? inboxMentionTargets(chat).filter((t) => t.name) : [];
+  const spans = []; // { index, length, kind, data }，依位置排序
+  for (const m of text.matchAll(INBOX_EMOJI_TOKEN_RE)) { const e = inbox.emojiTokens.get(m[1]); if (e) spans.push({ index: m.index, length: m[0].length, kind: "emoji", data: e }); }
+  if (targets.length) {
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const names = [...targets].sort((a, b) => b.name.length - a.name.length).map((t) => esc(t.name)).join("|");
+    const re = new RegExp(`(^|[\\s])@(${names})(?=$|[\\s])`, "g");
+    for (const m of text.matchAll(re)) {
+      const at = m.index + m[1].length, t = targets.find((x) => x.name === m[2]);
+      if (t && !spans.some((s) => at < s.index + s.length && s.index < at + m[0].length - m[1].length)) spans.push({ index: at, length: 1 + m[2].length, kind: "mention", data: t });
+    }
   }
-  if (!i) return { wire: { type: "text", text }, shown: { type: "text", text } };
+  spans.sort((a, b) => a.index - b.index);
+  if (!spans.length) return { wire: { type: "text", text }, shown: { type: "text", text } };
+  const substitution = {}, emojis = [], mentionees = [];
+  let shown = "", wire = "", last = 0, ei = 0, mi = 0;
+  for (const s of spans) {
+    const plain = text.slice(last, s.index);
+    shown += plain; wire += inboxEscapeBraces(plain);
+    if (s.kind === "emoji") {
+      const key = `emoji_${ei++}`;
+      substitution[key] = { type: "emoji", productId: s.data.productId, emojiId: s.data.emojiId };
+      emojis.push({ index: shown.length, length: 1, productId: s.data.productId, emojiId: s.data.emojiId });
+      shown += "$"; wire += `{${key}}`;
+    } else {
+      const key = `mention_${mi++}`;
+      substitution[key] = { type: "mention", mentionee: s.data.type === "all" ? { type: "all" } : { type: "user", userId: s.data.userId } };
+      const label = `@${s.data.name}`;
+      mentionees.push({ index: shown.length, length: label.length, type: s.data.type, userId: s.data.userId || undefined });
+      shown += label; wire += `{${key}}`;
+    }
+    last = s.index + s.length;
+  }
   const tail = text.slice(last);
-  return { wire: { type: "textV2", text: wire + inboxEscapeBraces(tail), substitution }, shown: { type: "text", text: shown + tail, emojis } };
+  const shownMsg = { type: "text", text: shown + tail, emojis };
+  if (mentionees.length) shownMsg.mention = { mentionees };
+  return { wire: { type: "textV2", text: wire + inboxEscapeBraces(tail), substitution }, shown: shownMsg };
 }
 function inboxEmojiToken(productId, emojiId) {
   const n = String(inbox.emojiTokens.size + 1);

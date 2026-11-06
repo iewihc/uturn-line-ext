@@ -57,18 +57,21 @@ function inboxLinkify(text) {
   return out;
 }
 // 文字泡泡：訊息帶 emojis[]（LINE 表情貼，文字裡該位置是佔位字元）就換成圖，其餘段落走 inboxLinkify
+// 表情貼（emojis[]）換成圖、@標記（mention.mentionees[]）標成藍字，其餘段落連結化
 function inboxTextNodes(msg, text) {
-  const emojis = Array.isArray(msg?.emojis)
-    ? msg.emojis.filter((e) => e && e.productId && e.emojiId && Number.isInteger(e.index)).sort((a, b) => a.index - b.index)
-    : [];
-  if (!emojis.length) return inboxLinkify(text);
+  const spans = [];
+  for (const e of Array.isArray(msg?.emojis) ? msg.emojis : []) if (e && e.productId && e.emojiId && Number.isInteger(e.index)) spans.push({ index: e.index, length: e.length || 1, kind: "emoji", data: e });
+  for (const m of Array.isArray(msg?.mention?.mentionees) ? msg.mention.mentionees : []) if (m && Number.isInteger(m.index) && m.length > 0) spans.push({ index: m.index, length: m.length, kind: "mention", data: m });
+  if (!spans.length) return inboxLinkify(text);
+  spans.sort((a, b) => a.index - b.index);
   const out = [];
   let last = 0;
-  for (const e of emojis) {
-    if (e.index < last || e.index > text.length) continue;
-    if (e.index > last) out.push(...inboxLinkify(text.slice(last, e.index)));
-    out.push(ih("img", { class: "loe-inbox-emoji", src: inboxEmojiUrl(e.productId, e.emojiId, false), alt: "表情貼" }));
-    last = e.index + (e.length || 1);
+  for (const s of spans) {
+    if (s.index < last || s.index > text.length) continue;
+    if (s.index > last) out.push(...inboxLinkify(text.slice(last, s.index)));
+    if (s.kind === "emoji") out.push(ih("img", { class: "loe-inbox-emoji", src: inboxEmojiUrl(s.data.productId, s.data.emojiId, false), alt: "表情貼" }));
+    else out.push(ih("span", { class: "loe-inbox-mention", text: text.slice(s.index, s.index + s.length), title: s.data.type === "all" ? "標記所有人" : "標記成員" }));
+    last = s.index + s.length;
   }
   if (last < text.length) out.push(...inboxLinkify(text.slice(last)));
   return out;
