@@ -52,9 +52,9 @@ function inboxOptionsButton() {
       renderInboxNotes(); renderInboxThread();
     }, "可以收起，但不會關掉"),
     ih("div", { class: "loe-inbox-options-group", text: "外觀" }),
-    ih("div", { class: "loe-inbox-option" },
+    ih("div", { class: "loe-inbox-option stack" },
       ih("span", { class: "loe-inbox-option-icon", html: ic("moon") }),
-      ih("span", { class: "loe-inbox-option-text" }, ih("span", { text: "配色" }), ih("small", { text: "只套在收件匣（含派單、司機對話、記事本、通知）；LINE 官方頁本身沒有暗色" })),
+      ih("span", { class: "loe-inbox-option-text" }, ih("span", { text: "配色" }), ih("small", { text: "只套在收件匣，LINE 官方頁不受影響" })),
       ih("span", { class: "loe-inbox-seg", role: "radiogroup", "aria-label": "配色" }, ...INBOX_THEME_OPTIONS.map(([id, label]) =>
         ih("button", { type: "button", class: inbox.theme === id ? "on" : "", role: "radio", "aria-checked": inbox.theme === id ? "true" : "false", text: label,
           onclick: () => { set(INBOX_THEME_KEY, "theme", id); inboxApplyTheme(); renderInboxHeader(); } })))),

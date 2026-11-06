@@ -310,6 +310,10 @@ function inboxTakeover() {
   .loe-inbox-option:has(input:checked) .loe-inbox-option-icon { color: var(--loe-primary); }
   .loe-inbox-option-text { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; color: var(--loe-fg); }
   .loe-inbox-option-text small { font-size: 12px; color: var(--loe-muted); }
+  /* 配色：三段切換鈕另起一行放在說明下面，不跟說明擠同一行 */
+  .loe-inbox-option.stack { flex-wrap: wrap; }
+  .loe-inbox-option.stack .loe-inbox-seg { flex-basis: 100%; margin-left: 32px; justify-content: stretch; }
+  .loe-inbox-option.stack .loe-inbox-seg button { flex: 1 1 0; }
   img.loe-inbox-avatar { object-fit: cover; }
   .loe-inbox-msg.failed .loe-inbox-msg-meta { color: var(--loe-error); }
   .loe-inbox-composer { flex: 0 0 auto; padding: 10px 20px 16px; background: var(--loe-paper); border-top: 1px solid var(--loe-line); display: flex; flex-direction: column; gap: 8px; }
