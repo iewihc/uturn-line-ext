@@ -13,6 +13,7 @@ import { renderInboxThread } from "./thread.js";
 import { firstText } from "../line/sync.js";
 import { LINE_CHAT_PROBE_MAX_IDS, lineMessageIds } from "../orders.js";
 import { toast } from "../ui/toast.js";
+import { closeInboxSearch } from "./msearch.js";
 
 /* ---- 訊息串 ---- */
 function inboxSetContext(chat) {
@@ -25,6 +26,7 @@ function inboxSetContext(chat) {
 async function inboxOpenChat(key) {
   if (inbox.selected !== key) {
     inboxSetReply(null); // 回覆是對著這位客人的，換人就清掉
+    closeInboxSearch(); // 訊息搜尋也是
     if (driverChat.host === inbox.el.dchat) closeDriverChat();
     inbox.dchatAutoFor = ""; // 換一位客人：有司機的單再自動開司機對話
   }
@@ -51,6 +53,7 @@ async function inboxOpenChat(key) {
     inboxNoteMessageIds(chat, lineMessageIds(items.slice(-LINE_CHAT_PROBE_MAX_IDS)));
     const seen = new Set(items.map((m) => m.message?.id).filter(Boolean));
     th.list = items.concat(th.list.filter((m) => !seen.has(m.message?.id)));
+    th.backward = data?.backward || ""; // 往前翻頁的 token（訊息搜尋跳到舊訊息時用）
   } catch (e) { th.error = e.message; }
   th.loading = false;
   if (inbox.selected === key) renderInboxThread();

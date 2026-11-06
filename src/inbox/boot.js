@@ -15,6 +15,7 @@ import { inboxApplyRail, inboxRenderAll, inboxToggleRail, renderInboxGate, rende
 import { hasAcceptedInboxTerms, showInboxTerms } from "./terms.js";
 import { renderInboxContents, renderInboxPicker } from "./thread.js";
 import { closePrefixPopover } from "../prefix.js";
+import { initInboxSearch } from "./msearch.js";
 
 function bootInbox() {
   const root = document.getElementById("loe-inbox");
@@ -30,6 +31,7 @@ function bootInbox() {
     filters: $(".loe-inbox-filters"), rows: $(".loe-inbox-rows"), listSearch: $(".loe-inbox-list-search"),
     thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
     reply: $(".loe-inbox-reply"), replyWho: $(".loe-inbox-reply-who"), replyText: $(".loe-inbox-reply-text"),
+    msearch: $(".loe-inbox-msearch"), msearchInput: $(".loe-inbox-msearch-input"), msearchCount: $(".loe-inbox-msearch-count"), msearchPrev: $(".loe-inbox-msearch-prev"), msearchNext: $(".loe-inbox-msearch-next"), msearchClose: $(".loe-inbox-msearch-close"), msearchList: $(".loe-inbox-msearch-list"),
     quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
     orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
     side: $(".loe-inbox-side"), sideSplit: $(".loe-inbox-side-split"), sideEmpty: $(".loe-inbox-side-empty"),
@@ -45,6 +47,7 @@ function bootInbox() {
   }, INBOX_ORDERS_REFRESH_MS);
   initInboxSide();
   initInboxColumns();
+  initInboxSearch();
   // 使用者往上捲就不再自動捲到底（圖片載入時）
   inbox.el.thMsgs?.addEventListener("scroll", (e) => {
     const el = e.currentTarget;

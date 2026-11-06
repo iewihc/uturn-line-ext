@@ -96,7 +96,7 @@ function renderInboxThread() {
     })(),
     inbox.el.aiSlot, // AI處理／轉人工（renderAiToggle 掛進來；沒有 AI 的帳號是空的）
     // 選項「開啟對話自動標已讀」勾了就會自動標，手動鈕不再顯示
-    inbox.autoRead ? null : ih("button", { type: "button", class: "loe-inbox-btn", text: "標為已讀", disabled: !chat.unread, onclick: () => inboxMarkRead(chat) }),
+    inbox.autoRead ? null : ih("button", { type: "button", class: "loe-inbox-btn", html: ic("check-check"), disabled: !chat.unread, onclick: () => inboxMarkRead(chat) }, ih("span", { text: "標為已讀" })),
     inboxFlagButton(chat, "pin", "pin"),
   ].filter(Boolean)); // 原生 append 會把 null 印成文字
   renderInboxToolsRight(chat);
@@ -136,7 +136,7 @@ function renderInboxThread() {
           onclick: async (e) => { e.stopPropagation(); const btn = e.currentTarget; try { flashCopied(btn, await copyText(text)); } catch (_) { flashCopied(btn, false); } } }),
       );
     }
-    thMsgs.append(ih("div", { class: "loe-inbox-msg" + (out ? " out" : " in") + (m.failed ? " failed" : "") + (isCard ? " card" : "") },
+    thMsgs.append(ih("div", { class: "loe-inbox-msg" + (out ? " out" : " in") + (m.failed ? " failed" : "") + (isCard ? " card" : ""), "data-id": m.message?.id || null },
       bubble,
       ih("div", { class: "loe-inbox-msg-meta" },
         out ? readMark + (isCard ? `AI 回覆 · ${meta}` : meta) : `${meta} · ${chat.name}`,

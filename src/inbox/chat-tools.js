@@ -8,6 +8,7 @@ import { inboxRenderAll } from "./shell.js";
 import { renderInboxThread } from "./thread.js";
 import { firstText, toEpochMs } from "../line/sync.js";
 import { toast } from "../ui/toast.js";
+import { toggleInboxSearch } from "./msearch.js";
 
 // 派單後「標記待處理」：LINE 的 followUp API（LINE 頁面是點它自己的按鈕）
 async function inboxFollowUp() {
@@ -37,7 +38,7 @@ function inboxFlagButton(chat, flag, icon) {
     onclick: () => inboxSetChatFlag(chat, flag, !on),
   }, ih("span", { text: INBOX_FLAG_LABEL[flag] }));
 }
-// 輸入框下方右側：待處理／處理完畢（LINE 的對話狀態）＋開啟官方
+// 輸入框下方右側：待處理／處理完畢（LINE 的對話狀態）＋搜尋訊息＋開啟官方
 function renderInboxToolsRight(chat) {
   const host = inbox.el.toolsRight;
   if (!host) return;
@@ -46,6 +47,7 @@ function renderInboxToolsRight(chat) {
   host.append(
     inboxFlagButton(chat, "followUp", "message-circle"),
     inboxFlagButton(chat, "done", "circle-check"),
+    ih("button", { type: "button", class: "loe-inbox-btn", html: ic("search"), title: "搜尋這位客人的訊息（同 LINE 聊天室的搜尋）", onclick: toggleInboxSearch }, ih("span", { text: "搜尋" })),
     ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", html: ic("external-link"), title: "在 LINE 官方聊天室開啟這位客人（新分頁）" }, ih("span", { text: "開啟官方" })));
 }
 // 改客人暱稱：LINE 的 nickname API；空字串＝清掉暱稱、恢復顯示原名

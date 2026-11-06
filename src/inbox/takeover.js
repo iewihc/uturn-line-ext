@@ -176,6 +176,22 @@ function inboxTakeover() {
   .loe-inbox-rename-btn:hover { color: #1c6cf3; }
   .loe-inbox-th-head { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 20px; background: #fff; border-bottom: 1px solid #e3e7ee; }
   .loe-inbox-th-head .loe-inbox-avatar { width: 36px; height: 36px; }
+  /* 對話內訊息搜尋列（標題列下方）＋結果下拉 */
+  .loe-inbox-msearch { flex: 0 0 auto; position: relative; display: flex; align-items: center; gap: 6px; padding: 8px 20px; background: #fff; border-bottom: 1px solid #e3e7ee; }
+  .loe-inbox-msearch-icon { display: inline-flex; color: #6b7280; }
+  .loe-inbox-msearch-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .loe-inbox-msearch-input { flex: 1 1 auto; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid #1c6cf3; border-radius: 8px; font: inherit; font-size: 13px; }
+  .loe-inbox-msearch-count { font-size: 12px; color: #6b7280; white-space: nowrap; min-width: 2em; text-align: center; }
+  .loe-inbox-msearch .loe-inbox-x:disabled { opacity: .35; cursor: default; }
+  .loe-inbox-msearch-list { position: absolute; top: 100%; left: 44px; right: 120px; max-height: min(360px, 50vh); overflow-y: auto; background: #fff; border: 1px solid #e3e7ee; border-radius: 10px; box-shadow: 0 12px 30px rgba(15,23,42,.18); z-index: 6; display: flex; flex-direction: column; padding: 4px; gap: 2px; }
+  .loe-inbox-msearch-item { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; font: inherit; cursor: pointer; }
+  .loe-inbox-msearch-item:hover, .loe-inbox-msearch-item.on { background: #f1f5ff; }
+  .loe-inbox-msearch-who { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #6b7280; }
+  .loe-inbox-msearch-who strong { color: #1f2937; }
+  .loe-inbox-msearch-snippet { font-size: 13px; color: #374151; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .loe-inbox-msearch-snippet mark.loe-hit { background: transparent; color: #1c6cf3; font-weight: 700; }
+  mark.loe-hit { background: #fde68a; color: inherit; padding: 0; border-radius: 2px; }
+  .loe-inbox-msg.hit .loe-inbox-bubble { box-shadow: 0 0 0 2px #f59e0b; }
   .loe-inbox-th-title { min-width: 0; }
   .loe-inbox-th-name { display: flex; align-items: center; gap: 8px; font-size: 15px; }
   .loe-inbox-th-msgs { flex: 1 1 auto; min-height: 0; padding: 20px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
@@ -386,6 +402,15 @@ function inboxTakeover() {
     <div class="loe-inbox-vsplit" data-col="list" role="separator" aria-orientation="vertical" aria-label="拖拉調整官方訊息欄寬度" title="拖拉調整寬度，雙擊回到預設"></div>
     <main class="loe-inbox-thread">
       <div class="loe-inbox-th-head" hidden></div>
+      <div class="loe-inbox-msearch" hidden role="search" aria-label="搜尋這位客人的訊息">
+        <span class="loe-inbox-msearch-icon">${ic("search")}</span>
+        <input class="loe-inbox-msearch-input" type="search" placeholder="輸入搜尋內容（Enter 搜尋，↑↓ 上下一筆，Esc 關閉）" aria-label="搜尋內容">
+        <span class="loe-inbox-msearch-count"></span>
+        <button type="button" class="loe-inbox-x loe-inbox-msearch-prev" title="上一筆（更舊）" aria-label="更舊的一筆">${ic("chevron-up")}</button>
+        <button type="button" class="loe-inbox-x loe-inbox-msearch-next" title="下一筆（更新）" aria-label="更新的一筆">${ic("chevron-down")}</button>
+        <button type="button" class="loe-inbox-x loe-inbox-msearch-close" title="關閉搜尋" aria-label="關閉搜尋">${ic("x")}</button>
+        <div class="loe-inbox-msearch-list" hidden></div>
+      </div>
       <div class="loe-inbox-orders" hidden aria-label="訂單狀態"></div>
       <div class="loe-inbox-th-msgs" hidden></div>
       <div class="loe-inbox-th-empty">從中間選一位客人，或等通知進來</div>
