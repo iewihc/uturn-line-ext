@@ -34,6 +34,36 @@ function dispatchEscHandler(e) {
     closeDispatchPopover();
   }
 }
+// 視窗拖曳：按住標題列移動；放開後記住左上角（本次頁面有效），再開啟就放回同一位置
+let dispatchPopPos = null;
+function dispatchPopDrag(pop, handle) {
+  handle.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const r = pop.getBoundingClientRect();
+    const dx = e.clientX - r.left;
+    const dy = e.clientY - r.top;
+    pop.style.bottom = "auto";
+    pop.style.left = r.left + "px";
+    pop.style.top = r.top + "px";
+    pop.classList.add("dragging");
+    const move = (ev) => {
+      const left = Math.min(Math.max(ev.clientX - dx, 0), window.innerWidth - 80); // 至少留 80px 在畫面內
+      const top = Math.min(Math.max(ev.clientY - dy, 0), window.innerHeight - 40);
+      pop.style.left = left + "px";
+      pop.style.top = top + "px";
+      pop.style.maxHeight = Math.max(200, window.innerHeight - top - 12) + "px";
+    };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      pop.classList.remove("dragging");
+      dispatchPopPos = { left: pop.offsetLeft, top: pop.offsetTop };
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  });
+}
 function closeDispatchPopover() {
   if (openDispatchPopover._pop) {
     openDispatchPopover._pop.remove();
@@ -172,7 +202,8 @@ function openDispatchPopover(prefillAddress) {
   // 送出時才讀 location 會抓到別人的對話）；開啟時拍不到快照才退回送出當下的網址
   const chatIdAtOpen = getChatId();
   const oaIdAtOpen = getOaId();
-  const anchor = document.querySelector(`.${DISPATCH_BUTTON_CLASS}`);
+  // 錨點：原生頁的派單鈕；收件匣則是輸入框旁的「派車」鈕（之前找不到就退回置中貼頂，離手很遠）
+  const anchor = document.querySelector(`.${DISPATCH_BUTTON_CLASS}, .loe-inbox-dispatch`);
   const pop = document.createElement("div");
   pop.className = DISPATCH_POP_CLASS;
   pop.addEventListener("click", (e) => e.stopPropagation());
@@ -180,6 +211,8 @@ function openDispatchPopover(prefillAddress) {
   const title = document.createElement("div");
   title.className = "loe-pop-title";
   title.textContent = "派單";
+  title.title = "按住拖曳可移動視窗";
+  dispatchPopDrag(pop, title);
 
   const closeX = document.createElement("button");
   closeX.type = "button";
@@ -452,19 +485,24 @@ function openDispatchPopover(prefillAddress) {
   document.body.appendChild(pop);
   refreshPreview();
 
-  // 定位：固定在按鈕「上方」展開（bottom 錨定），高度不超過按鈕上方可用空間，避免跑出畫面或抖動
+  // 定位：上次拖過就放回同一位置（仍在畫面內才算）；否則貼著按鈕上方、右緣對齊（靠近手的位置），
+  // 高度不超過按鈕上方可用空間，避免跑出畫面或抖動
   const W = pop.offsetWidth || 300;
-  if (anchor) {
+  const H = pop.offsetHeight || 400;
+  const saved = dispatchPopPos;
+  pop.style.top = "auto";
+  if (saved && saved.left + 80 <= window.innerWidth && saved.top + 40 <= window.innerHeight) {
+    pop.style.left = Math.max(0, saved.left) + "px";
+    pop.style.top = Math.max(0, saved.top) + "px";
+    pop.style.maxHeight = Math.max(200, window.innerHeight - saved.top - 12) + "px";
+  } else if (anchor) {
     const r = anchor.getBoundingClientRect();
-    pop.style.left =
-      Math.round(Math.max(8, Math.min(r.left, window.innerWidth - W - 8))) +
-      "px";
+    pop.style.left = Math.round(Math.max(8, Math.min(r.right - W, window.innerWidth - W - 8))) + "px";
     pop.style.bottom = Math.round(window.innerHeight - r.top + 8) + "px";
-    pop.style.top = "auto";
     pop.style.maxHeight = Math.round(r.top - 16) + "px";
   } else {
-    pop.style.left = Math.round((window.innerWidth - W) / 2) + "px";
-    pop.style.top = "12px";
+    pop.style.left = Math.round(window.innerWidth - W - 24) + "px";
+    pop.style.top = Math.round(Math.max(12, window.innerHeight - H - 24)) + "px";
     pop.style.maxHeight = window.innerHeight - 24 + "px";
   }
   addrInput.focus();

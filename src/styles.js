@@ -514,14 +514,15 @@ const STYLE_CSS = `
     /* 派單彈出視窗（精簡版，限制高度避免超出畫面） */
     .${DISPATCH_POP_CLASS} {
       position: fixed; z-index: 2147483647;
-      width: 300px; padding: 12px;
+      width: 326px; padding: 12px; box-sizing: border-box; /* border-box：maxHeight 含內距，拖到下緣不會超出畫面 */
       background: #fff; border: 1px solid rgba(15,23,42,.12);
       border-radius: 12px; box-shadow: 0 16px 44px rgba(15,23,42,.24);
       font-size: 13px; color: #1f2937;
       overflow-y: auto;
     }
     .${DISPATCH_POP_CLASS} { position: fixed; } /* 確保 X 以此為定位基準 */
-    .${DISPATCH_POP_CLASS} .loe-pop-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; padding-right: 22px; }
+    .${DISPATCH_POP_CLASS} .loe-pop-title { font-weight: 700; font-size: 14px; margin: -12px -12px 6px; padding: 12px 34px 6px 12px; cursor: move; user-select: none; touch-action: none; }
+    .${DISPATCH_POP_CLASS}.dragging { opacity: .92; user-select: none; }
     .${DISPATCH_POP_CLASS} .loe-pop-close {
       position: absolute; top: 8px; right: 10px;
       border: 0; background: transparent; cursor: pointer;
