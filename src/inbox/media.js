@@ -1,4 +1,5 @@
 // 收件匣訊息內容：圖片／影片／檔案網址、連結化、表情貼替換。
+import { ic } from "../core/icons.js";
 import { ih } from "./core.js";
 import { firstText } from "../line/sync.js";
 
@@ -12,6 +13,27 @@ function inboxMedia(botId, message) {
   }
   if (p.type === "external") return { url: p.originalContentUrl || "", preview: p.previewImageUrl || p.originalContentUrl || "", expired: false };
   return null;
+}
+// 圖片燈箱：蓋住整個畫面放大看原圖；點背景、× 或 Esc 關；右上角「開新分頁」「下載」
+function openInboxLightbox(url) {
+  closeInboxLightbox();
+  const box = ih("div", { class: "loe-inbox-lightbox", role: "dialog", "aria-label": "圖片", onclick: (e) => { if (e.target === box) closeInboxLightbox(); } },
+    ih("div", { class: "loe-inbox-lightbox-bar" },
+      ih("a", { class: "loe-inbox-btn", href: url, target: "_blank", rel: "noopener", text: "開新分頁" }),
+      ih("a", { class: "loe-inbox-btn", href: url, download: "", text: "下載" }),
+      ih("button", { type: "button", class: "loe-inbox-btn", "aria-label": "關閉", html: ic("x"), onclick: closeInboxLightbox })),
+    ih("img", { class: "loe-inbox-lightbox-img", src: url, alt: "圖片", onclick: closeInboxLightbox }));
+  box._esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); closeInboxLightbox(); } };
+  document.addEventListener("keydown", box._esc, true);
+  document.body.append(box);
+  openInboxLightbox._box = box;
+}
+function closeInboxLightbox() {
+  const box = openInboxLightbox._box;
+  if (!box) return;
+  document.removeEventListener("keydown", box._esc, true);
+  box.remove();
+  openInboxLightbox._box = null;
 }
 const inboxStickerUrl = (id) => `https://stickershop.line-scdn.net/stickershop/v1/sticker/${encodeURIComponent(id)}/android/sticker.png`;
 // 表情貼（LINE 叫 sticon）：_key 是鍵盤用的小圖，泡泡裡用原圖
@@ -67,7 +89,9 @@ function inboxMediaNode(botId, m) {
     case "image":
       if (!media) return m.localUrl ? ih("img", { class: "loe-inbox-media-img", src: m.localUrl, alt: "圖片" }) : localNode("🖼", "圖片");
       if (media.expired) return expiredNode("圖片");
-      return ih("a", { class: "loe-inbox-media-link", href: media.url, target: "_blank", rel: "noopener", title: "點擊看原圖" },
+      // 原圖網址（chat-content.line.biz）直接開會變成下載；改成頁內燈箱放大看，燈箱裡再給「開新分頁」「下載」
+      return ih("a", { class: "loe-inbox-media-link", href: media.url, target: "_blank", rel: "noopener", title: "點擊放大",
+        onclick: (e) => { e.preventDefault(); e.stopPropagation(); openInboxLightbox(media.url); } },
         ih("img", { class: "loe-inbox-media-img", src: media.preview, alt: "圖片", loading: "lazy" }));
     case "video":
       if (!media) return localNode("🎬", "影片");

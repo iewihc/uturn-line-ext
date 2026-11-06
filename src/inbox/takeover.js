@@ -344,6 +344,10 @@ function inboxTakeover() {
   .loe-inbox-picker-grid img { width: 100%; height: 100%; object-fit: contain; display: block; }
   .loe-inbox-picker-grid .loe-inbox-empty { width: 100%; }
   .loe-inbox-emoji { width: 20px; height: 20px; vertical-align: -5px; display: inline-block; }
+  .loe-inbox-lightbox { position: fixed; inset: 0; background: rgba(15,23,42,.88); z-index: 2147483645; display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+  .loe-inbox-lightbox-img { max-width: 96vw; max-height: 92vh; object-fit: contain; border-radius: 6px; box-shadow: 0 10px 40px rgba(0,0,0,.5); cursor: zoom-out; }
+  .loe-inbox-lightbox-bar { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; cursor: default; }
+  .loe-inbox-lightbox-bar .loe-inbox-btn { background: rgba(255,255,255,.92); }
   .loe-inbox-modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 60; }
   .loe-inbox-modal-box { width: min(760px, calc(100vw - 32px)); height: min(640px, calc(100vh - 48px)); background: #fff; border-radius: 12px; box-shadow: 0 20px 60px rgba(15,23,42,.25); display: flex; flex-direction: column; }
   .loe-inbox-modal-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 14px 18px 8px; font-size: 16px; font-weight: 700; }
