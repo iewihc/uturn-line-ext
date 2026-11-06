@@ -6,7 +6,7 @@ import { INBOX_ENABLED_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_PAGES_P
 import { inboxDismissToast, inboxNotify } from "./notify.js";
 import { inboxLoadBoard, inboxQueueLink } from "./order-status.js";
 import { inboxAppendToThread, inboxRefreshThread, inboxSetContext } from "./send.js";
-import { inboxRenderAll, renderInboxRail } from "./shell.js";
+import { inboxRenderAll, renderInboxHeader, renderInboxRail } from "./shell.js";
 import { renderInboxThread } from "./thread.js";
 import { lineChatsPageUrl } from "../line/fetch.js";
 import { firstText } from "../line/sync.js";
@@ -144,11 +144,11 @@ async function inboxConnect(botId) {
     let sub = "";
     try { sub = JSON.parse(ev.data).subEvent || ""; } catch (_) {}
     inboxDrop(c);
-    if (sub === "too_many_sse_connections") { // 名額被別的分頁／帳號用完：改輪詢，隔一陣子再試 SSE
-      c.status = "poll"; c.error = "";
-      inboxStartPoll(c);
+    if (sub === "too_many_sse_connections") { // 名額被別的分頁／帳號用完：選項開「輪詢」就改輪詢，否則只等；隔一陣子再試 SSE
+      c.error = "";
+      if (inbox.pollFallback) { c.status = "poll"; inboxStartPoll(c); } else { c.status = "limit"; inboxStopPoll(c); }
       c.timer = setTimeout(() => { c.timer = 0; if (inbox.enabled.has(botId)) inboxConnect(botId); }, INBOX_LIMIT_RETRY_MS);
-      renderInboxRail();
+      renderInboxRail(); renderInboxHeader();
     } else inboxScheduleReconnect(c, "LINE 中斷連線");
   });
   es.addEventListener("reload", () => { if (c.es !== es) return; inboxDrop(c); inboxScheduleReconnect(c, "LINE 要求重新連線"); });
@@ -163,6 +163,14 @@ function inboxStartPoll(c) {
 function inboxStopPoll(c) {
   c.polling = false;
   clearTimeout(c.pollTimer); c.pollTimer = 0;
+}
+// 選項「超過連線上限改用輪詢」切換：正在等名額的帳號立刻開始輪詢；關掉就停輪詢、回到只等
+function inboxApplyPollFallback() {
+  for (const c of inbox.conns.values()) {
+    if (!inbox.enabled.has(c.botId) || c.es || (c.status !== "poll" && c.status !== "limit")) continue;
+    if (inbox.pollFallback) { c.status = "poll"; inboxStartPoll(c); } else { c.status = "limit"; inboxStopPoll(c); }
+  }
+  renderInboxRail(); renderInboxHeader();
 }
 const inboxChatSig = (c) => [c.at, c.unread, c.done, c.followedUp, c.pinnedAt, c.assignedBizId, c.preview, c.name].join("|");
 async function inboxPollOnce(c) {
@@ -311,4 +319,4 @@ async function inboxOnChatEvent(botId, raw) {
   inboxRenderAll();
 }
 
-export { inboxAssigneeLabel, inboxConnect, inboxEnabledIds, inboxFetchChat, inboxLoadBots, inboxLoadChats, inboxNoteMessageIds, inboxNoteUserRead, inboxPreview, inboxSetEnabled, inboxUnreadTotal };
+export { inboxApplyPollFallback, inboxAssigneeLabel, inboxConnect, inboxEnabledIds, inboxFetchChat, inboxLoadBots, inboxLoadChats, inboxNoteMessageIds, inboxNoteUserRead, inboxPreview, inboxSetEnabled, inboxUnreadTotal };

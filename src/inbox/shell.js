@@ -6,9 +6,9 @@ import { hasLineExtAuth, lineAuthDoneText, saveLineCookie } from "../core/backen
 import { UTURN_BUILD } from "../core/constants.js";
 import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
-import { inboxConnect, inboxEnabledIds, inboxLoadChats, inboxSetEnabled, inboxUnreadTotal } from "./chats.js";
+import { inboxApplyPollFallback, inboxConnect, inboxEnabledIds, inboxLoadChats, inboxSetEnabled, inboxUnreadTotal } from "./chats.js";
 import { inboxLoadNotes, inboxMarkRead, renderInboxNotes } from "./chat-tools.js";
-import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
+import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
 import { renderInboxList } from "./list.js";
 import { inboxBeep, inboxSoundReady } from "./notify.js";
 import { inboxChatColumns, inboxLoadBoard, inboxQueueLink, inboxScheduleBoard } from "./order-status.js";
@@ -54,6 +54,9 @@ function inboxOptionsButton() {
     ih("div", { class: "loe-inbox-options-group", text: "已讀" }),
     row("check-check", "開啟對話自動標已讀", inbox.autoRead, (v) => { set(INBOX_AUTO_READ_KEY, "autoRead", v); if (v && chat?.unread) inboxMarkRead(chat); renderInboxThread(); }, // 標題列「標為已讀」鈕跟著出現／消失
       "不勾＝永遠不自動標，只有按「標為已讀」才標（回覆後也不標）；勾了就不顯示「標為已讀」鈕"),
+    ih("div", { class: "loe-inbox-options-group", text: "連線" }),
+    row("refresh", "超過連線上限改用輪詢", inbox.pollFallback, (v) => { set(INBOX_POLL_KEY, "pollFallback", v); inboxApplyPollFallback(); },
+      "LINE 每個登入約 19 條即時連線，超過官方開啟數 LINE 會限制。不勾＝那些帳號只等名額（收不到新訊息）；勾了＝每 12 秒輪詢一次"),
     ih("div", { class: "loe-inbox-options-group", text: "提示音" }),
     row("bell", "新訊息提示音", inbox.sound, (v) => {
       set(INBOX_SOUND_KEY, "sound", v);
@@ -71,6 +74,7 @@ function renderInboxHeader() {
   host.textContent = "";
   const live = [...inbox.conns.values()].filter((c) => c.status === "live").length;
   const polled = [...inbox.conns.values()].filter((c) => c.status === "poll").length;
+  const limited = [...inbox.conns.values()].filter((c) => c.status === "limit").length;
   const stats = ih("div", { class: "loe-inbox-stats" },
     ih("span", { class: "loe-inbox-muted", text: "啟用帳號" }),
     ih("strong", { text: `${inboxEnabledIds().length}／${inbox.bots.length}` }),
@@ -78,6 +82,8 @@ function renderInboxHeader() {
     ih("strong", { text: String(live) }),
     polled ? ih("span", { class: "loe-inbox-muted", text: "輪詢中" }) : null,
     polled ? ih("strong", { text: String(polled) }) : null,
+    limited ? ih("span", { class: "loe-inbox-muted", text: "超過上限" }) : null,
+    limited ? ih("strong", { class: "loe-inbox-stat-limit", text: String(limited), title: "超過 LINE 即時連線上限，這些帳號收不到新訊息；選項可改用輪詢" }) : null,
     ih("span", { class: "loe-inbox-muted", text: "未讀對話" }),
     ih("span", { class: "loe-inbox-badge", text: String(inboxUnreadTotal()) }),
   );
@@ -176,7 +182,7 @@ function renderInboxRail() {
     const on = inbox.enabled.has(b.botId);
     const c = inbox.conns.get(b.botId);
     const status = on ? (c?.status || "connecting") : "off";
-    const label = { live: "連線中", connecting: "連線中…", poll: "輪詢中（SSE 名額已滿，每 12 秒更新）", error: c?.error ? `重連中：${c.error}` : "重連中", off: "已關閉" }[status] || status;
+    const label = { live: "連線中", connecting: "連線中…", poll: "輪詢中（SSE 名額已滿，每 12 秒更新）", limit: "超過官方開啟數，LINE 會限制；等名額或到「選項」改用輪詢", error: c?.error ? `重連中：${c.error}` : "重連中", off: "已關閉" }[status] || status;
     let unread = 0;
     if (on) { for (const ch of inbox.chats.values()) if (ch.botId === b.botId && ch.unread) unread++; }
     else unread = b.unreadCount;
