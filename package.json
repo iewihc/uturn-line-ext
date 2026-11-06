@@ -18,7 +18,7 @@
     "vite": "^8.3.6",
     "vite-plugin-monkey": "^8.1.1"
   },
-  "version": "1.80.1",
+  "version": "1.80.2",
   "dependencies": {
     "@microsoft/signalr": "10.0.0"
   }

@@ -62,7 +62,7 @@ function renderInboxList() {
     if (selected) row.style.borderLeftColor = inboxBotColor(c.botId);
     rows.append(row);
   }
-  if (!chats.length) rows.append(ih("div", { class: "loe-inbox-empty", text: !inboxEnabledIds().length ? "打開左邊的帳號開關開始監聽。" : (inbox.el.listSearch?.value || "").trim() ? "沒有符合搜尋的對話。" : "沒有符合的對話。換個篩選，或等新訊息進來。" }));
+  if (!chats.length) rows.append(ih("div", { class: "loe-inbox-empty", text: !inboxEnabledIds().length ? "打開左邊的帳號開關開始監聽。" : (inbox.el.listSearch?.value || "").trim() ? "沒有符合搜尋的對話。" : "沒有符合的對話。篩選記得有「未讀」跟「全部」可切換。" }));
 }
 
 export { renderInboxList };

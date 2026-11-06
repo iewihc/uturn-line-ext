@@ -444,7 +444,7 @@ function inboxTakeover() {
       </div>
       <div class="loe-inbox-orders" hidden aria-label="訂單狀態"></div>
       <div class="loe-inbox-th-msgs" hidden></div>
-      <div class="loe-inbox-th-empty">從中間選一位客人，或等通知進來</div>
+      <div class="loe-inbox-th-empty">尚無訊息，請從官方訊息選取一位客人</div>
       <aside class="loe-inbox-dchat" hidden aria-label="司機對話"></aside>
       <div class="loe-inbox-composer" hidden>
         <div class="loe-inbox-quick loe-qr-bar"></div>
