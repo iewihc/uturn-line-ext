@@ -343,7 +343,7 @@ function inboxDriverToastCard(t) {
   const card = ih("div", { class: "loe-inbox-toast driver", role: "status" },
     ih("div", { class: "loe-inbox-toast-top" },
       ih("span", { class: "loe-inbox-tag ord", text: "司機" }),
-      ih("strong", { class: "loe-inbox-row-name", text: t.driverNo || "司機", title: t.driverNo || "" }),
+      ih("strong", { class: "loe-inbox-row-name", text: (t.driverNo || "司機").replace(/^[^|]*\|/, ""), title: t.driverNo || "" }), // 只留車牌(車色)，編號不顯示
       ih("span", { class: "loe-inbox-toast-time", text: inboxTime(t.at || Date.now()) }),
       ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知", html: ic("x"), onclick: close }),
     ),

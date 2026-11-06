@@ -54,7 +54,7 @@ function inboxNotifyDriver({ orderId, shortId, oriText, driverNo, text, chatKey 
   if (inbox.sound) inboxBeep();
   if (document.hidden && typeof Notification === "function" && Notification.permission === "granted") {
     try {
-      const n = new Notification(`司機 ${t.driverNo}・${t.shortId}`, { body: t.lines.join("\n"), tag: key });
+      const n = new Notification(`司機 ${String(t.driverNo || "").replace(/^[^|]*\|/, "")}・${t.shortId}`, { body: t.lines.join("\n"), tag: key });
       n.onclick = () => { window.focus(); n.close(); };
     } catch (_) {}
   }
