@@ -70,14 +70,23 @@ async function inboxSearchGo(i) {
     renderInboxThread(); // 重畫後再標
   }
   renderInboxSearch();
-  requestAnimationFrame(() => {
-    clearInboxHits();
-    const el = inbox.el.thMsgs?.querySelector(`.loe-inbox-msg[data-id="${id}"]`);
-    if (!el) { ms.error = "這則訊息已不在可載入的範圍"; renderInboxSearch(); return; }
-    el.classList.add("hit");
-    markInboxText(el.querySelector(".loe-inbox-bubble"), ms.query);
-    el.scrollIntoView({ block: "center" });
-  });
+  requestAnimationFrame(() => { if (!inboxSearchApplyHit()) { ms.error = "這則訊息已不在可載入的範圍"; renderInboxSearch(); } });
+}
+// 把目前這筆標黃並捲到中間；訊息串重畫（新訊息進來）後也要再做一次，不然會跳回最底
+function inboxSearchApplyHit() {
+  const hit = ms.open && ms.idx >= 0 ? ms.list[ms.idx] : null;
+  if (!hit || !inbox.el.thMsgs) return false;
+  clearInboxHits();
+  const el = inbox.el.thMsgs.querySelector(`.loe-inbox-msg[data-id="${hit.message.id}"]`);
+  if (!el) return false;
+  el.classList.add("hit");
+  markInboxText(el.querySelector(".loe-inbox-bubble"), ms.query);
+  el.scrollIntoView({ block: "center" });
+  return true;
+}
+// renderInboxThread 畫完呼叫：搜尋定位中就留在那則
+function inboxSearchAfterRender() {
+  if (ms.open && ms.idx >= 0 && inbox.selected === ms.chatKey) inboxSearchApplyHit();
 }
 function clearInboxHits() {
   const host = inbox.el.thMsgs;
@@ -147,4 +156,4 @@ function initInboxSearch() {
   msearchClose.addEventListener("click", closeInboxSearch);
 }
 
-export { closeInboxSearch, initInboxSearch, toggleInboxSearch };
+export { closeInboxSearch, inboxSearchAfterRender, initInboxSearch, toggleInboxSearch };

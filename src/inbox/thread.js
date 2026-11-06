@@ -17,6 +17,7 @@ import { renderQuickBar } from "../quick-reply/bar.js";
 import { getPrefix } from "../settings.js";
 import { copyText, flashCopied } from "../ui/copy.js";
 import { toast } from "../ui/toast.js";
+import { inboxSearchAfterRender } from "./msearch.js";
 
 // 回覆（引用）：客人訊息下方的「回覆」鈕（LINE 給了 quoteToken 的才能引用）；官方自己送出的不給回覆
 function inboxReplyButton(chat, m, out) {
@@ -145,6 +146,7 @@ function renderInboxThread() {
     ));
   }
   thMsgs.scrollTop = thMsgs.scrollHeight;
+  inboxSearchAfterRender(); // 搜尋定位中：留在那則、重新標黃
   // 圖片載入後才撐開高度：還停在底部就跟著捲到底，最新的訊息（常是客人剛傳的圖）才不會被擠到下面看不到
   inbox.threadAtBottom = true;
   for (const img of thMsgs.querySelectorAll("img")) {
