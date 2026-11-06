@@ -9,7 +9,7 @@ import { renderInboxList } from "./list.js";
 import { inboxBeep } from "./notify.js";
 import { inboxLoadBoard } from "./order-status.js";
 import { inboxLoadOrders } from "./orders.js";
-import { inboxSend, inboxSendFiles } from "./send.js";
+import { inboxSend, inboxSendFiles, inboxSetReply } from "./send.js";
 import { inboxApplyRail, inboxRenderAll, inboxToggleRail, renderInboxGate, renderInboxHeader, renderInboxRail } from "./shell.js";
 import { hasAcceptedInboxTerms, showInboxTerms } from "./terms.js";
 import { renderInboxContents, renderInboxPicker } from "./thread.js";
@@ -27,6 +27,7 @@ function bootInbox() {
     railAside: $(".loe-inbox-rail"), railToggle: $(".loe-inbox-rail-toggle"), railStrip: $(".loe-inbox-rail-strip"),
     filters: $(".loe-inbox-filters"), rows: $(".loe-inbox-rows"), listSearch: $(".loe-inbox-list-search"),
     thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
+    reply: $(".loe-inbox-reply"), replyWho: $(".loe-inbox-reply-who"), replyText: $(".loe-inbox-reply-text"),
     quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notes: $(".loe-inbox-notes"),
     orderBar: $(".loe-inbox-orders"), dchat: $(".loe-inbox-dchat"), orderFilters: $(".loe-inbox-order-filters"),
     side: $(".loe-inbox-side"), sideSplit: $(".loe-inbox-side-split"), sideEmpty: $(".loe-inbox-side-empty"),
@@ -68,7 +69,9 @@ function bootInbox() {
   $(".loe-inbox-dispatch").addEventListener("click", (e) => { e.stopPropagation(); openDispatchPopover(""); });
   inbox.el.textarea.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); doSend(); }
+    if (e.key === "Escape" && inbox.replyTo) { e.preventDefault(); inboxSetReply(null); }
   });
+  $(".loe-inbox-reply-x").addEventListener("click", () => inboxSetReply(null));
   // 貼上圖片／檔案就直接當檔案送（跟 LINE 聊天室一樣）
   inbox.el.textarea.addEventListener("paste", (e) => {
     const files = Array.from(e.clipboardData?.files || []);

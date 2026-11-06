@@ -10,7 +10,7 @@ import { inboxEmojiUrl, inboxMediaNode, inboxPackTabUrl, inboxStickerUrl, inboxT
 import { inboxDismissToast } from "./notify.js";
 import { inboxRelayControls } from "./relay.js";
 import { inboxOpenDriverChatFor, renderInboxOrders } from "./orders.js";
-import { inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSendSticker } from "./send.js";
+import { inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSendSticker, inboxSetReply } from "./send.js";
 import { inboxAvatar } from "./shell.js";
 import { GEAR_ICON, closePrefixPopover, openPrefixPopover } from "../prefix.js";
 import { renderQuickBar } from "../quick-reply/bar.js";
@@ -18,6 +18,19 @@ import { getPrefix } from "../settings.js";
 import { copyText, flashCopied } from "../ui/copy.js";
 import { toast } from "../ui/toast.js";
 
+// 回覆（引用）：訊息下方「回覆」鈕（LINE 給了 quoteToken 的才能引用）
+function inboxReplyButton(chat, m, out) {
+  const msg = m.message;
+  if (!msg?.id || !msg.quoteToken) return null;
+  return ih("button", { type: "button", class: "loe-relay-btn", text: "回覆", title: "回覆這則訊息（同 LINE 聊天室的「回覆」，對方會看到引用）",
+    onclick: () => inboxSetReply({ id: msg.id, quoteToken: msg.quoteToken, text: inboxPreview(m) || "[訊息]", who: out ? inboxBotName(chat.botId) : chat.name }) });
+}
+// 泡泡裡的引用塊：被引用的那則在這串裡就顯示誰說了什麼
+function inboxQuoteNode(chat, th, quotedId) {
+  const src = th?.list.find((x) => x.message?.id === quotedId);
+  const who = src ? (src.type === "messageSent" ? inboxBotName(chat.botId) : chat.name) : "";
+  return ih("span", { class: "loe-inbox-quote" }, who ? ih("strong", { text: who }) : null, ih("span", { text: src ? (inboxPreview(src) || "[訊息]") : "（引用的訊息不在這裡）" }));
+}
 function renderInboxThread() {
   const { thHead, thMsgs, thComposer, thEmpty } = inbox.el;
   if (!thHead) return;
@@ -108,10 +121,11 @@ function renderInboxThread() {
     const orig = m.message && m.message.originalType;
     const isCard = out && !!(orig && orig !== "text" || (m.message && ["flex", "template", "imagemap", "cardType"].includes(m.message.type)));
     // 與 LINE 聊天室同一套：泡泡掛 BUBBLE_CLASS／TEXT_PAD_CLASS，右上角常駐「派單」「複製」
+    const quote = m.message?.quotedMessageId ? inboxQuoteNode(chat, th, m.message.quotedMessageId) : null; // 這則是回覆（引用）哪一則
     const bubble = mediaNode
-      ? ih("div", { class: "loe-inbox-bubble media" }, mediaNode)
+      ? ih("div", { class: "loe-inbox-bubble media" }, quote, mediaNode)
       : ih("div", { class: "loe-inbox-bubble" + (withActions ? ` ${BUBBLE_CLASS} ${TEXT_PAD_CLASS} loe-has-forward` : "") },
-        isCard ? ih("span", { class: "loe-inbox-card-label", text: "AI 卡片回覆" }) : null, ...inboxTextNodes(m.message, text));
+        quote, isCard ? ih("span", { class: "loe-inbox-card-label", text: "AI 卡片回覆" }) : null, ...inboxTextNodes(m.message, text));
     if (withActions && !mediaNode) {
       bubble.append(
         ih("button", { type: "button", class: FORWARD_BUTTON_CLASS, html: FORWARD_ICON, "aria-label": "帶入派單", "data-loe-tip": "派單",
@@ -124,6 +138,7 @@ function renderInboxThread() {
       bubble,
       ih("div", { class: "loe-inbox-msg-meta" },
         out ? readMark + (isCard ? `AI 回覆 · ${meta}` : meta) : `${meta} · ${chat.name}`,
+        m.pending || m.failed ? null : inboxReplyButton(chat, m, out),
         m.pending || m.failed ? null : inboxRelayControls(m)),
     ));
   }

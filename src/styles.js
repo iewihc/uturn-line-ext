@@ -1,5 +1,5 @@
 // 整支腳本的樣式（LINE 聊天室增強 + 收件匣 + 訂單看板），boot 時注入一次。
-import { BLUE, BLUE_HOVER, BLUE_SOFT, BUBBLE_CLASS, BUTTON_CLASS, COPIED_CLASS, DISPATCH_BUTTON_CLASS, DISPATCH_POP_CLASS, DRIVER_CHAT_BUTTON_CLASS, DRIVER_CHAT_FLOAT_CLASS, ESTIMATE_BUTTON_CLASS, FORWARD_BUTTON_CLASS, ICON_CLASS, NATIVE_ORDERS_BUTTON_CLASS, NATIVE_ORDERS_PANEL_CLASS, PREFIX_CHIP_CLASS, QR_BAR_CLASS, QR_CHIP_CLASS, QUICK_BUTTON_CLASS, QUICK_MENU_CLASS, QUICK_MENU_OPEN_CLASS, TEXT_PAD_CLASS } from "./core/constants.js";
+import { BLUE, BLUE_HOVER, BLUE_SOFT, BUBBLE_CLASS, BUTTON_CLASS, COPIED_CLASS, DISPATCH_BUTTON_CLASS, DISPATCH_POP_CLASS, ESTIMATE_BUTTON_CLASS, FORWARD_BUTTON_CLASS, ICON_CLASS, PREFIX_CHIP_CLASS, QR_BAR_CLASS, QR_CHIP_CLASS, QUICK_BUTTON_CLASS, QUICK_MENU_CLASS, QUICK_MENU_OPEN_CLASS, TEXT_PAD_CLASS } from "./core/constants.js";
 
 /* ---------------------------------------------------------------------- *
  * Styles
@@ -582,35 +582,8 @@ const STYLE_CSS = `
     .loe-ord-btn.cancel:hover:not(:disabled) { background: #fef2f2; border-color: #f87171; }
     .loe-ord-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-    /* 原生頁「訂單」按鈕＋面板（這位客人的進行中訂單） */
-    .${NATIVE_ORDERS_PANEL_CLASS} {
-      position: fixed; right: 16px; top: 72px; width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 260px);
-      z-index: 2147483000; background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(15,23,42,.25);
-      display: flex; flex-direction: column; overflow: hidden; font-size: 13px; color: #1f2937;
-    }
-    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ordp-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
-    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ordp-list { overflow-y: auto; padding: 4px 12px; }
-    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ord { padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
-    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ord:last-child { border-bottom: 0; }
-    .${NATIVE_ORDERS_PANEL_CLASS} .loe-ordp-hint { padding: 8px 12px 10px; color: #6b7280; font-size: 12px; border-top: 1px solid #f1f5f9; }
-
-    /* 司機對話：原生頁按鈕（派單左邊，藍色外框）＋浮動面板；面板內容兩種模式共用 */
-    .${NATIVE_ORDERS_BUTTON_CLASS},
-    .${DRIVER_CHAT_BUTTON_CLASS} {
-      position: relative; top: 4px; display: inline-flex; align-items: center; gap: 5px;
-      height: 32px; margin-right: 8px; padding: 0 12px; border: 1px solid ${BLUE}; border-radius: 6px;
-      background: #fff; color: ${BLUE}; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
-    }
-    .${DRIVER_CHAT_BUTTON_CLASS}.on, .${DRIVER_CHAT_BUTTON_CLASS}:hover,
-    .${NATIVE_ORDERS_BUTTON_CLASS}.on, .${NATIVE_ORDERS_BUTTON_CLASS}:hover { background: ${BLUE_SOFT}; }
-    .${NATIVE_ORDERS_BUTTON_CLASS} > svg,
-    .${DRIVER_CHAT_BUTTON_CLASS} > svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    /* 司機對話面板（收件匣右欄；內容與記事本共用一欄） */
     .loe-dchat-badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-    .${DRIVER_CHAT_FLOAT_CLASS} {
-      position: fixed; right: 16px; top: 72px; width: min(400px, calc(100vw - 32px)); height: min(620px, calc(100vh - 260px));
-      z-index: 2147483000; background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(15,23,42,.25);
-      display: flex; flex-direction: column; overflow: hidden; font-size: 13px; color: #1f2937;
-    }
     .loe-dchat-head { flex: 0 0 auto; padding: 10px 12px 8px; border-bottom: 1px solid #e3e7ee; display: flex; flex-direction: column; gap: 6px; background: #fff; }
     .loe-dchat-title { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: move; touch-action: none; user-select: none; }
     .loe-dchat-grip { display: inline-flex; color: #cbd5e1; }

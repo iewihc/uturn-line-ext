@@ -24,6 +24,7 @@ function inboxSetContext(chat) {
 }
 async function inboxOpenChat(key) {
   if (inbox.selected !== key) {
+    inboxSetReply(null); // 回覆是對著這位客人的，換人就清掉
     if (driverChat.host === inbox.el.dchat) closeDriverChat();
     inbox.dchatAutoFor = ""; // 換一位客人：有司機的單再自動開司機對話
   }
@@ -112,8 +113,26 @@ async function inboxSend(text) {
   text = text.trim();
   if (!text || !inboxSelectedChat()) return false;
   if (text.length > 5000) { toast("訊息超過 5000 字，請分段傳送", "warn", 3000); return false; }
-  const { wire, shown } = inboxTextMessage(text);
-  return inboxSendPayload(wire, shown);
+  let { wire, shown } = inboxTextMessage(text);
+  const reply = inbox.replyTo;
+  if (reply) { // 回覆（引用）：LINE 自家一律送 textV2 並帶被引用那則的 quoteToken
+    if (wire.type === "text") wire = { type: "textV2", text: inboxEscapeBraces(wire.text) };
+    wire = { ...wire, quoteToken: reply.quoteToken };
+    shown = { ...shown, quotedMessageId: reply.id };
+  }
+  const ok = await inboxSendPayload(wire, shown);
+  if (ok && inbox.replyTo === reply) inboxSetReply(null);
+  return ok;
+}
+// 回覆（引用）某一則：輸入框上方顯示引用條，送出時帶 quoteToken；null＝取消
+function inboxSetReply(item) {
+  inbox.replyTo = item || null;
+  const { reply, replyWho, replyText, textarea } = inbox.el;
+  if (!reply) return;
+  reply.hidden = !inbox.replyTo;
+  replyWho.textContent = inbox.replyTo ? `回覆 ${inbox.replyTo.who || ""}` : "";
+  replyText.textContent = inbox.replyTo ? inbox.replyTo.text : "";
+  if (inbox.replyTo) textarea.focus();
 }
 // 輸入框裡的表情貼寫成 [表情貼N]（N 對到 inbox.emojiTokens）；沒有就送純文字，
 // 有就照 LINE 自家前端的 textV2 寫法：{emoji_i} 佔位＋substitution，其餘 { } 逃脫成 {{ }}。
@@ -187,4 +206,4 @@ async function inboxSendFiles(files) {
   return results;
 }
 
-export { inboxAppendToThread, inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSend, inboxSendFiles, inboxSendPayload, inboxSendSticker, inboxSetContext, inboxTextWithTokens };
+export { inboxAppendToThread, inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, inboxSend, inboxSendFiles, inboxSendPayload, inboxSendSticker, inboxSetContext, inboxSetReply, inboxTextWithTokens };

@@ -11,7 +11,7 @@ import { inboxTakeover } from "./inbox/takeover.js";
 import { refreshLedgerBalance } from "./ledger.js";
 import { invalidateLineApiCapture } from "./line/api-capture.js";
 import { closeLineCustomers, lineCustomerDialog } from "./line/broadcast.js";
-import { initNativeOrders, refreshNativeOrders, renderNativeButtons } from "./native-orders.js";
+import { probeNativeChat } from "./native-orders.js";
 import { closePrefixPopover, enhancePrefixChip, renderPrefixChip } from "./prefix.js";
 import { closeQuickReplyMenus, enhanceQuickReplyToolbars, ensureQuickBar } from "./quick-reply/bar.js";
 import { syncRemoteConfig } from "./remote-config.js";
@@ -31,7 +31,6 @@ function uturnMain() {
   initAiToggle();
   initScroll();
   initDriverChat();
-  initNativeOrders();
   initBoard();
 
   injectStyles();
@@ -58,18 +57,18 @@ function uturnMain() {
     stickToBottomIfPinned();
     if (++heartbeatTick % 4 === 0) refreshLedgerBalance(); // 每秒一次（原獨立計時器併入）
   }, 250);
-  // 每輪都要做的增強（建按鈕／前綴／氣泡列／訂單與司機對話鈕、處理 ?send）：開頁一次，之後每輪 rAF 維護再做
+  // 每輪都要做的增強（建按鈕／前綴／氣泡列、處理 ?send）：開頁一次，之後每輪 rAF 維護再做
   function enhanceChatPage() {
     enhanceChatBodies();
     enhanceQuickReplyToolbars();
     enhancePrefixChip();
     enhanceLineAdvancedMenu();
     addDispatchButton();
-    renderNativeButtons();
     ensureQuickBar();
     checkSendToken();
   }
   enhanceChatPage();
+  probeNativeChat();
   resumeUturnOpenNotice();
   checkUturnOpen();
   learnOaBotName();
@@ -117,7 +116,7 @@ function uturnMain() {
         // 換對話：關掉派單窗（第二道保險，見 chatIdAtOpen 快照）——面板掛在 body 不隨
         // 聊天區重繪消失，留著會讓「填的是 A 客人、人在 B 對話」有機會發生（#39435）
         closeDispatchPopover();
-        refreshNativeOrders(); // 司機對話：換對話就關面板、重抓這位客人的訂單
+        probeNativeChat(); // 換對話：這位客人交給後端比對乘客一次
         lastChatId = chat;
         resetScrollerForChat(chat);
       }

@@ -10,6 +10,7 @@ import { makeLineRateLimiter } from "../line/fetch.js";
  *         POST /api/v1/bots/{bot}/streamingApiToken → GET {streamingApiBaseUrl}/api/{version}/sse?token=…
  *         事件 chat.subEvent：message（客人傳來）／messageSent（官方送出）／read（客服標已讀）／chatRead（客人已讀，read.watermark＝時間水位）／pin、unpin（釘選）…
  *   發訊：POST /api/v1/bots/{bot}/chats/{chat}/messages/send { type:"text", text, sendId }，帶 X-XSRF-TOKEN
+ *         回覆（引用）：textV2 加 quoteToken＝被引用那則的 quoteToken；回來的訊息帶 quotedMessageId
  *         貼圖 { type:"sticker", packageId, stickerId }；多頁訊息 { type:"cardType", cardTypeMessageId }；
  *         優惠券 { type:"coupon", couponId }；文字夾表情貼 { type:"textV2", text:"…{emoji_0}…", substitution }
  *         （與 LINE 自家前端 ou() 同形：文字裡的 { } 要寫成 {{ }}）
@@ -82,6 +83,7 @@ const inbox = {
   boardRefreshing: false, // 「官方訊息」訂單狀態數量手動重新整理中
   botsLoaded: false, started: false, // 官方帳號清單讀完／已通過身份授權開始連線
   packs: new Map(), // "botId/sticker"｜"botId/emoji" → { list: [{ id, items }], loading, error }
+  replyTo: null, // 回覆（引用）哪一則：{ id, quoteToken, text, who }；送出時帶 quoteToken，換對話或送出後清掉
   emojiTokens: new Map(), // 輸入框裡 [表情貼N] 的 N → { productId, emojiId }（送出時換成 textV2 的 substitution）
   contents: null, // 選擇內容視窗：{ tab: "saved"|"card"|"coupon", selected }（null＝關閉）
   contentLists: new Map(), // "botId/tab" → { list, page, next, done, loading, error }

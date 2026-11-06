@@ -239,6 +239,14 @@ function inboxTakeover() {
   .loe-inbox-msg.failed .loe-inbox-msg-meta { color: #b91c1c; }
   .loe-inbox-composer { flex: 0 0 auto; padding: 10px 20px 16px; background: #fff; border-top: 1px solid #e3e7ee; display: flex; flex-direction: column; gap: 8px; }
   .loe-inbox-composer-row { display: flex; gap: 10px; align-items: flex-end; }
+  /* 回覆（引用）：輸入框上方的引用條（同 LINE 聊天室）；泡泡內的引用塊 */
+  .loe-inbox-reply { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-left: 3px solid #1c6cf3; border-radius: 6px; background: #f1f5ff; font-size: 12px; }
+  .loe-inbox-reply-body { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+  .loe-inbox-reply-text { color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .loe-inbox-quote { display: block; margin-bottom: 4px; padding: 4px 8px; border-left: 3px solid rgba(0,0,0,.25); border-radius: 4px; background: rgba(0,0,0,.06); font-size: 12px; opacity: .85; max-width: 100%; overflow: hidden; }
+  .loe-inbox-quote strong { display: block; font-size: 11px; }
+  .loe-inbox-quote span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .loe-inbox-msg.out .loe-inbox-bubble:not(.media) .loe-inbox-quote { border-left-color: rgba(255,255,255,.6); background: rgba(255,255,255,.15); }
   .loe-inbox-textarea { flex: 1 1 auto; min-width: 0; min-height: 60px; resize: vertical; padding: 10px 12px; border: 1px solid #d5dbe5; border-radius: 10px; font-size: 14px; line-height: 1.5; }
   .loe-inbox-composer-btns { display: flex; flex-direction: column; gap: 6px; align-self: stretch; justify-content: flex-end; }
   .loe-inbox-dispatch { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid #f97316; background: #fff; color: #c2410c; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
@@ -367,6 +375,7 @@ function inboxTakeover() {
       <div class="loe-inbox-composer" hidden>
         <div class="loe-inbox-quick loe-qr-bar"></div>
         <div class="loe-inbox-picker" hidden></div>
+        <div class="loe-inbox-reply" hidden aria-label="回覆的訊息"><span class="loe-inbox-reply-body"><strong class="loe-inbox-reply-who"></strong><span class="loe-inbox-reply-text"></span></span><button type="button" class="loe-inbox-x loe-inbox-reply-x" title="取消回覆（Esc）" aria-label="取消回覆">${ic("x")}</button></div>
         <div class="loe-inbox-composer-row">
           <textarea class="loe-inbox-textarea" rows="2" placeholder="輸入回覆 (Enter傳送，Shift+Enter可換行)" aria-label="回覆內容"></textarea>
           <div class="loe-inbox-composer-btns">

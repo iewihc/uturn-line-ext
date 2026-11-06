@@ -24,7 +24,6 @@ const DRIVER_CHAT_SEEN_KEY = "loe_driver_chat_seen_v1"; // orderId → 看過的
 const DRIVER_CHAT_SEEN_MAX = 300;
 const DRIVER_CHAT_IMAGE_MAX_PX = 1600;
 const DRIVER_CHAT_RECALL_MS = 24 * 60 * 60 * 1000;
-const NATIVE_ORDERS_REFRESH_MS = 15000;
 const driverChat = {
   host: null, onClose: null, // 面板掛載點（收件匣 aside／原生頁浮動 div）與關閉時的收尾
   orders: [], orderId: "", // 可切換的訂單（有司機的）與目前這張
@@ -36,7 +35,6 @@ const driverChat = {
 // 司機訊息下方額外的動作（收件匣掛「轉給客人」）；(訊息) → 節點或 null
 let driverChatMsgActions = () => null;
 const setDriverChatMsgActions = (fn) => { driverChatMsgActions = fn; };
-const driverChatNotified = new Map(); // orderId → 已提示過的司機最後訊息時間（ms），避免重複響
 const msOf = (iso) => { const t = Date.parse(iso || ""); return Number.isFinite(t) ? t : 0; };
 function driverChatSeen() {
   const m = storeGet(DRIVER_CHAT_SEEN_KEY, {});
@@ -57,19 +55,7 @@ function driverChatUnread(order) {
   const t = msOf(order && order.lastDriverMessageAt);
   return !!t && driverChat.orderId !== order.id && (driverChatSeen()[order.id] || 0) < t;
 }
-// 訂單列表更新後：有新的未讀司機訊息就響一聲＋提示（每則只提示一次）
-function driverChatNotifyOrders(orders) {
-  for (const o of orders) {
-    const t = msOf(o.lastDriverMessageAt);
-    if (!t || !driverChatUnread(o)) continue;
-    const prev = driverChatNotified.get(o.id);
-    driverChatNotified.set(o.id, t);
-    if (prev === undefined || prev >= t) continue; // 第一次看到這張單只記下、不響（避免開頁就一直響）
-    driverChatBeep();
-    toast(`💬 司機 ${o.driverNo || ""} 在 ${o.shortId || "訂單"} 傳了訊息`, "ok", 5000);
-  }
-}
-// 兩個短音；收件匣用收件匣的提示音開關，原生頁直接響
+// 兩個短音；收件匣用收件匣的提示音開關
 let driverChatAudio = null;
 function driverChatBeep() {
   if (INBOX_MODE) { if (inbox.sound) inboxBeep(); return; }
@@ -473,4 +459,4 @@ function initDriverChat() {
   document.addEventListener("visibilitychange", driverChatMarkRead);
 }
 
-export { NATIVE_ORDERS_REFRESH_MS, closeDriverChat, driverChat, driverChatCompressImage, driverChatDock, driverChatNotifyOrders, driverChatUnread, initDriverChat, msOf, openDriverChat, renderDriverChatHead, renderDriverChatMsgs, setDriverChatMsgActions, syncDriverChatOrders };
+export { closeDriverChat, driverChat, driverChatCompressImage, driverChatDock, driverChatUnread, initDriverChat, msOf, openDriverChat, renderDriverChatHead, renderDriverChatMsgs, setDriverChatMsgActions, syncDriverChatOrders };
