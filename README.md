@@ -1,5 +1,7 @@
 # uturn-line-ext
 
+版本 **1.82.3**：後端網域改成台灣環境 `right-tw.mr-chi-tech.com`（所有 line-ext API：授權、派單、看板、訂單、司機對話 token、快捷同步等；SignalR 原本就是 right-signalr-tw）。
+
 版本 **1.82.2**：官方訊息的篩選區更緊湊：晶片縮小、每排不換行（超出可左右滑），訂單狀態的收起鈕移到那排最前面，收起時整排只剩一顆「˅ 訂單狀態」（有選狀態就顯示狀態名）。原本最多五行，現在兩行、收起後一行半。訂單狀態那排在看板數字回來前就先顯示、可以點。
 
 版本 **1.82.1**：官方訊息篩選列最右邊多一顆小箭頭，可把下面「訂單狀態」那排往上收起（篩選仍生效；收起時若有選中的狀態會顯示在箭頭旁），狀態會記住。
@@ -191,7 +193,7 @@ Tampermonkey userscript：`uturn-line-ext.user.js`。版本 **1.48.0**：群發�
 | 同步客戶與記事本 | 翻完目前官方帳號所有對話並平行讀每位客人的 LINE 記事本，每 500 位上傳一個 chunk 到同步工作，全部完成才 commit 整份取代（失敗就撤銷，後端資料維持原樣；header `X-Synced-By`＝後台帳號、`X-Oa-Name`＝官方帳號名稱，皆選填） | `POST /line-oa/{groupId}/syncs`、`PUT …/syncs/{syncId}/chunks/{index}`、`POST …/syncs/{syncId}/commit`、`DELETE …/syncs/{syncId}` |
 | 群發訊息 | 搜尋、單選、多選、全選所有人、直接傳送、toast 進度通知 | `GET /line-oa/{groupId}/customers` |
 
-基底：`https://right.mr-chi-tech.com`。`account` 來自轉發設定的「UTurn 後台帳號」；`groupId` 是目前 LINE 官方帳號網址中的第一個 U ID，須與配置中的官方帳號 GroupId 一致。
+基底：`https://right-tw.mr-chi-tech.com`（台灣環境；v1.82.3 起，之前是 right.mr-chi-tech.com）。`account` 來自轉發設定的「UTurn 後台帳號」；`groupId` 是目前 LINE 官方帳號網址中的第一個 U ID，須與配置中的官方帳號 GroupId 一致。
 
 Cookie 僅由手動點「身份授權」擷取，不在載入或切換對話時讀取，不寫入 GM 設定或 localStorage、不列印至 Console。必要欄位為 `ses`、`__Host-chat-ses`、`XSRF-TOKEN`；缺少時不覆寫後端。Tampermonkey 須設定 Advanced → Security → Allow scripts to access cookies: All。
 
