@@ -95,7 +95,7 @@ async function inboxLoadNotes(chat, more = false) {
   renderInboxThread();
 }
 // LINE 每個對話只能有一則筆記（多加一則回 400 exceeds_note_limit，84 個對話查過沒有超過 1 則的）；要改內容用 PUT
-const INBOX_NOTE_LIMIT_TEXT = "LINE 每個對話只能有一則筆記，請直接編輯或刪除現有的那則";
+const INBOX_NOTE_LIMIT_TEXT = "這個對話已有筆記，請編輯現有的";
 async function inboxAddNote(chat, body) {
   body = String(body || "").trim();
   if (!body) return false;
@@ -139,22 +139,20 @@ function renderInboxNotes() {
     ih("button", { type: "button", class: "loe-inbox-x", html: ic(collapsed ? "chevron-right" : "chevron-down"), "aria-expanded": collapsed ? "false" : "true",
       "aria-label": collapsed ? "展開記事本" : "收起記事本", onclick: toggle }),
     ih("strong", { class: "loe-inbox-notes-title", text: `記事本 ${st ? st.total : ""}`, onclick: toggle }),
-    ih("span", { class: "loe-inbox-muted", text: "客人看不到" }),
     ih("span", { class: "loe-inbox-spacer" }),
     collapsed ? null : ih("button", { type: "button", class: "loe-inbox-x", "aria-label": inbox.notesMax ? "還原記事本" : "放大記事本", title: inbox.notesMax ? "還原（Esc）" : "放大：蓋到訊息串上，看更多筆記",
       html: ic(inbox.notesMax ? "minimize-2" : "maximize-2"), onclick: () => { inbox.notesMax = !inbox.notesMax; renderInboxNotes(); } }),
     inbox.pinNotes ? null : ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉記事本", html: ic("x"), onclick: () => { inbox.notesOpen = false; inbox.notesMax = false; renderInboxNotes(); renderInboxThread(); } }),
   ));
   if (collapsed) return;
-  const ta = ih("textarea", { class: "loe-inbox-note-input", rows: "3", placeholder: "新增筆記（客人看不到，只有客服看得到）", "aria-label": "新增筆記" });
+  const ta = ih("textarea", { class: "loe-inbox-note-input", rows: "3", placeholder: "新增筆記", "aria-label": "新增筆記" });
   const addBtn = ih("button", { type: "button", class: "loe-inbox-btn primary", text: "新增筆記", onclick: async () => {
     addBtn.disabled = true;
     try { if (await inboxAddNote(chat, ta.value)) ta.value = ""; } catch (e) { toast("新增筆記失敗：" + e.message, "err", 4000); }
     addBtn.disabled = false;
   } });
-  // 已有一則：不再給「新增」，提示直接編輯（LINE 上限一則）
-  if (st && !st.loading && st.list.length) host.append(ih("div", { class: "loe-inbox-note-limit", text: INBOX_NOTE_LIMIT_TEXT }));
-  else host.append(ih("div", { class: "loe-inbox-note-add" }, ta, addBtn));
+  // 已有一則就不給「新增」（LINE 上限一則），直接用下面那則的「編輯」
+  if (!(st && !st.loading && st.list.length)) host.append(ih("div", { class: "loe-inbox-note-add" }, ta, addBtn));
   const list = ih("div", { class: "loe-inbox-notes-list" });
   if (!st || (st.loading && !st.list.length)) list.append(ih("div", { class: "loe-inbox-empty", text: "讀取中…" }));
   else if (st.error) list.append(ih("div", { class: "loe-inbox-empty err", text: "讀取失敗：" + st.error }));

@@ -186,7 +186,6 @@ function inboxTakeover() {
   .loe-inbox-note-del:hover { background: #fee2e2; }
   .loe-inbox-note-del.edit { color: #1c6cf3; }
   .loe-inbox-note-del.edit:hover { background: #dbe7ff; }
-  .loe-inbox-note-limit { padding: 8px 14px; font-size: 12px; color: #64748b; background: #f8fafc; border-bottom: 1px solid #e3e7ee; }
   .loe-inbox-note.editing .loe-inbox-note-input { background: #fff; }
   .loe-inbox-note-edit-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 6px; }
   .loe-inbox-rename { height: 32px; padding: 0 10px; border: 1px solid #1c6cf3; border-radius: 8px; font-size: 14px; min-width: 180px; }
