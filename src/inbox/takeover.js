@@ -167,7 +167,12 @@ function inboxTakeover() {
   .loe-inbox-note-input { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; border: 1px solid #d5dbe5; border-radius: 8px; font-size: 13px; }
   .loe-inbox-notes-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
   .loe-inbox-note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 8px 10px; }
-  .loe-inbox-note-body { white-space: pre-wrap; word-break: break-word; }
+  .loe-inbox-note-body { white-space: pre-wrap; word-break: break-word; font-size: var(--loe-notes-font, 14px); line-height: 1.45; }
+  .loe-inbox-notes-zoom-wrap { display: inline-flex; align-items: center; border: 1px solid #d5dbe5; border-radius: 6px; overflow: hidden; }
+  .loe-inbox-notes-zoom { height: 24px; min-width: 28px; padding: 0 6px; border: 0; background: #fff; color: #374151; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .loe-inbox-notes-zoom.num { min-width: 26px; color: #6b7280; font-weight: 500; border-inline: 1px solid #e3e7ee; }
+  .loe-inbox-notes-zoom:hover:not(:disabled) { background: #f1f5f9; }
+  .loe-inbox-notes-zoom:disabled { color: #c3c9d3; cursor: default; }
   .loe-inbox-note-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: #92400e; }
   .loe-inbox-note-del { border: 0; background: transparent; color: #b91c1c; font-size: 11px; cursor: pointer; padding: 2px 4px; border-radius: 4px; }
   .loe-inbox-note-del:hover { background: #fee2e2; }

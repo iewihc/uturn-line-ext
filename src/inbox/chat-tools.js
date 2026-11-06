@@ -2,7 +2,8 @@
 import { renderInboxSide } from "./side.js";
 import { ic } from "../core/icons.js";
 import { pageContext } from "../core/page-context.js";
-import { ih, inbox, inboxApi, inboxChatUrl, inboxTime } from "./core.js";
+import { storeSet } from "../core/store.js";
+import { INBOX_NOTES_FONT, INBOX_NOTES_FONT_KEY, ih, inbox, inboxApi, inboxChatUrl, inboxTime } from "./core.js";
 import { inboxDismissToast } from "./notify.js";
 import { inboxRenderAll } from "./shell.js";
 import { renderInboxThread } from "./thread.js";
@@ -119,6 +120,11 @@ function renderInboxNotes() {
   const owners = inbox.owners.get(chat.botId) || new Map();
   const collapsed = inbox.notesCollapsed;
   const toggle = () => { inbox.notesCollapsed = !collapsed; renderInboxNotes(); };
+  // 文字大小：A−／A+ 一次 1px、點數字回預設；有些客人筆記很多，可以縮小看更多或放大看清楚
+  const font = inbox.notesFont || INBOX_NOTES_FONT.def;
+  host.style.setProperty("--loe-notes-font", `${font}px`);
+  const setFont = (px) => { inbox.notesFont = px === INBOX_NOTES_FONT.def ? 0 : px; storeSet(INBOX_NOTES_FONT_KEY, inbox.notesFont); renderInboxNotes(); };
+  const fontBtn = (label, px, title) => ih("button", { type: "button", class: "loe-inbox-notes-zoom", text: label, title, disabled: px < INBOX_NOTES_FONT.min || px > INBOX_NOTES_FONT.max, onclick: () => setFont(px) });
   // 標題列點一下收起／展開（固定開啟也能收）；固定開啟時不能關，只能收
   host.append(ih("div", { class: "loe-inbox-notes-head" },
     ih("button", { type: "button", class: "loe-inbox-x", html: ic(collapsed ? "chevron-right" : "chevron-down"), "aria-expanded": collapsed ? "false" : "true",
@@ -126,6 +132,10 @@ function renderInboxNotes() {
     ih("strong", { class: "loe-inbox-notes-title", text: `記事本 ${st ? st.total : ""}`, onclick: toggle }),
     ih("span", { class: "loe-inbox-muted", text: "客人看不到" }),
     ih("span", { class: "loe-inbox-spacer" }),
+    collapsed ? null : ih("span", { class: "loe-inbox-notes-zoom-wrap", title: "記事本文字大小" },
+      fontBtn("A−", font - INBOX_NOTES_FONT.step, "縮小文字"),
+      ih("button", { type: "button", class: "loe-inbox-notes-zoom num", text: `${font}`, title: "點一下回到預設大小", onclick: () => setFont(INBOX_NOTES_FONT.def) }),
+      fontBtn("A+", font + INBOX_NOTES_FONT.step, "放大文字")),
     inbox.pinNotes ? null : ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉記事本", html: ic("x"), onclick: () => { inbox.notesOpen = false; renderInboxNotes(); renderInboxThread(); } }),
   ));
   if (collapsed) return;
