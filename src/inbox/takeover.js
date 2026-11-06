@@ -147,6 +147,7 @@ function inboxTakeover() {
   @keyframes loe-inbox-spin { to { transform: rotate(360deg); } }
   .loe-inbox-tag.ai { background: #eef2ff; color: #4f46e5; font-weight: 700; }
   .loe-inbox-tag.group { background: #eef4ff; color: #1c6cf3; border: 1px solid rgba(28,108,243,.35); font-weight: 600; }
+  .loe-inbox-row-top > .loe-inbox-tag { flex: 0 0 auto; white-space: nowrap; } /* 群編不換行、不被擠扁；名字太長用 … 縮 */
   .loe-inbox-prefix { color: #1c6cf3; border-color: rgba(28,108,243,.35); font-weight: 600; }
   .loe-inbox-prefix.empty { color: #6b7280; font-weight: 400; }
   .loe-inbox-tag.ai-on { background: #6366f1; color: #fff; }
