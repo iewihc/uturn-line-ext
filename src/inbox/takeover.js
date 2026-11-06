@@ -331,6 +331,7 @@ function inboxTakeover() {
   .loe-inbox-toasts { position: fixed; top: 64px; right: 20px; width: min(360px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: 50; }
   .loe-inbox-toast { background: #fff; border: 1px solid #e3e7ee; border-left: 4px solid #1c6cf3; border-radius: 10px; padding: 10px 12px; box-shadow: 0 6px 20px rgba(15,23,42,.12); display: flex; flex-direction: column; gap: 6px; }
   .loe-inbox-toast-top { display: flex; align-items: center; gap: 6px; }
+  .loe-inbox-toast-top > .loe-inbox-tag { flex: 0 0 auto; white-space: nowrap; }
   .loe-inbox-toast-body { color: #374151; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .loe-inbox-toast-actions { display: flex; gap: 6px; }
   .loe-inbox-toast-actions .loe-inbox-btn { height: 28px; font-size: 12px; }

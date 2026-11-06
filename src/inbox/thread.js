@@ -14,7 +14,7 @@ import { inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxSelectedChat, 
 import { inboxAvatar } from "./shell.js";
 import { GEAR_ICON, closePrefixPopover, openPrefixPopover } from "../prefix.js";
 import { renderQuickBar } from "../quick-reply/bar.js";
-import { getPrefix } from "../settings.js";
+import { getChatOverrides, getPrefix, getPrefixForGid } from "../settings.js";
 import { copyText, flashCopied } from "../ui/copy.js";
 import { toast } from "../ui/toast.js";
 import { inboxSearchAfterRender } from "./msearch.js";
@@ -262,15 +262,19 @@ function renderInboxToasts() {
   const host = inbox.el.toasts;
   if (!host) return;
   host.textContent = "";
+  const overrides = getChatOverrides();
   for (const t of inbox.toasts.values()) {
     if (t.kind === "driver") { host.append(inboxDriverToastCard(t)); continue; }
     const chat = inbox.chats.get(t.key);
     if (!chat) continue;
     const chip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId).slice(0, 8), title: inboxBotName(chat.botId) });
     chip.style.background = inboxBotColor(chat.botId);
+    // 群編標籤同對話列（店配覆寫優先，否則此帳號的預設前綴）；選項「不顯示官方帳號名稱」時同樣只留群編
+    const group = (overrides[t.key] && overrides[t.key].group) || getPrefixForGid(chat.botId);
     const card = ih("div", { class: "loe-inbox-toast", role: "status" },
       ih("div", { class: "loe-inbox-toast-top" },
-        chip,
+        inbox.hideOaName && group ? null : chip,
+        group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `${inboxBotName(chat.botId)}・派單預設群編：${group}` }) : null,
         ih("strong", { class: "loe-inbox-row-name", text: chat.name }),
         t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則新訊息` }) : null,
         ih("span", { class: "loe-inbox-spacer" }),
