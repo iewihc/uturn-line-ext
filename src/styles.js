@@ -545,19 +545,17 @@ const STYLE_CSS = `
     .loe-tpl-select:focus { outline: none; border-color: ${BLUE}; }
 
     /* AI 客服切換（聊天室頂端「待處理」左邊）：[AI處理][轉人工] 分段按鈕 */
+    /* 一顆切換鈕：顯示目前狀態（AI處理＝靛藍、轉人工＝橘），只留框線＋彩色字，點一下切到另一邊 */
     .loe-ai-toggle {
       display: inline-flex; align-items: center; vertical-align: middle;
-      margin-right: 6px; border: 1px solid #c7d2fe; border-radius: 6px; overflow: hidden;
-      font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap;
+      margin-right: 6px; font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap;
     }
     .loe-ai-toggle button {
-      height: 28px; padding: 0 10px; border: 0; background: #fff; color: #64748b;
-      font: inherit; cursor: pointer;
+      height: 28px; padding: 0 10px; border-radius: 8px; background: #fff; font: inherit; cursor: pointer;
+      color: #4f46e5; border: 1px solid color-mix(in srgb, currentColor 55%, transparent);
     }
-    .loe-ai-toggle button + button { border-left: 1px solid #c7d2fe; }
-    .loe-ai-toggle button:hover:not(:disabled):not(.on) { background: #eef2ff; color: #4338ca; }
-    .loe-ai-toggle button.on { background: #6366f1; color: #fff; cursor: default; }
-    .loe-ai-toggle button.on.human { background: #f97316; }
+    .loe-ai-toggle button.on.human { color: #c2410c; }
+    .loe-ai-toggle button:hover:not(:disabled) { background: color-mix(in srgb, currentColor 8%, #fff); }
     .loe-ai-toggle button:disabled { opacity: .6; cursor: progress; }
     .loe-ai-toggle .loe-ai-note { display: inline-flex; align-items: center; height: 28px; padding: 0 10px; color: #94a3b8; font-weight: 600; cursor: help; }
 
@@ -602,9 +600,9 @@ const STYLE_CSS = `
     .loe-dchat-x { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
     .loe-dchat-x:hover { background: #f1f5f9; }
     .loe-dchat-x svg, .loe-dchat-icon-btn svg, .loe-dchat-send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .loe-dchat-col { padding: 1px 8px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 600; background: #6b7280; }
-    .loe-dchat-col.booking { background: #7c3aed; } .loe-dchat-col.pending { background: #f59e0b; }
-    .loe-dchat-col.accepted { background: #1c6cf3; } .loe-dchat-col.arrived { background: #16a34a; } .loe-dchat-col.executing { background: #0d9488; }
+    .loe-dchat-col { padding: 0 8px; line-height: 18px; border-radius: 4px; color: #637381; font-size: 12px; font-weight: 700; background: transparent; border: 1px solid color-mix(in srgb, currentColor 55%, transparent); }
+    .loe-dchat-col.booking { color: #6d28d9; } .loe-dchat-col.pending { color: #b45309; }
+    .loe-dchat-col.accepted { color: #2f5fd0; } .loe-dchat-col.arrived { color: #1b806a; } .loe-dchat-col.executing { color: #0f766e; }
     .loe-dchat-tabs { display: flex; gap: 6px; overflow-x: auto; padding-top: 4px; }
     .loe-dchat-tab { position: relative; flex: 1 1 0; min-width: 120px; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 4px 10px; border: 1px solid #d5dbe5; border-radius: 10px; background: #fff; font: inherit; text-align: left; cursor: pointer; }
     .loe-dchat-tab.on { border: 2px solid ${BLUE}; background: ${BLUE_SOFT}; }

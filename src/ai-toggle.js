@@ -179,19 +179,18 @@ function renderAiToggle() {
   box.dataset.sig = sig;
   box.textContent = "";
   if (s.status === "ready") {
-    [["0", "AI處理", "AI 自動回覆這位客人"],
-     ["1", "轉人工", "轉人工：AI 不再回這位客人（客人閒置 60 分鐘後 AI 會自動接回）"]].forEach(([value, label, title]) => {
-      const btn = document.createElement("button");
-      const on = (value === "1") === s.handoff;
-      btn.type = "button";
-      btn.dataset.handoff = value;
-      btn.textContent = label;
-      btn.title = title;
-      btn.className = on ? (value === "1" ? "on human" : "on") : "";
-      btn.setAttribute("aria-pressed", String(on));
-      btn.disabled = s.busy;
-      box.appendChild(btn);
-    });
+    // 一顆就好：顯示目前狀態，點一下切到另一邊（data-handoff 是「要切成」的值）
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.handoff = s.handoff ? "0" : "1";
+    btn.textContent = s.handoff ? "轉人工" : "AI處理";
+    btn.title = s.handoff
+      ? "目前：轉人工，AI 不回這位客人（客人閒置 60 分鐘後 AI 會自動接回）。點一下交回 AI 處理"
+      : "目前：AI 自動回覆這位客人。點一下轉人工";
+    btn.className = s.handoff ? "on human" : "on";
+    btn.setAttribute("aria-pressed", String(s.handoff));
+    btn.disabled = s.busy;
+    box.appendChild(btn);
     return;
   }
   const note = document.createElement("span");

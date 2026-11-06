@@ -35,8 +35,8 @@ function inboxTakeover() {
   .loe-inbox-btn:disabled { opacity: .5; cursor: default; }
   .loe-inbox-btn.on { background: #e6f6ef; border-color: #00a76f; color: #00a76f; }
   .loe-inbox-btn.warn { background: #fffbeb; border-color: #f59e0b; color: #b45309; font-weight: 600; }
-  .loe-inbox-btn.primary { background: #00a76f; border-color: #00a76f; color: #fff; font-weight: 600; }
-  .loe-inbox-btn.primary:hover { background: #007867; }
+  .loe-inbox-btn.primary { background: #1b806a; border-color: #1b806a; color: #fff; font-weight: 600; }
+  .loe-inbox-btn.primary:hover { background: #16695a; }
   .loe-inbox-hint { font-size: 12px; color: #9a3412; background: #ffedd5; padding: 2px 8px; border-radius: 10px; }
   .loe-inbox-body { flex: 1 1 auto; display: flex; align-items: stretch; min-height: 0; }
   /* 欄與欄之間的直分隔線：6px 寬、疊在邊框上，拖拉改左邊那欄（右側欄則改右邊）的寬度 */
@@ -135,7 +135,7 @@ function inboxTakeover() {
   .loe-inbox-filters { flex: 0 0 auto; display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 0 12px 6px; }
   .loe-inbox-filters::-webkit-scrollbar { display: none; }
   .loe-inbox-chip { flex: 0 0 auto; height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid #d5dbe5; background: #fff; color: #454f5b; font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer; display: inline-flex; align-items: center; }
-  .loe-inbox-chip.on { background: #00a76f; border-color: #00a76f; color: #fff; }
+  .loe-inbox-chip.on { background: #1b806a; border-color: #1b806a; color: #fff; }
   .loe-inbox-rows { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
   .loe-inbox-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 10px 14px; border: 0; border-bottom: 1px solid rgba(145,158,171,.16); border-left: 3px solid transparent; background: #fff; cursor: pointer; color: #212b36; }
   .loe-inbox-row:hover { background: #f9fafb; }
