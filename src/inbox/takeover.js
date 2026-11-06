@@ -39,6 +39,13 @@ function inboxTakeover() {
   .loe-inbox-btn.primary:hover { background: #0b57d0; }
   .loe-inbox-hint { font-size: 12px; color: #9a3412; background: #ffedd5; padding: 2px 8px; border-radius: 10px; }
   .loe-inbox-body { flex: 1 1 auto; display: flex; align-items: stretch; min-height: 0; }
+  /* 欄與欄之間的直分隔線：6px 寬、疊在邊框上，拖拉改左邊那欄（右側欄則改右邊）的寬度 */
+  .loe-inbox-vsplit { flex: 0 0 6px; margin: 0 -3px; position: relative; z-index: 3; cursor: col-resize; touch-action: none; user-select: none; }
+  .loe-inbox-vsplit::before { content: ""; position: absolute; top: 50%; left: 50%; width: 4px; height: 28px; margin: -14px 0 0 -2px; border-left: 1px solid #c7cdd8; border-right: 1px solid #c7cdd8; opacity: .8; }
+  .loe-inbox-vsplit:hover, .loe-inbox-vsplit.dragging { background: rgba(28,108,243,.15); }
+  .loe-inbox-vsplit:hover::before, .loe-inbox-vsplit.dragging::before { border-color: #1c6cf3; }
+  .loe-inbox-rail.collapsed + .loe-inbox-vsplit, .loe-inbox-body:has(> .loe-inbox-side[hidden]) > .loe-inbox-vsplit[data-col="side"] { display: none; }
+  @media (max-width: 960px) { .loe-inbox-vsplit { display: none; } }
   .loe-inbox-gate { position: absolute; top: 56px; left: 0; right: 0; bottom: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; background: #f3f5f9; }
   .loe-inbox-gate[hidden] { display: none; }
   .loe-inbox-gate-box { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 460px; padding: 32px 28px; background: #fff; border: 1px solid #e3e7ee; border-radius: 16px; box-shadow: 0 12px 40px rgba(15,23,42,.08); text-align: center; }
@@ -77,7 +84,7 @@ function inboxTakeover() {
   .loe-inbox-rail-head { gap: 8px; }
   .loe-inbox-rail-head strong { margin-right: auto; }
   /* 左欄收起：只剩一條可點的直條（監聽與通知照常），再點展開 */
-  .loe-inbox-rail.collapsed { flex-basis: 40px; }
+  .loe-inbox-rail.collapsed { flex-basis: 40px !important; }
   .loe-inbox-rail.collapsed > :not(.loe-inbox-rail-strip) { display: none; }
   .loe-inbox-rail-strip { display: none; }
   .loe-inbox-rail.collapsed .loe-inbox-rail-strip { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; height: 100%; padding: 12px 0; border: 0; background: transparent; color: #374151; cursor: pointer; }
@@ -360,6 +367,7 @@ function inboxTakeover() {
       <div class="loe-inbox-rail-list"></div>
       <div class="loe-inbox-rail-foot"></div>
     </aside>
+    <div class="loe-inbox-vsplit" data-col="rail" role="separator" aria-orientation="vertical" aria-label="拖拉調整官方帳號欄寬度" title="拖拉調整寬度，雙擊回到預設"></div>
     <section class="loe-inbox-list">
       <div class="loe-inbox-list-head"><strong>官方訊息</strong><span>依最後訊息時間</span></div>
       <input class="loe-inbox-search loe-inbox-list-search" type="search" placeholder="搜尋客人、訊息內容、官方帳號或群編" aria-label="搜尋官方訊息">
@@ -367,6 +375,7 @@ function inboxTakeover() {
       <div class="loe-inbox-filters loe-inbox-order-filters" hidden aria-label="依訂單狀態篩選"></div>
       <div class="loe-inbox-rows"></div>
     </section>
+    <div class="loe-inbox-vsplit" data-col="list" role="separator" aria-orientation="vertical" aria-label="拖拉調整官方訊息欄寬度" title="拖拉調整寬度，雙擊回到預設"></div>
     <main class="loe-inbox-thread">
       <div class="loe-inbox-th-head" hidden></div>
       <div class="loe-inbox-orders" hidden aria-label="訂單狀態"></div>
@@ -393,6 +402,7 @@ function inboxTakeover() {
         </div>
       </div>
     </main>
+    <div class="loe-inbox-vsplit" data-col="side" role="separator" aria-orientation="vertical" aria-label="拖拉調整司機對話與記事本欄寬度" title="拖拉調整寬度，雙擊回到預設"></div>
     <aside class="loe-inbox-side" hidden aria-label="司機對話與記事本">
       <div class="loe-inbox-side-empty" hidden></div>
       <div class="loe-inbox-side-split" hidden role="separator" aria-orientation="horizontal" aria-label="拖拉調整司機對話與記事本的高度" title="拖拉調整高度，雙擊回到預設"></div>

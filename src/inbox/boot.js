@@ -1,4 +1,5 @@
 // 收件匣啟動：條款 → 綁定畫面事件 → 讀官方帳號 → 授權閘門 → 連線與輪詢。
+import { initInboxColumns } from "./columns.js";
 import { initInboxSide } from "./side.js";
 import { initInboxRelay } from "./relay.js";
 import { openDispatchPopover } from "../dispatch.js";
@@ -25,6 +26,7 @@ function bootInbox() {
   inbox.el = {
     header: $(".loe-inbox-top"), rail: $(".loe-inbox-rail-list"), search: $(".loe-inbox-search"), foot: $(".loe-inbox-rail-foot"),
     railAside: $(".loe-inbox-rail"), railToggle: $(".loe-inbox-rail-toggle"), railStrip: $(".loe-inbox-rail-strip"),
+    body: $(".loe-inbox-body"), listSection: $(".loe-inbox-list"),
     filters: $(".loe-inbox-filters"), rows: $(".loe-inbox-rows"), listSearch: $(".loe-inbox-list-search"),
     thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thEmpty: $(".loe-inbox-th-empty"),
     reply: $(".loe-inbox-reply"), replyWho: $(".loe-inbox-reply-who"), replyText: $(".loe-inbox-reply-text"),
@@ -42,6 +44,7 @@ function bootInbox() {
     if (chat && document.visibilityState === "visible") inboxLoadOrders(chat);
   }, INBOX_ORDERS_REFRESH_MS);
   initInboxSide();
+  initInboxColumns();
   // 使用者往上捲就不再自動捲到底（圖片載入時）
   inbox.el.thMsgs?.addEventListener("scroll", (e) => {
     const el = e.currentTarget;
