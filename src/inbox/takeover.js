@@ -231,6 +231,7 @@ function inboxTakeover() {
   .loe-inbox-msg.out .loe-inbox-bubble { background: #1c6cf3; color: #fff; }
   .loe-inbox-msg.failed .loe-inbox-bubble { background: #fee2e2; color: #991b1b; }
   .loe-inbox-bubble.media { padding: 4px; background: #fff; }
+  .loe-inbox-bubble.media.loe-has-forward { padding: 9px 13px; } /* 位置訊息：留位置給右上角派車／複製 */
   .loe-inbox-msg.out .loe-inbox-bubble.media { background: #fff; color: #1f2937; }
   .loe-inbox-media-link { display: block; line-height: 0; }
   .loe-inbox-media-img { max-width: 260px; max-height: 260px; border-radius: 10px; display: block; object-fit: contain; }

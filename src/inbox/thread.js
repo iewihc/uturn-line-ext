@@ -122,21 +122,25 @@ function renderInboxThread() {
     const isText = !!m.message && (m.message.type === "text" || m.message.type === "textV2" || m.message.type === "location");
     const mediaNode = inboxMediaNode(chat.botId, m);
     const withActions = isText && !m.pending && !m.failed;
+    // 位置訊息：複製／派車用「名稱 地址」（沒有就經緯度），不是預覽的「[位置]」
+    const loc = m.message?.type === "location" ? m.message : null;
+    const actionText = loc ? ([loc.title, loc.address].filter(Boolean).join(" ") || `${loc.latitude},${loc.longitude}`) : text;
     // AI 客服回的是卡片（LINE 回成 text 但 originalType=flex；也涵蓋 template／imagemap／cardType），另一種樣式標示
     const orig = m.message && m.message.originalType;
     const isCard = out && !!(orig && orig !== "text" || (m.message && ["flex", "template", "imagemap", "cardType"].includes(m.message.type)));
     // 與 LINE 聊天室同一套：泡泡掛 BUBBLE_CLASS／TEXT_PAD_CLASS，右上角常駐「派單」「複製」
     const quote = m.message?.quotedMessageId ? inboxQuoteNode(chat, th, m.message.quotedMessageId) : null; // 這則是回覆（引用）哪一則
+    // 位置訊息也是 media 泡泡，但要掛派車／複製（之前 media 一律不掛，位置就點不了）
     const bubble = mediaNode
-      ? ih("div", { class: "loe-inbox-bubble media" }, quote, mediaNode)
+      ? ih("div", { class: "loe-inbox-bubble media" + (withActions ? ` ${BUBBLE_CLASS} ${TEXT_PAD_CLASS} loe-has-forward` : "") }, quote, mediaNode)
       : ih("div", { class: "loe-inbox-bubble" + (withActions ? ` ${BUBBLE_CLASS} ${TEXT_PAD_CLASS} loe-has-forward` : "") },
         quote, isCard ? ih("span", { class: "loe-inbox-card-label", text: "AI 卡片回覆" }) : null, ...inboxTextNodes(m.message, text));
-    if (withActions && !mediaNode) {
+    if (withActions) {
       bubble.append(
         ih("button", { type: "button", class: FORWARD_BUTTON_CLASS, html: FORWARD_ICON, "aria-label": "帶入派車", "data-loe-tip": "派車",
-          onclick: (e) => { e.stopPropagation(); openDispatchPopover(text); } }),
+          onclick: (e) => { e.stopPropagation(); openDispatchPopover(actionText); } }),
         ih("button", { type: "button", class: BUTTON_CLASS, html: COPY_ICON, "aria-label": "複製這則訊息", "data-loe-tip": "複製",
-          onclick: async (e) => { e.stopPropagation(); const btn = e.currentTarget; try { flashCopied(btn, await copyText(text)); } catch (_) { flashCopied(btn, false); } } }),
+          onclick: async (e) => { e.stopPropagation(); const btn = e.currentTarget; try { flashCopied(btn, await copyText(actionText)); } catch (_) { flashCopied(btn, false); } } }),
       );
     }
     thMsgs.append(ih("div", { class: "loe-inbox-msg" + (out ? " out" : " in") + (m.failed ? " failed" : "") + (isCard ? " card" : ""), "data-id": m.message?.id || null },
