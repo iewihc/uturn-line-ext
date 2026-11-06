@@ -171,7 +171,9 @@ function renderInboxRail() {
   if (!host) return;
   const q = (inbox.el.search?.value || "").trim().toLowerCase();
   host.textContent = "";
-  for (const b of inbox.bots) {
+  // 有打開（監聽中）的排在上面，其餘維持原本順序（sort 是穩定的）
+  const bots = [...inbox.bots].sort((a, b) => (inbox.enabled.has(b.botId) ? 1 : 0) - (inbox.enabled.has(a.botId) ? 1 : 0));
+  for (const b of bots) {
     if (q && !b.name.toLowerCase().includes(q) && !getPrefixForGid(b.botId).toLowerCase().includes(q)) continue;
     const on = inbox.enabled.has(b.botId);
     const c = inbox.conns.get(b.botId);

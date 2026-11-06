@@ -18,10 +18,10 @@ import { getPrefix } from "../settings.js";
 import { copyText, flashCopied } from "../ui/copy.js";
 import { toast } from "../ui/toast.js";
 
-// 回覆（引用）：訊息下方「回覆」鈕（LINE 給了 quoteToken 的才能引用）
+// 回覆（引用）：客人訊息下方的「回覆」鈕（LINE 給了 quoteToken 的才能引用）；官方自己送出的不給回覆
 function inboxReplyButton(chat, m, out) {
   const msg = m.message;
-  if (!msg?.id || !msg.quoteToken) return null;
+  if (out || !msg?.id || !msg.quoteToken) return null;
   return ih("button", { type: "button", class: "loe-relay-btn", text: "回覆", title: "回覆這則訊息（同 LINE 聊天室的「回覆」，對方會看到引用）",
     onclick: () => inboxSetReply({ id: msg.id, quoteToken: msg.quoteToken, text: inboxPreview(m) || "[訊息]", who: out ? inboxBotName(chat.botId) : chat.name }) });
 }
