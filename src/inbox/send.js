@@ -4,7 +4,7 @@ import { pageContext, setPageContext } from "../core/page-context.js";
 import { closeDispatchPopover } from "../dispatch.js";
 import { closeDriverChat, driverChat } from "../driver-chat.js";
 import { inboxLoadNotes, inboxMarkRead } from "./chat-tools.js";
-import { inboxNoteMessageIds, inboxPreview } from "./chats.js";
+import { inboxNoteMessageIds, inboxNoteUserRead, inboxPreview } from "./chats.js";
 import { inbox, inboxApi, inboxBotName, inboxKey } from "./core.js";
 import { inboxDismissToast } from "./notify.js";
 import { inboxLoadOrders } from "./orders.js";
@@ -45,6 +45,8 @@ async function inboxOpenChat(key) {
     const data = await inboxApi("GET", `/api/v3/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`);
     // LINE 回新→舊，這裡翻成舊→新；載入期間 SSE 塞進來的保留在後面
     const items = (data?.list || []).filter((m) => m && (m.type === "message" || m.type === "messageSent")).reverse();
+    // 列表裡的 chatRead 事件＝客人讀到哪，取最新的當水位
+    inboxNoteUserRead(chat, Math.max(0, ...(data?.list || []).filter((m) => m?.type === "chatRead").map((m) => m.read?.watermark || m.timestamp || 0)));
     inboxNoteMessageIds(chat, lineMessageIds(items.slice(-LINE_CHAT_PROBE_MAX_IDS)));
     const seen = new Set(items.map((m) => m.message?.id).filter(Boolean));
     th.list = items.concat(th.list.filter((m) => !seen.has(m.message?.id)));

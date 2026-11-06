@@ -7,6 +7,7 @@ import { inboxDismissToast, inboxNotify } from "./notify.js";
 import { inboxLoadBoard, inboxQueueLink } from "./order-status.js";
 import { inboxAppendToThread, inboxSetContext } from "./send.js";
 import { inboxRenderAll, renderInboxRail } from "./shell.js";
+import { renderInboxThread } from "./thread.js";
 import { lineChatsPageUrl } from "../line/fetch.js";
 import { firstText } from "../line/sync.js";
 import { LINE_CHAT_PROBE_MAX_IDS, lineMessageIds } from "../orders.js";
@@ -56,8 +57,15 @@ function inboxChatFromLine(botId, item, prev) {
     avatarUrl: p.iconHash && p.iconHash !== "biz-app"
       ? `https://profile.line-scdn.net/${encodeURIComponent(p.iconHash)}/preview` : "",
     chatType: item.chatType || "",
+    // 客人已讀水位：官方送出時間 ≤ 這個時間就標「已讀」（同 LINE 聊天室）；只增不減
+    userReadAt: Math.max(item.userLastReadAt || 0, prev ? prev.userReadAt || 0 : 0),
     messageIds: inboxMergeIds(prev ? prev.messageIds : [], lineMessageIds(le ? [le] : [])), // 最近的訊息編號（比對乘客用）
   };
+}
+function inboxNoteUserRead(chat, at) {
+  if (!chat || !(at > (chat.userReadAt || 0))) return false;
+  chat.userReadAt = at;
+  return true;
 }
 function inboxMergeIds(prev, ids) {
   const out = (prev || []).filter((id) => !ids.includes(id)).concat(ids);
@@ -235,6 +243,11 @@ async function inboxOnChatEvent(botId, raw) {
       inboxAppendToThread(key, payload);
       inboxNoteMessageIds(chat, lineMessageIds([payload]));
       break;
+    case "chatRead": { // 客人讀到哪：只更新水位，正在看這位才重畫訊息
+      if (!inboxNoteUserRead(chat, payload.read?.watermark || payload.timestamp)) return;
+      if (inbox.selected === key) renderInboxThread();
+      return;
+    }
     case "read": // 客服（任一分頁）標了已讀
       chat.unread = false; chat.unreadCount = 0;
       inboxDismissToast(key);
@@ -249,9 +262,9 @@ async function inboxOnChatEvent(botId, raw) {
       if (!fresh) { inbox.chats.delete(key); inbox.threads.delete(key); inboxDismissToast(key); if (inbox.selected === key) inbox.selected = null; }
       break;
     }
-    default: return; // typing／chatRead 等不重繪
+    default: return; // typing 等不重繪
   }
   inboxRenderAll();
 }
 
-export { inboxAssigneeLabel, inboxConnect, inboxEnabledIds, inboxFetchChat, inboxLoadBots, inboxLoadChats, inboxNoteMessageIds, inboxPreview, inboxSetEnabled, inboxUnreadTotal };
+export { inboxAssigneeLabel, inboxConnect, inboxEnabledIds, inboxFetchChat, inboxLoadBots, inboxLoadChats, inboxNoteMessageIds, inboxNoteUserRead, inboxPreview, inboxSetEnabled, inboxUnreadTotal };

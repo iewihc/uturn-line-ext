@@ -99,6 +99,7 @@ function renderInboxThread() {
     }
     const out = m.type === "messageSent";
     const meta = m.pending ? "傳送中…" : m.failed ? `傳送失敗：${m.error || ""}` : inboxTime(m.timestamp);
+    const readMark = out && !m.pending && !m.failed && m.timestamp && m.timestamp <= (chat.userReadAt || 0) ? "已讀 · " : ""; // 客人已讀（同 LINE 聊天室）
     const text = inboxPreview(m) || "[訊息]";
     const isText = !!m.message && (m.message.type === "text" || m.message.type === "textV2" || m.message.type === "location");
     const mediaNode = inboxMediaNode(chat.botId, m);
@@ -122,7 +123,7 @@ function renderInboxThread() {
     thMsgs.append(ih("div", { class: "loe-inbox-msg" + (out ? " out" : " in") + (m.failed ? " failed" : "") + (isCard ? " card" : "") },
       bubble,
       ih("div", { class: "loe-inbox-msg-meta" },
-        out ? (isCard ? `AI 回覆 · ${meta}` : meta) : `${meta} · ${chat.name}`,
+        out ? readMark + (isCard ? `AI 回覆 · ${meta}` : meta) : `${meta} · ${chat.name}`,
         m.pending || m.failed ? null : inboxRelayControls(m)),
     ));
   }
