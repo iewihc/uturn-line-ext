@@ -327,8 +327,8 @@ function inboxToastCard(t) {
     ),
     ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
     ih("div", { class: "loe-inbox-toast-actions" },
-      ih("button", { type: "button", class: "loe-inbox-btn primary", text: "在收件匣回覆", onclick: open }),
-      ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", text: "開官方" }),
+      ih("button", { type: "button", class: "loe-inbox-btn primary", html: ic("message-circle"), onclick: open }, ih("span", { text: "在收件匣回覆" })),
+      ih("a", { class: "loe-inbox-btn", href: inboxChatUrl(chat), target: "_blank", rel: "noopener", html: ic("external-link") }, ih("span", { text: "開官方" })),
     ),
     t.folded ? null : ih("span", { class: "loe-inbox-toast-timer" }),
   );
@@ -356,7 +356,7 @@ function inboxDriverToastCard(t) {
     t.oriText ? ih("div", { class: "loe-inbox-toast-ori", text: t.oriText, title: t.oriText }) : null, // 派單原文（小字，一行）
     ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
     chat ? ih("div", { class: "loe-inbox-toast-actions" },
-      ih("button", { type: "button", class: "loe-inbox-btn primary", text: "司機對話", onclick: () => { close(); inbox.notifOpen = false; inboxOpenDriverChatFor(chat.key, t.orderId); } }),
+      ih("button", { type: "button", class: "loe-inbox-btn primary", html: ic("message-square"), onclick: () => { close(); inbox.notifOpen = false; inboxOpenDriverChatFor(chat.key, t.orderId); } }, ih("span", { text: "司機對話" })),
     ) : null,
     t.folded ? null : ih("span", { class: "loe-inbox-toast-timer" }),
   );
