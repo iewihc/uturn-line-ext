@@ -44,6 +44,8 @@ const INBOX_TOAST_MAX_RANGE = [1, 5];
 const INBOX_TOAST_MAX_KEPT = 60; // 鈴鐺裡最多留幾則（超過丟最舊的）
 const INBOX_BOTS_REFRESH_MS = 60000; // 未啟用帳號的未讀數靠 /api/v1/bots 每分鐘更新
 const INBOX_LIMIT_RETRY_MS = 120000; // 連線數已滿時隔多久再試 SSE（期間依選項：輪詢或只等）
+const INBOX_THEME_KEY = "loe_inbox_theme_v1"; // 選項「外觀」：light（預設，原本的顏色）／dark／system
+const INBOX_THEME_OPTIONS = [["light", "亮色"], ["dark", "暗色"], ["system", "跟隨系統"]];
 const INBOX_POLL_KEY = "loe_inbox_poll_v1"; // 選項：超過 LINE 連線上限的帳號改用輪詢（預設關＝只開 SSE、等名額）
 const INBOX_POLL_MS = 12000; // 連線數已滿的帳號改輪詢對話清單的間隔
 const INBOX_ORDERS_REFRESH_MS = 15000; // 開著的對話多久重抓一次訂單狀態
@@ -92,6 +94,7 @@ const inbox = {
   colsCollapsed: { list: false, thread: false, side: false }, // 其他欄收起（initInboxCollapse 讀設定）
   notifOpen: false, // 鈴鐺的通知清單抽屜開著
   toastMax: Math.min(5, Math.max(1, Number(storeGet(INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_SHOWN)) || INBOX_TOAST_MAX_SHOWN)), // 右上角最多疊幾張
+  theme: INBOX_THEME_OPTIONS.some(([id]) => id === storeGet(INBOX_THEME_KEY, "light")) ? storeGet(INBOX_THEME_KEY, "light") : "light", // 外觀
   pollFallback: storeGet(INBOX_POLL_KEY, false) === true, // 超過連線上限改用輪詢（預設關）
   railCollapsed: storeGet(INBOX_RAIL_COLLAPSED_KEY, false) === true, // 左欄「官方帳號」往左收成一條（監聽不受影響）
   orderFiltersCollapsed: storeGet(INBOX_ORDER_FILTERS_COLLAPSED_KEY, false) === true, // 訂單狀態篩選那排收起（篩選仍生效）
@@ -180,4 +183,4 @@ async function inboxApi(method, path, body, retried = false, opts = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-export { INBOX_AUTO_READ_KEY, INBOX_BOTS_REFRESH_MS, INBOX_COLS_COLLAPSED_KEY, INBOX_COL_WIDTHS_KEY, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDER_FILTERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_TOAST_MAX_KEPT, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_TOAST_MAX_SHOWN, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
+export { INBOX_AUTO_READ_KEY, INBOX_BOTS_REFRESH_MS, INBOX_COLS_COLLAPSED_KEY, INBOX_COL_WIDTHS_KEY, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDER_FILTERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_THEME_KEY, INBOX_THEME_OPTIONS, INBOX_TOAST_MAX_KEPT, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_TOAST_MAX_SHOWN, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };

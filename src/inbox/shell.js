@@ -8,7 +8,7 @@ import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
 import { inboxApplyPollFallback, inboxConnect, inboxEnabledIds, inboxLoadChats, inboxSetEnabled, inboxUnreadTotal } from "./chats.js";
 import { inboxLoadNotes, inboxMarkRead, renderInboxNotes } from "./chat-tools.js";
-import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_SOUND_KEY, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
+import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_SOUND_KEY, INBOX_THEME_KEY, INBOX_THEME_OPTIONS, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
 import { renderInboxList } from "./list.js";
 import { inboxBeep, inboxDismissAllToasts, inboxSoundReady } from "./notify.js";
 import { inboxChatColumns, inboxLoadBoard, inboxQueueLink, inboxScheduleBoard } from "./order-status.js";
@@ -28,6 +28,8 @@ function inboxRenderAll() {
   const n = inboxUnreadTotal();
   document.title = (n ? `(${n}) ` : "") + "UTurn 收件匣";
 }
+// 外觀：html[data-loe-theme] 由 CSS token 換色（light＝原本顏色）
+function inboxApplyTheme() { document.documentElement.dataset.loeTheme = inbox.theme; }
 /* ---- 右上「選項」：固定開啟司機對話／記事本、自動標已讀、提示音（都記在這台電腦） ---- */
 function inboxOptionsButton() {
   const wrap = ih("div", { class: "loe-inbox-options" });
@@ -49,6 +51,13 @@ function inboxOptionsButton() {
       if (v) { inbox.notesOpen = true; inbox.notesCollapsed = false; if (chat && !inbox.notes.has(chat.key)) inboxLoadNotes(chat); }
       renderInboxNotes(); renderInboxThread();
     }, "可以收起，但不會關掉"),
+    ih("div", { class: "loe-inbox-options-group", text: "外觀" }),
+    ih("div", { class: "loe-inbox-option" },
+      ih("span", { class: "loe-inbox-option-icon", html: ic("moon") }),
+      ih("span", { class: "loe-inbox-option-text" }, ih("span", { text: "配色" }), ih("small", { text: "只套在收件匣（含派單、司機對話、記事本、通知）；LINE 官方頁本身沒有暗色" })),
+      ih("span", { class: "loe-inbox-seg", role: "radiogroup", "aria-label": "配色" }, ...INBOX_THEME_OPTIONS.map(([id, label]) =>
+        ih("button", { type: "button", class: inbox.theme === id ? "on" : "", role: "radio", "aria-checked": inbox.theme === id ? "true" : "false", text: label,
+          onclick: () => { set(INBOX_THEME_KEY, "theme", id); inboxApplyTheme(); renderInboxHeader(); } })))),
     ih("div", { class: "loe-inbox-options-group", text: "列表" }),
     row("eye-off", "不顯示官方帳號名稱", inbox.hideOaName, (v) => { set(INBOX_HIDE_OA_NAME_KEY, "hideOaName", v); renderInboxList(); }, "官方訊息每列只顯示群編（例如 0/），沒設群編的帳號仍顯示名稱"),
     ih("div", { class: "loe-inbox-options-group", text: "已讀" }),
@@ -290,4 +299,4 @@ function inboxAvatar(chat) {
   return img;
 }
 
-export { inboxApplyRail, inboxAvatar, inboxRenderAll, inboxToggleRail, inboxVisibleChats, renderInboxGate, renderInboxHeader, renderInboxRail };
+export { inboxApplyRail, inboxApplyTheme, inboxAvatar, inboxRenderAll, inboxToggleRail, inboxVisibleChats, renderInboxGate, renderInboxHeader, renderInboxRail };

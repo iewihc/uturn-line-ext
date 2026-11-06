@@ -14,7 +14,7 @@ import { inboxUnlockAudio } from "./notify.js";
 import { inboxLoadBoard } from "./order-status.js";
 import { inboxLoadOrders } from "./orders.js";
 import { inboxSend, inboxSendFiles, inboxSetReply } from "./send.js";
-import { inboxApplyRail, inboxRenderAll, inboxToggleRail, renderInboxGate, renderInboxHeader, renderInboxRail } from "./shell.js";
+import { inboxApplyRail, inboxApplyTheme, inboxRenderAll, inboxToggleRail, renderInboxGate, renderInboxHeader, renderInboxRail } from "./shell.js";
 import { hasAcceptedInboxTerms, showInboxTerms } from "./terms.js";
 import { renderInboxNotes } from "./chat-tools.js";
 import { renderInboxContents, renderInboxPicker, renderInboxToasts } from "./thread.js";
@@ -51,6 +51,7 @@ function bootInbox() {
   }, INBOX_ORDERS_REFRESH_MS);
   initInboxSide();
   initInboxColumns();
+  inboxApplyTheme(); // 外觀（亮／暗／跟隨系統）
   initInboxCollapse();
   initInboxSearch();
   // 使用者往上捲就不再自動捲到底（圖片載入時）
