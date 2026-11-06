@@ -79,7 +79,8 @@ function driverLiveOnMessage(fleet, env) {
   live.seen.add(env.id);
   if (live.seen.size > DRIVER_LIVE_SEEN_MAX) live.seen.delete(live.seen.values().next().value);
   if (!driverLiveIsMine(env, fleet) || driverChat.orderId === env.orderId) return; // 那張單的司機對話開著：已經看得到
-  inboxNotifyDriver({ orderId: env.orderId, shortId: env.shortId, driverNo: env.sender?.name, text: driverLiveText(env), chatKey: inboxOrderChatKey(env.orderId) });
+  // envelope 同後台 ChatTransportMessage：shortId、oriText（派單原文）都在裡面
+  inboxNotifyDriver({ orderId: env.orderId, shortId: env.shortId, oriText: env.oriText, driverNo: env.sender?.name, text: driverLiveText(env), chatKey: inboxOrderChatKey(env.orderId) });
 }
 
 function driverLiveConnect(fleet) {

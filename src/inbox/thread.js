@@ -308,6 +308,7 @@ function inboxDriverToastCard(t) {
       chat ? ih("span", { class: "loe-inbox-toast-who", text: chat.name, title: chat.name }) : null,
       t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則新訊息` }) : null,
     ),
+    t.oriText ? ih("div", { class: "loe-inbox-toast-ori", text: t.oriText, title: t.oriText }) : null, // 派單原文（小字，一行）
     ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
     chat ? ih("div", { class: "loe-inbox-toast-actions" },
       ih("button", { type: "button", class: "loe-inbox-btn primary", text: "司機對話", onclick: () => { close(); inboxOpenDriverChatFor(chat.key, t.orderId); } }),

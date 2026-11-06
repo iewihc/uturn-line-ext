@@ -346,6 +346,7 @@ function inboxTakeover() {
   .loe-inbox-toast-order { flex: 0 0 auto; font-weight: 600; color: #475569; }
   .loe-inbox-toast-who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .loe-inbox-toast-sub .loe-inbox-badge { flex: 0 0 auto; }
+  .loe-inbox-toast-ori { font-size: 11px; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
   .loe-inbox-toast-body { color: #374151; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .loe-inbox-toast-actions { display: flex; gap: 6px; }
   .loe-inbox-toast-actions .loe-inbox-btn { height: 28px; font-size: 12px; }

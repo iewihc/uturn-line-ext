@@ -31,10 +31,10 @@ function inboxNotify(chat, payload) {
 }
 // 司機對話新訊息（只有自己的單）：右上卡片（同一張單合併計數）＋提示音＋背景時的桌面通知。
 // chatKey＝這張單派自哪個收件匣對話（有才能「在收件匣開」）
-function inboxNotifyDriver({ orderId, shortId, driverNo, text, chatKey }) {
+function inboxNotifyDriver({ orderId, shortId, oriText, driverNo, text, chatKey }) {
   const key = `dchat:${orderId}`;
   const t = inbox.toasts.get(key) || { key, kind: "driver", orderId, count: 0, lines: [], timer: 0 };
-  Object.assign(t, { shortId: shortId || t.shortId || "", driverNo: driverNo || t.driverNo || "", chatKey: chatKey || t.chatKey || "" });
+  Object.assign(t, { shortId: shortId || t.shortId || "", oriText: oriText || t.oriText || "", driverNo: driverNo || t.driverNo || "", chatKey: chatKey || t.chatKey || "" });
   t.count += 1;
   t.lines.push(text || "[訊息]");
   if (t.lines.length > 3) t.lines.shift();
