@@ -41,11 +41,11 @@ function renderInboxList() {
           inbox.hideOaName && group ? null : ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(c.botId).slice(0, 6), title: inboxBotName(c.botId) }),
           group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `${inboxBotName(c.botId)}・派單預設群編：${group}` }) : null,
           c.pinnedAt ? ih("span", { class: "loe-inbox-pin", html: ic("pin"), title: "已釘選" }) : null,
-          ih("span", { class: "loe-inbox-row-name", text: c.name }),
+          ih("span", { class: "loe-inbox-row-name", text: c.name, title: c.name }), // 名字被「…」縮掉時滑過去看全名
           ih("span", { class: "loe-inbox-row-time", text: inboxTime(c.at) }),
         ),
         ih("span", { class: "loe-inbox-row-mid" },
-          ih("span", { class: "loe-inbox-row-preview", text: c.preview }),
+          ih("span", { class: "loe-inbox-row-preview", text: c.preview, title: c.preview || "" }),
           c.unread ? ih("span", { class: "loe-inbox-unread" + (c.unreadCount ? "" : " dot"), text: c.unreadCount ? String(c.unreadCount) : "" }) : null,
         ),
         ih("span", { class: "loe-inbox-row-meta" },
