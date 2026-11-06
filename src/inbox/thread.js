@@ -76,7 +76,7 @@ function renderInboxThread() {
       oaChip);
   }
   const notesCount = inbox.notes.get(chat.key)?.total;
-  thHead.append(
+  thHead.append(...[
     inboxAvatar(chat),
     ih("div", { class: "loe-inbox-th-title" },
       title,
@@ -98,7 +98,7 @@ function renderInboxThread() {
     // 選項「開啟對話自動標已讀」勾了就會自動標，手動鈕不再顯示
     inbox.autoRead ? null : ih("button", { type: "button", class: "loe-inbox-btn", text: "標為已讀", disabled: !chat.unread, onclick: () => inboxMarkRead(chat) }),
     inboxFlagButton(chat, "pin", "pin"),
-  );
+  ].filter(Boolean)); // 原生 append 會把 null 印成文字
   renderInboxToolsRight(chat);
   const th = inbox.threads.get(chat.key);
   if (!th || th.loading) thMsgs.append(ih("div", { class: "loe-inbox-empty", text: "讀取訊息中…" }));
