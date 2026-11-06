@@ -2,7 +2,7 @@
 import { httpGetJson } from "./core/backend.js";
 import { API_BASE } from "./core/constants.js";
 import { renderPrefixChip } from "./prefix.js";
-import { setChatOverrides, setPrefixForGid, setWebhook } from "./settings.js";
+import { setChatOverrides, setFleetSystemNoti, setPrefixForGid, setWebhook } from "./settings.js";
 
 // 套用一份車隊雲端設定（後端 /line-ext-config 回應）到本地：
 //   - official(無 chatId)：設該 OA 的群編前綴
@@ -31,6 +31,7 @@ function applyFleetConfig(data) {
   if (data && typeof data.discordWebhook === "string" && data.discordWebhook) {
     setWebhook(data.discordWebhook);
   }
+  if (data && data.systemNoti) setFleetSystemNoti(data.systemNoti); // 派單「系統自動通知」勾選框照車隊設定
   renderPrefixChip();
   return { gidCount, chatCount };
 }

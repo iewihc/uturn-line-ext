@@ -8,7 +8,7 @@ import { sendForward, tryApiDispatch } from "./forward.js";
 import { inboxFollowUp } from "./inbox/chat-tools.js";
 import { inboxReloadSelectedOrders } from "./inbox/orders.js";
 import { inboxSend } from "./inbox/send.js";
-import { getAutoReply, getCurrentOverride, getDispatchTemplate, getDispatcher, getMarkFollowUp, getMemoInclude, getPrefix, getSystemNoti, setAutoReply, setDispatchTemplate, setMarkFollowUp, setMemoInclude, setSystemNoti } from "./settings.js";
+import { getAutoReply, getCurrentOverride, getDispatchTemplate, getDispatcher, getFleetSystemNoti, getMarkFollowUp, getMemoInclude, getPrefix, getSystemNoti, setAutoReply, setDispatchTemplate, setMarkFollowUp, setMemoInclude, setSystemNoti } from "./settings.js";
 import { fillReplyTextarea } from "./ui/reply-input.js";
 import { toast } from "./ui/toast.js";
 
@@ -198,12 +198,22 @@ function openDispatchPopover(prefillAddress) {
   notiWrap.className = "loe-check loe-sysnoti-check";
   notiWrap.style.margin = "10px 0 4px";
   notiWrap.title = "司機承接、抵達、客上時，系統用你的懶惰蟲身份授權，依車隊複製模板自動傳訊息給這位客人";
+  // 車隊設定（後台 › 複製設定 › 懶惰蟲自動通知）：關閉＝鎖住不能勾；預設勾選＝每次開窗先勾好；列出會送哪些節點
+  const fleetNoti = getFleetSystemNoti();
+  const fleetNotiOff = !!fleetNoti && fleetNoti.enabled === false;
   const notiChk = document.createElement("input");
   notiChk.type = "checkbox";
-  notiChk.checked = getSystemNoti();
+  notiChk.disabled = fleetNotiOff;
+  notiChk.checked = !fleetNotiOff && (fleetNoti?.defaultOn === true || getSystemNoti());
   notiChk.addEventListener("change", () => setSystemNoti(notiChk.checked));
   const notiText = document.createElement("span");
-  notiText.textContent = "系統自動通知（承接／抵達／客上自動傳給客人）";
+  const notiNodes = fleetNoti && Array.isArray(fleetNoti.nodes) ? fleetNoti.nodes : null;
+  notiText.textContent = fleetNotiOff
+    ? "系統自動通知（車隊已關閉，後台 › 複製設定）"
+    : notiNodes
+      ? `系統自動通知（會送：${notiNodes.length ? notiNodes.join("、") : "車隊沒開任何節點"}）`
+      : "系統自動通知（承接／抵達／客上自動傳給客人）";
+  if (fleetNotiOff) notiWrap.style.opacity = "0.55";
   notiWrap.appendChild(notiChk);
   notiWrap.appendChild(notiText);
 

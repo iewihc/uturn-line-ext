@@ -1,5 +1,5 @@
 // 本機設定的讀寫：前綴（依官方帳號）、Webhook／後台帳號／車隊（全域）、派單視窗的勾選。
-import { AUTOREPLY_KEY, CHAT_OVERRIDE_KEY, DISPATCHER_KEY, DISPATCH_TEMPLATE_KEY, FLEET_KEY, MARK_FOLLOWUP_KEY, MEMO_INCLUDE_KEY, PREFIX_KEY, SYSTEM_NOTI_KEY, WEBHOOK_KEY } from "./core/constants.js";
+import { AUTOREPLY_KEY, CHAT_OVERRIDE_KEY, DISPATCHER_KEY, DISPATCH_TEMPLATE_KEY, FLEET_KEY, FLEET_SYSTEM_NOTI_KEY, MARK_FOLLOWUP_KEY, MEMO_INCLUDE_KEY, PREFIX_KEY, SYSTEM_NOTI_KEY, WEBHOOK_KEY } from "./core/constants.js";
 import { INBOX_MODE } from "./core/env.js";
 import { getChatId, getOaId } from "./core/page-context.js";
 import { storeGet, storeSet } from "./core/store.js";
@@ -113,6 +113,14 @@ const getAutoReply = autoReply.get, setAutoReply = autoReply.set;
 const getMemoInclude = memoInclude.get, setMemoInclude = memoInclude.set;
 const getMarkFollowUp = markFollowUp.get, setMarkFollowUp = markFollowUp.set;
 const getSystemNoti = systemNoti.get, setSystemNoti = systemNoti.set;
+// 車隊的系統自動通知設定（後台複製設定）：{ enabled, defaultOn, nodes }；沒拉過回 null（照舊不鎖）
+function getFleetSystemNoti() {
+  const v = storeGet(FLEET_SYSTEM_NOTI_KEY, null);
+  return v && typeof v === "object" ? v : null;
+}
+function setFleetSystemNoti(v) {
+  storeSet(FLEET_SYSTEM_NOTI_KEY, v && typeof v === "object" ? v : null);
+}
 function getDispatchTemplate() {
   const v = storeGet(DISPATCH_TEMPLATE_KEY, "");
   return typeof v === "string" ? v : "";
@@ -121,4 +129,4 @@ function setDispatchTemplate(name) {
   storeSet(DISPATCH_TEMPLATE_KEY, name || "");
 }
 
-export { fixEmailTypo, getAutoReply, getChatOverrides, getCurrentOverride, getDispatchTemplate, getDispatcher, getFleet, getMarkFollowUp, getMemoInclude, getPrefix, getPrefixForGid, getSystemNoti, getWebhook, setAutoReply, setChatOverrides, setDispatchTemplate, setDispatcher, setFleet, setMarkFollowUp, setMemoInclude, setPrefix, setPrefixForGid, setSystemNoti, setWebhook };
+export { fixEmailTypo, getAutoReply, getChatOverrides, getCurrentOverride, getDispatchTemplate, getDispatcher, getFleet, getFleetSystemNoti, getMarkFollowUp, getMemoInclude, getPrefix, getPrefixForGid, getSystemNoti, getWebhook, setAutoReply, setChatOverrides, setDispatchTemplate, setDispatcher, setFleet, setFleetSystemNoti, setMarkFollowUp, setMemoInclude, setPrefix, setPrefixForGid, setSystemNoti, setWebhook };
