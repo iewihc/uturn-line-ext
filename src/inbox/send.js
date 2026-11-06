@@ -41,12 +41,17 @@ async function inboxOpenChat(key) {
   if (chat && inbox.notesOpen && !inbox.notes.has(key)) inboxLoadNotes(chat);
   if (chat && chat.unread && inbox.autoRead) inboxMarkRead(chat); // 選項：開啟對話自動標已讀
   if (chat) inboxLoadOrders(chat);
-  if (!chat || inbox.threads.has(key)) return;
+  if (chat) await inboxLoadThread(chat, true);
+}
+// 載入訊息串（第一頁 50 則）。priority：使用者點開的，不排在輪詢後面；滑鼠移到列上也會先預抓（非 priority）
+async function inboxLoadThread(chat, priority = false) {
+  const key = chat.key;
+  if (inbox.threads.has(key)) return;
   const th = { list: [], loading: true, error: "" };
   inbox.threads.set(key, th);
-  renderInboxThread();
+  if (inbox.selected === key) renderInboxThread();
   try {
-    const data = await inboxApi("GET", `/api/v3/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`);
+    const data = await inboxApi("GET", `/api/v3/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`, undefined, false, { priority });
     // LINE 回新→舊，這裡翻成舊→新；載入期間 SSE 塞進來的保留在後面
     const items = (data?.list || []).filter((m) => m && (m.type === "message" || m.type === "messageSent")).reverse();
     // 列表裡的 chatRead 事件＝客人讀到哪，取最新的當水位
@@ -55,9 +60,20 @@ async function inboxOpenChat(key) {
     const seen = new Set(items.map((m) => m.message?.id).filter(Boolean));
     th.list = items.concat(th.list.filter((m) => !seen.has(m.message?.id)));
     th.backward = data?.backward || ""; // 往前翻頁的 token（訊息搜尋跳到舊訊息時用）
-  } catch (e) { th.error = e.message; }
+  } catch (e) { if (priority) th.error = e.message; else inbox.threads.delete(key); } // 預抓失敗就當沒抓過，點開再抓
   th.loading = false;
   if (inbox.selected === key) renderInboxThread();
+}
+// 滑鼠停在對話列上 150ms 就先把訊息串抓好，點下去幾乎不用等；同時最多一個在抓
+let prefetchTimer = 0, prefetching = false;
+function inboxPrefetchThread(key) {
+  clearTimeout(prefetchTimer);
+  prefetchTimer = setTimeout(async () => {
+    const chat = inbox.chats.get(key);
+    if (!chat || prefetching || inbox.threads.has(key)) return;
+    prefetching = true;
+    try { await inboxLoadThread(chat, false); } finally { prefetching = false; }
+  }, 150);
 }
 // 重抓這位客人的訊息，把還沒有的補進串裡（輪詢的帳號：清單只給最新一則，期間可能來了好幾則）
 async function inboxRefreshThread(chat) {
@@ -222,4 +238,4 @@ async function inboxSendFiles(files) {
   return results;
 }
 
-export { inboxAppendToThread, inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxRefreshThread, inboxSelectedChat, inboxSend, inboxSendFiles, inboxSendPayload, inboxSendSticker, inboxSetContext, inboxSetReply, inboxTextWithTokens };
+export { inboxAppendToThread, inboxPrefetchThread, inboxEmojiToken, inboxInsertAtCaret, inboxOpenChat, inboxRefreshThread, inboxSelectedChat, inboxSend, inboxSendFiles, inboxSendPayload, inboxSendSticker, inboxSetContext, inboxSetReply, inboxTextWithTokens };

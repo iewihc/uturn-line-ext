@@ -146,8 +146,9 @@ async function inboxCsrf(force) {
   return inbox.csrf;
 }
 // body 給 FormData 就是 multipart（檔案上傳，Content-Type 交給瀏覽器帶 boundary），其他一律 JSON
-async function inboxApi(method, path, body, retried = false) {
-  await inbox.limiter.acquire();
+// opts.priority：點開對話等使用者操作，不排在輪詢／看板的佇列後面
+async function inboxApi(method, path, body, retried = false, opts = {}) {
+  await inbox.limiter.acquire(undefined, !!opts.priority);
   const isForm = typeof FormData !== "undefined" && body instanceof FormData;
   const headers = { Accept: "application/json", "x-oa-chat-client-version": "20240513144702" };
   if (method !== "GET") {
@@ -159,8 +160,8 @@ async function inboxApi(method, path, body, retried = false) {
     method, credentials: "same-origin", cache: "no-store", headers,
     body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
   });
-  if (r.status === 429) { inbox.limiter.pauseUntilNextMinute(); return inboxApi(method, path, body, retried); }
-  if (r.status === 403 && method !== "GET" && !retried) { inbox.csrf = null; return inboxApi(method, path, body, true); }
+  if (r.status === 429) { inbox.limiter.pauseUntilNextMinute(); return inboxApi(method, path, body, retried, opts); }
+  if (r.status === 403 && method !== "GET" && !retried) { inbox.csrf = null; return inboxApi(method, path, body, true, opts); }
   if (r.status === 401) throw new Error("LINE 登入已失效，請先登入 chat.line.biz");
   if (!r.ok) { // LINE 錯誤內容是 { code, message? }，帶出來才看得出原因（例如 exceeds_note_limit）
     let detail = ""; try { const j = JSON.parse(await r.text()); detail = j?.message || j?.code || ""; } catch (_) {}

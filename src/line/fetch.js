@@ -11,7 +11,9 @@ function makeLineRateLimiter(perMinute = LINE_RATE_PER_MINUTE) {
   let nextSlot = 0, pausedUntil = 0;
   return {
     get pausedUntil() { return pausedUntil; },
-    async acquire(signal) {
+    // priority：使用者操作（點開對話）不排在輪詢／看板後面，只尊重 429 的暫停
+    async acquire(signal, priority = false) {
+      if (priority) { await sleepUntil(Math.max(Date.now(), pausedUntil), signal); return; }
       for (;;) {
         const at = Math.max(Date.now(), nextSlot, pausedUntil);
         nextSlot = at + interval;

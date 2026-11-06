@@ -6,7 +6,7 @@ import { inboxAiLabel, inboxQueueAi } from "./ai.js";
 import { inboxAssigneeLabel, inboxEnabledIds } from "./chats.js";
 import { INBOX_FILTERS, ih, inbox, inboxBotColor, inboxBotName, inboxGroupLabel, inboxTime } from "./core.js";
 import { inboxChatColumns, inboxRefreshBoards, orderColumnLabel, renderInboxOrderFilters } from "./order-status.js";
-import { inboxOpenChat } from "./send.js";
+import { inboxOpenChat, inboxPrefetchThread } from "./send.js";
 import { inboxAvatar, inboxVisibleChats } from "./shell.js";
 import { getChatOverrides, getPrefixForGid } from "../settings.js";
 
@@ -36,7 +36,7 @@ function renderInboxList() {
     const group = (overrides[c.key] && overrides[c.key].group) || getPrefixForGid(c.botId);
     const ai = inboxAiLabel(c);
     if (aiBots.get(c.botId) === true) inboxQueueAi(c);
-    const row = ih("button", { type: "button", class: "loe-inbox-row" + (selected ? " selected" : ""), "aria-current": selected ? "true" : null, onclick: () => inboxOpenChat(c.key) },
+    const row = ih("button", { type: "button", class: "loe-inbox-row" + (selected ? " selected" : ""), "aria-current": selected ? "true" : null, onclick: () => inboxOpenChat(c.key), onpointerenter: () => inboxPrefetchThread(c.key) },
       inboxAvatar(c),
       ih("span", { class: "loe-inbox-row-main" },
         ih("span", { class: "loe-inbox-row-top" },
