@@ -424,6 +424,7 @@ function inboxTakeover() {
   .loe-inbox-notif-head svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .loe-inbox-notif-head .loe-inbox-btn { height: 26px; font-size: 12px; }
   .loe-inbox-notif-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+  .loe-inbox-notif-list > * { flex: 0 0 auto; } /* 卡片不隨清單高度被壓扁（多則時整排擠成一行高） */
   .loe-inbox-notif .loe-inbox-toast { box-shadow: none; }
   .loe-inbox-toast-actions { margin-top: 2px; }
   .loe-inbox-toast-actions .loe-inbox-btn { height: 26px; font-size: 12px; padding: 0 9px; }
