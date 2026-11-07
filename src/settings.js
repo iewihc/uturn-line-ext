@@ -1,5 +1,5 @@
 // 本機設定的讀寫：前綴（依官方帳號）、Webhook／後台帳號／車隊（全域）、派單視窗的勾選。
-import { AUTOREPLY_KEY, CHAT_OVERRIDE_KEY, DISPATCHER_KEY, DISPATCH_TEMPLATE_KEY, FLEET_KEY, FLEET_SYSTEM_NOTI_KEY, MARK_FOLLOWUP_KEY, MEMO_INCLUDE_KEY, PREFIX_KEY, SYSTEM_NOTI_KEY, WEBHOOK_KEY } from "./core/constants.js";
+import { AUTOREPLY_KEY, CHAT_OVERRIDE_KEY, DISPATCHER_KEY, DISPATCH_TEMPLATE_KEY, DRIVER_RELAY_KEY, FLEET_KEY, FLEET_SYSTEM_NOTI_KEY, MARK_FOLLOWUP_KEY, MEMO_INCLUDE_KEY, PREFIX_KEY, SYSTEM_NOTI_KEY, WEBHOOK_KEY } from "./core/constants.js";
 import { INBOX_MODE } from "./core/env.js";
 import { getChatId, getOaId } from "./core/page-context.js";
 import { storeGet, storeSet } from "./core/store.js";
@@ -109,10 +109,12 @@ const autoReply = boolSetting(AUTOREPLY_KEY, false); // 派單後自動回覆客
 const memoInclude = boolSetting(MEMO_INCLUDE_KEY, true); // 帶入乘客姓名（預設帶入）
 const markFollowUp = boolSetting(MARK_FOLLOWUP_KEY, true); // 標記待處理（預設標記）
 const systemNoti = boolSetting(SYSTEM_NOTI_KEY, false); // 系統自動通知（預設不開）
+const driverRelay = boolSetting(DRIVER_RELAY_KEY, false); // 司機↔客人轉傳（預設不開）
 const getAutoReply = autoReply.get, setAutoReply = autoReply.set;
 const getMemoInclude = memoInclude.get, setMemoInclude = memoInclude.set;
 const getMarkFollowUp = markFollowUp.get, setMarkFollowUp = markFollowUp.set;
 const getSystemNoti = systemNoti.get, setSystemNoti = systemNoti.set;
+const getDriverRelay = driverRelay.get, setDriverRelay = driverRelay.set;
 // 車隊的系統自動通知設定（後台複製設定）：{ enabled, defaultOn, nodes }；沒拉過回 null（照舊不鎖）
 function getFleetSystemNoti() {
   const v = storeGet(FLEET_SYSTEM_NOTI_KEY, null);
@@ -129,4 +131,4 @@ function setDispatchTemplate(name) {
   storeSet(DISPATCH_TEMPLATE_KEY, name || "");
 }
 
-export { fixEmailTypo, getAutoReply, getChatOverrides, getCurrentOverride, getDispatchTemplate, getDispatcher, getFleet, getFleetSystemNoti, getMarkFollowUp, getMemoInclude, getPrefix, getPrefixForGid, getSystemNoti, getWebhook, setAutoReply, setChatOverrides, setDispatchTemplate, setDispatcher, setFleet, setFleetSystemNoti, setMarkFollowUp, setMemoInclude, setPrefix, setPrefixForGid, setSystemNoti, setWebhook };
+export { fixEmailTypo, getAutoReply, getChatOverrides, getCurrentOverride, getDispatchTemplate, getDispatcher, getDriverRelay, getFleet, getFleetSystemNoti, getMarkFollowUp, getMemoInclude, getPrefix, getPrefixForGid, getSystemNoti, getWebhook, setAutoReply, setChatOverrides, setDispatchTemplate, setDispatcher, setDriverRelay, setFleet, setFleetSystemNoti, setMarkFollowUp, setMemoInclude, setPrefix, setPrefixForGid, setSystemNoti, setWebhook };

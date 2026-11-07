@@ -48,12 +48,14 @@ function postToDiscord(url, content) {
 /* 直接派單（API 優先）：後端同步建單、返回即結果。
  * 回 null = 後端不可達（網路錯誤 / 404 舊後端 / 5xx）→ caller fallback 到 webhook 老路；
  * 回物件（含 success:false 業務失敗）= 明確結果，不再 fallback（避免失敗單被 webhook 重複派出）。 */
-async function tryApiDispatch(payload, isSystemNoti) {
+// driverRelay：司機↔客人轉傳（司機在 App 傳給客人的話加「司機說：」轉到這個對話；要有 linechaturl: 才有作用）
+async function tryApiDispatch(payload, isSystemNoti, driverRelay) {
   try {
     return await httpSendJson("POST", `${API_BASE}/line-dispatch`, {
       text: payload,
       dispatcher: getDispatcher(),
       isSystemNoti: !!isSystemNoti,
+      driverRelay: !!driverRelay,
     });
   } catch (e) {
     return null;

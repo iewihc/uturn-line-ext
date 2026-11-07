@@ -586,6 +586,9 @@ const STYLE_CSS = `
     .loe-ord-btn.on { background: var(--loe-info-soft, #eef4ff); border-color: ${BLUE}; color: ${BLUE}; }
     .loe-ord-btn.noti { color: var(--loe-muted, #6b7280); }
     .loe-ord-btn.noti.on { background: var(--loe-primary-soft, #ecfdf3); border-color: var(--loe-primary, #16a34a); color: var(--loe-primary-dark, #15803d); font-weight: 600; }
+    .loe-ord-btn.relay { color: var(--loe-muted, #6b7280); }
+    .loe-ord-btn.relay.on { background: ${BLUE}; border-color: ${BLUE}; color: #fff; font-weight: 600; } /* 轉傳中：實心強調（關著＝外框） */
+    .loe-ord-btn.relay.on:hover:not(:disabled) { background: ${BLUE_HOVER}; border-color: ${BLUE_HOVER}; }
     .loe-ord-btn.cancel { color: var(--loe-error, #b91c1c); border-color: var(--loe-error-line, #fecaca); }
     .loe-ord-btn.cancel:hover:not(:disabled) { background: var(--loe-error-soft, #fef2f2); border-color: var(--loe-error-line, #f87171); }
     .loe-ord-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -629,6 +632,8 @@ const STYLE_CSS = `
     .loe-dchat-msg.in { align-self: flex-start; align-items: flex-start; }
     .loe-dchat-msg.out { align-self: flex-end; align-items: flex-end; }
     .loe-dchat-who { font-size: 11px; color: var(--loe-muted, #64748b); margin: 6px 4px 2px; }
+    .loe-dchat-relay { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid ${BLUE}; border-radius: 4px; color: ${BLUE}; font-size: 11px; font-weight: 600; }
+    .loe-dchat-relay.failed { margin: 0 4px 2px; border-color: var(--loe-error, #b91c1c); color: var(--loe-error, #b91c1c); align-self: flex-start; }
     .loe-dchat-bubble { padding: 7px 11px; border-radius: 14px; background: var(--loe-paper, #fff); color: var(--loe-fg, #1f2937); white-space: pre-wrap; word-break: break-word; line-height: 1.45; box-shadow: 0 1px 1px rgba(15,23,42,.05); }
     .loe-dchat-msg.out .loe-dchat-bubble { background: var(--loe-info-soft, #dbeafe); }
     .loe-dchat-msg.out.mine .loe-dchat-bubble { background: ${BLUE}; color: #fff; }

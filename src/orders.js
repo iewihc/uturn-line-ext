@@ -44,6 +44,15 @@ function setOrderSystemNoti(order, enabled, onChange) {
     else toast(`${order.shortId} 自動通知已${enabled ? "開啟" : "關閉"}`, "ok", 2500);
   }, onChange);
 }
+// 司機↔客人轉傳（懶惰蟲單）：開著時司機在 App「聯繫客戶」的話加「司機說：」轉到這個對話；關掉司機只能聯繫調度
+function setOrderDriverRelay(order, enabled, onChange) {
+  return runOrderAction(order, enabled ? "開啟司機↔客人" : "暫停司機↔客人", async () => {
+    const r = await lineExtOrderApi("PUT", order.id, "/driver-relay", { enabled });
+    order.driverRelay = !!r.driverRelay;
+    if (r.warning) toast(`${order.shortId} 司機↔客人已開啟，但${r.warning}`, "warn", 7000);
+    else toast(`${order.shortId} 司機↔客人已${order.driverRelay ? "開啟" : "暫停"}`, "ok", 2500);
+  }, onChange);
+}
 function cancelLineExtOrder(order, onChange) {
   const note = order.hasDriver ? "\n司機已接單：會依車隊規則判定一般／逾時取消，並通知司機。" : "";
   if (!window.confirm(`取消訂單 ${order.shortId || ""}？${note}`)) return;
@@ -90,6 +99,10 @@ function orderRow(o, { onChange, onChat }) {
               : "點擊開啟：之後司機承接／抵達，會用建單人員的懶惰蟲依車隊複製模板自動傳給客人（已過的不補送）",
             onclick: () => setOrderSystemNoti(o, !o.isSystemNoti, onChange) },
             ih("span", { text: o.isSystemNoti ? `自動通知 ${noti}` : "自動通知 關" })),
+          o.driverRelayAvailable ? ih("button", { type: "button", class: "loe-ord-btn relay" + (o.driverRelay ? " on" : ""), html: ic("arrow-left-right"), disabled: busy,
+            title: `${o.driverRelay ? "轉傳中" : "已暫停"}。開著：司機在 App 傳給客人的話會加「司機說：」轉到這個對話；點一下切換`,
+            onclick: () => setOrderDriverRelay(o, !o.driverRelay, onChange) },
+            ih("span", { text: o.driverRelay ? "司機↔客人" : "司機↔客人 關" })) : null,
           o.hasDriver && onChat
             ? ih("button", { type: "button", class: "loe-ord-btn" + (driverChat.orderId === o.id ? " on" : ""), html: ic("message-square"),
               title: "和這張單的司機對話（同 admin 調度中心的司機對話）", onclick: () => onChat(o.id) },
@@ -101,4 +114,4 @@ function orderRow(o, { onChange, onChat }) {
     ].filter(Boolean)); // 原生 append 會把 null 印成文字
 }
 
-export { LINE_CHAT_PROBE_MAX_IDS, LINE_CHAT_RESOLVE_BATCH, cancelLineExtOrder, driverChatApi, lineMessageIds, liveOrders, orderActionBusy, orderNotiSummary, orderRow, resolveLineChats, setOrderSystemNoti };
+export { LINE_CHAT_PROBE_MAX_IDS, LINE_CHAT_RESOLVE_BATCH, cancelLineExtOrder, driverChatApi, lineMessageIds, liveOrders, orderActionBusy, orderNotiSummary, orderRow, resolveLineChats, setOrderDriverRelay, setOrderSystemNoti };

@@ -8,7 +8,7 @@ import { sendForward, tryApiDispatch } from "./forward.js";
 import { inboxFollowUp } from "./inbox/chat-tools.js";
 import { inboxReloadSelectedOrders } from "./inbox/orders.js";
 import { inboxSend } from "./inbox/send.js";
-import { getAutoReply, getCurrentOverride, getDispatchTemplate, getDispatcher, getFleetSystemNoti, getMarkFollowUp, getMemoInclude, getPrefix, getSystemNoti, setAutoReply, setDispatchTemplate, setMarkFollowUp, setMemoInclude, setSystemNoti } from "./settings.js";
+import { getAutoReply, getCurrentOverride, getDispatchTemplate, getDispatcher, getDriverRelay, getFleetSystemNoti, getMarkFollowUp, getMemoInclude, getPrefix, getSystemNoti, setAutoReply, setDispatchTemplate, setDriverRelay, setMarkFollowUp, setMemoInclude, setSystemNoti } from "./settings.js";
 import { fillReplyTextarea } from "./ui/reply-input.js";
 import { toast } from "./ui/toast.js";
 
@@ -250,6 +250,21 @@ function openDispatchPopover(prefillAddress) {
   notiWrap.appendChild(notiChk);
   notiWrap.appendChild(notiText);
 
+  // 司機↔客人轉傳：司機在 App「聯繫客戶」傳的話，後端用建單人員的懶惰蟲身份授權加「司機說：」送進這個對話；
+  // 預設不勾、勾過記住；派單後在訂單列「司機↔客人」隨時開關。沒有聊天室（不帶 linechaturl:）時不會有作用
+  const relayWrap = document.createElement("label");
+  relayWrap.className = "loe-check loe-sysnoti-check";
+  relayWrap.style.margin = "4px 0";
+  relayWrap.title = "司機可在 App 直接跟客人說話，訊息會加「司機說：」轉到這個對話；派單後可在訂單列隨時開關";
+  const relayChk = document.createElement("input");
+  relayChk.type = "checkbox";
+  relayChk.checked = getDriverRelay();
+  relayChk.addEventListener("change", () => setDriverRelay(relayChk.checked));
+  const relayText = document.createElement("span");
+  relayText.textContent = "司機↔客人轉傳（司機可在 App 直接跟客人說話，會加「司機說：」）";
+  relayWrap.appendChild(relayChk);
+  relayWrap.appendChild(relayText);
+
   // 依設定檔決定預設：此對話有店配覆寫就用覆寫的群編＋固定上車地址，否則用此帳號前綴
   const override = getCurrentOverride();
 
@@ -400,7 +415,7 @@ function openDispatchPopover(prefillAddress) {
     sendBtn.disabled = true;
     try {
       // 1) 直接派單 API：返回即建單結果（成功=綠、失敗=紅，失敗不回覆客人不標記）
-      const api = await tryApiDispatch(payload, notiChk.checked);
+      const api = await tryApiDispatch(payload, notiChk.checked, relayChk.checked);
       if (api) {
         closeDispatchPopover();
         if (api.success) {
@@ -409,7 +424,8 @@ function openDispatchPopover(prefillAddress) {
             `✅ 派單成功：${api.oriText || ""}` +
               (api.shortId ? `（單號 ${api.shortId}）` : "") +
               (auto ? "，已自動回覆客人" : "") +
-              (api.systemNoti ? "，已開系統自動通知" : ""),
+              (api.systemNoti ? "，已開系統自動通知" : "") +
+              (relayChk.checked && lineUrlSuffix() ? "，已開司機↔客人轉傳" : ""),
             "ok",
             5000,
           );
@@ -480,6 +496,7 @@ function openDispatchPopover(prefillAddress) {
   pop.appendChild(previewLabel);
   pop.appendChild(preview);
   pop.appendChild(notiWrap); // 系統自動通知放在「派單後自動回覆客人」正上方
+  pop.appendChild(relayWrap);
   pop.appendChild(chkWrap);
   pop.appendChild(actions);
   document.body.appendChild(pop);
