@@ -1,5 +1,6 @@
 // 收件匣外框：標頭、授權閘門、左欄官方帳號列表、啟動與身份授權。
 import { startDriverLive } from "./driver-live.js";
+import { applyHandoffLive } from "./handoff-live.js";
 import { aiBots } from "../ai-toggle.js";
 import { board, closeBoard, openBoard } from "../board.js";
 import { hasLineExtAuth, lineAuthDoneText, saveLineCookie } from "../core/backend.js";
@@ -8,7 +9,7 @@ import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
 import { inboxApplyPollFallback, inboxConnect, inboxEnabledIds, inboxLoadChats, inboxSetEnabled, inboxUnreadTotal } from "./chats.js";
 import { inboxLoadNotes, inboxMarkRead, renderInboxNotes } from "./chat-tools.js";
-import { INBOX_AUTO_READ_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_SOUND_KEY, INBOX_THEME_KEY, INBOX_THEME_OPTIONS, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
+import { INBOX_AUTO_READ_KEY, INBOX_HANDOFF_ONLY_KEY, INBOX_HIDE_OA_NAME_KEY, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_RAIL_COLLAPSED_KEY, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_SOUND_KEY, INBOX_THEME_KEY, INBOX_THEME_OPTIONS, ih, inbox, inboxBotName, inboxGroupLabel, inboxInitial } from "./core.js";
 import { renderInboxList } from "./list.js";
 import { inboxBeep, inboxDismissAllToasts, inboxSoundReady } from "./notify.js";
 import { inboxChatColumns, inboxLoadBoard, inboxQueueLink, inboxScheduleBoard } from "./order-status.js";
@@ -67,6 +68,8 @@ function inboxOptionsButton() {
     row("refresh", "超過連線上限改用輪詢", inbox.pollFallback, (v) => { set(INBOX_POLL_KEY, "pollFallback", v); inboxApplyPollFallback(); },
       "LINE 每個登入約 19 條即時連線，超過官方開啟數 LINE 會限制。不勾＝那些帳號只等名額（收不到新訊息）；勾了＝每 12 秒輪詢一次"),
     ih("div", { class: "loe-inbox-options-group", text: "通知" }),
+    row("headset", "只通知轉人工（客叫單）", inbox.handoffOnly, (v) => { set(INBOX_HANDOFF_ONLY_KEY, "handoffOnly", v); applyHandoffLive(); renderInboxOrders(); },
+      "客叫／AI 叫車的單：司機訊息、AI 處理中的客人訊息都不跳通知、不自動開司機對話；只有客人轉人工（含轉人工後再傳的話）才通知"),
     (() => { // 右上角最多疊幾張（1～5）；其餘摺進鈴鐺
       const [min, max] = INBOX_TOAST_MAX_RANGE;
       const setMax = (n) => { inbox.toastMax = Math.min(max, Math.max(min, n)); storeSet(INBOX_TOAST_MAX_KEY, inbox.toastMax); renderInboxHeader(); renderInboxToasts(); };
@@ -178,6 +181,7 @@ function inboxStart() {
   }
   inboxScheduleBoard();
   startDriverLive();
+  applyHandoffLive();
 }
 // 收件匣的身份授權：同 LINE 後台選單的「身份授權」，用任一官方帳號讀目前的 LINE 登入；授權後馬上重抓需要 KEY 的資料
 async function inboxAuthorize(e) {

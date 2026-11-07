@@ -307,6 +307,7 @@ function renderInboxNotifDrawer(all) {
 // 一張通知卡（右上角堆疊與鈴鐺清單共用）
 function inboxToastCard(t) {
   if (t.kind === "driver") return inboxDriverToastCard(t);
+  if (t.kind === "handoff") return inboxHandoffToastCard(t);
   const chat = inbox.chats.get(t.key);
   if (!chat) return null;
   const chip = ih("span", { class: "loe-inbox-oa-chip", text: inboxBotName(chat.botId).slice(0, 8), title: inboxBotName(chat.botId) });
@@ -320,6 +321,7 @@ function inboxToastCard(t) {
       inbox.hideOaName && group ? null : chip,
       group ? ih("span", { class: "loe-inbox-tag group", text: inboxGroupLabel(group) || group, title: `${inboxBotName(chat.botId)}・派單預設群編：${group}` }) : null,
       ih("strong", { class: "loe-inbox-row-name", text: chat.name, title: chat.name }),
+      t.handoff ? ih("span", { class: "loe-inbox-tag handoff", text: t.handoff }) : null,
       t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則` }) : null,
       ih("span", { class: "loe-inbox-toast-time", text: inboxTime(t.at || Date.now()) }),
       ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知", html: ic("x"), onclick: () => { inboxDismissToast(t.key); renderInboxToasts(); } }),
@@ -361,6 +363,29 @@ function inboxDriverToastCard(t) {
   );
   if (chat) card.style.borderLeftColor = inboxBotColor(chat.botId);
   return card;
+}
+
+// 轉人工通知卡（對不到收件匣對話時）：官方帳號＋客人、單號、客人的話；知道聊天室就給「開官方」
+function inboxHandoffToastCard(t) {
+  const close = () => { inboxDismissToast(t.key); renderInboxToasts(); };
+  return ih("div", { class: "loe-inbox-toast handoff", role: "status" },
+    ih("div", { class: "loe-inbox-toast-top" },
+      ih("span", { class: "loe-inbox-tag handoff", text: t.handoff || "轉人工" }),
+      ih("strong", { class: "loe-inbox-row-name", text: t.customerName || "客人", title: t.customerName || "" }),
+      ih("span", { class: "loe-inbox-toast-time", text: inboxTime(t.at || Date.now()) }),
+      ih("button", { type: "button", class: "loe-inbox-x", "aria-label": "關閉通知", html: ic("x"), onclick: close }),
+    ),
+    ih("div", { class: "loe-inbox-toast-sub" },
+      t.officialName ? ih("span", { class: "loe-inbox-toast-who", text: t.officialName, title: t.officialName }) : null,
+      t.shortId ? ih("span", { class: "loe-inbox-toast-order", text: t.shortId, title: "訂單" }) : null,
+      t.count > 1 ? ih("span", { class: "loe-inbox-badge", text: `${t.count} 則` }) : null,
+    ),
+    ih("div", { class: "loe-inbox-toast-body", text: t.lines.join("\n") }),
+    t.chatUrl ? ih("div", { class: "loe-inbox-toast-actions" },
+      ih("a", { class: "loe-inbox-btn primary", href: t.chatUrl, target: "_blank", rel: "noopener", html: ic("external-link"), onclick: close }, ih("span", { text: "開官方" })),
+    ) : null,
+    t.folded ? null : ih("span", { class: "loe-inbox-toast-timer" }),
+  );
 }
 
 export { inboxInsertText, renderInboxContents, renderInboxPicker, renderInboxThread, renderInboxToasts };

@@ -184,6 +184,7 @@ function inboxTakeover() {
   .loe-inbox-prefix.empty { color: var(--loe-muted); font-weight: 400; }
   .loe-inbox-tag.ai-on { color: var(--loe-ai); }
   .loe-inbox-tag.ai-human { color: var(--loe-warn); }
+  .loe-inbox-tag.handoff { color: var(--loe-error); font-weight: 700; } /* 轉人工通知（同後台調度中心紅色轉人工列） */
   .loe-inbox-tag.ai-unmatched { color: var(--loe-muted); }
   .loe-inbox-oa-name { display: flex; align-items: center; gap: 5px; }
   .loe-inbox-oa-name > .loe-inbox-oa-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -418,6 +419,7 @@ function inboxTakeover() {
   .loe-inbox-toast-body { color: var(--loe-fg2); white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
   .loe-inbox-toast-actions { display: flex; gap: 6px; }
   .loe-inbox-toast { position: relative; overflow: hidden; }
+  .loe-inbox-toast.handoff { border-left-color: var(--loe-error); }
   .loe-inbox-toast-time { flex: 0 0 auto; font-size: 11px; color: var(--loe-faint); }
   .loe-inbox-toast-top > .loe-inbox-x { flex: 0 0 auto; }
   /* 右上角的卡：露出期間底部一條藍線倒數（CSS 動畫，時間同 INBOX_TOAST_MS） */

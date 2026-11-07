@@ -25,39 +25,47 @@ function inboxToastTouch(t) {
   inbox.toasts.delete(t.key); inbox.toasts.set(t.key, t); // 重新插到最後＝最新
   while (inbox.toasts.size > INBOX_TOAST_MAX_KEPT) { const oldest = inbox.toasts.keys().next().value; clearTimeout(inbox.toasts.get(oldest)?.timer); inbox.toasts.delete(oldest); }
 }
-function inboxNotify(chat, payload) {
-  const key = chat.key;
-  const t = inbox.toasts.get(key) || { key, count: 0, lines: [], timer: 0 };
+// 通知卡加一則：同一個 key 合併計數、只留最近 3 則；init 只在第一次建立時用，fields 每次覆寫（空值不蓋掉舊的）
+function inboxPushToast(key, init, fields, line) {
+  const t = inbox.toasts.get(key) || { key, count: 0, lines: [], timer: 0, ...init };
+  for (const [k, v] of Object.entries(fields || {})) if (v) t[k] = v;
   t.count += 1;
-  t.lines.push(inboxPreview(payload) || "[訊息]");
+  t.lines.push(line || "[訊息]");
   if (t.lines.length > 3) t.lines.shift();
   inboxToastTouch(t);
+  return t;
+}
+// 提示音＋背景時的桌面通知（點了回到收件匣）
+function inboxAlert(title, t, onOpen) {
   if (inbox.sound) inboxBeep();
   if (document.hidden && typeof Notification === "function" && Notification.permission === "granted") {
     try {
-      const n = new Notification(`${inboxBotName(chat.botId)}・${chat.name}`, { body: t.lines.join("\n"), tag: key });
-      n.onclick = () => { window.focus(); inboxOpenChat(key); n.close(); };
+      const n = new Notification(title, { body: t.lines.join("\n"), tag: t.key });
+      n.onclick = () => { window.focus(); onOpen?.(); n.close(); };
     } catch (_) {}
   }
 }
-// 司機對話新訊息（只有自己的單）：右上卡片（同一張單合併計數）＋提示音＋背景時的桌面通知。
-// chatKey＝這張單派自哪個收件匣對話（有才能「在收件匣開」）
+// 客人來訊（同一位客人合併計數）；extra.handoff＝轉人工原因（卡片標「轉人工」）
+function inboxNotify(chat, payload, extra) {
+  const t = inboxPushToast(chat.key, {}, extra, inboxPreview(payload));
+  inboxAlert(`${inboxBotName(chat.botId)}・${chat.name}`, t, () => inboxOpenChat(chat.key));
+}
+// 司機對話新訊息（只有自己的單）：同一張單合併計數。chatKey＝這張單派自哪個收件匣對話（有才能「在收件匣開」）
 function inboxNotifyDriver({ orderId, shortId, oriText, driverNo, text, chatKey }) {
-  const key = `dchat:${orderId}`;
-  const t = inbox.toasts.get(key) || { key, kind: "driver", orderId, count: 0, lines: [], timer: 0 };
-  Object.assign(t, { shortId: shortId || t.shortId || "", oriText: oriText || t.oriText || "", driverNo: driverNo || t.driverNo || "", chatKey: chatKey || t.chatKey || "" });
-  t.count += 1;
-  t.lines.push(text || "[訊息]");
-  if (t.lines.length > 3) t.lines.shift();
-  inboxToastTouch(t);
+  const t = inboxPushToast(`dchat:${orderId}`, { kind: "driver", orderId }, { shortId, oriText, driverNo, chatKey }, text);
   renderInboxToasts();
-  if (inbox.sound) inboxBeep();
-  if (document.hidden && typeof Notification === "function" && Notification.permission === "granted") {
-    try {
-      const n = new Notification(`司機 ${String(t.driverNo || "").replace(/^[^|]*\|/, "")}・${t.shortId}`, { body: t.lines.join("\n"), tag: key });
-      n.onclick = () => { window.focus(); n.close(); };
-    } catch (_) {}
+  inboxAlert(`司機 ${String(t.driverNo || "").replace(/^[^|]*\|/, "")}・${t.shortId}`, t);
+}
+// AI 客服轉人工／轉人工中客人來訊（選項「只通知轉人工」）：對得到收件匣的對話就併進那位客人的卡片，
+// 對不到（帳號沒開、還沒對應）另開一張轉人工卡，同一位客人合併。
+function inboxNotifyHandoff({ chatKey, conversationId, chatUrl, customerName, officialName, shortId, reason, text }) {
+  const chat = chatKey && inbox.chats.get(chatKey);
+  if (chat) inboxNotify(chat, { type: "message", message: { type: "text", text } }, { handoff: reason });
+  else {
+    const t = inboxPushToast(`handoff:${conversationId || chatUrl}`, { kind: "handoff" }, { customerName, officialName, shortId, chatUrl, handoff: reason }, text);
+    inboxAlert(`轉人工・${[officialName, customerName].filter(Boolean).join(" ")}`, t);
   }
+  renderInboxToasts();
 }
 // 不載外部音檔（CSP／離線都不受影響）：Web Audio 兩個短音
 function inboxAudio() {
@@ -114,4 +122,4 @@ function playTwoTone(ctx) {
 }
 const inboxSoundReady = () => !inbox.sound || (inbox.audio && inbox.audio.state === "running");
 
-export { inboxBeep, inboxDismissAllToasts, inboxDismissToast, inboxUnlockAudio, inboxNotify, inboxNotifyDriver, inboxSoundReady, playTwoTone };
+export { inboxBeep, inboxDismissAllToasts, inboxDismissToast, inboxUnlockAudio, inboxNotify, inboxNotifyDriver, inboxNotifyHandoff, inboxSoundReady, playTwoTone };

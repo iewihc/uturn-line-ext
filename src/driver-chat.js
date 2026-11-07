@@ -2,7 +2,7 @@
 import { INBOX_MODE } from "./core/env.js";
 import { ic } from "./core/icons.js";
 import { storeGet, storeSet } from "./core/store.js";
-import { ih, inbox, inboxTime } from "./inbox/core.js";
+import { ih, inbox, inboxMutedOrder, inboxTime } from "./inbox/core.js";
 import { inboxLinkify } from "./inbox/media.js";
 import { inboxBeep, playTwoTone } from "./inbox/notify.js";
 import { inboxToggleDchatDock, renderInboxOrders } from "./inbox/orders.js";
@@ -50,10 +50,11 @@ function driverChatMarkSeen(orderId, iso) {
   if (keys.length > DRIVER_CHAT_SEEN_MAX) keys.sort((a, b) => m[a] - m[b]).slice(0, keys.length - DRIVER_CHAT_SEEN_MAX).forEach((k) => delete m[k]);
   storeSet(DRIVER_CHAT_SEEN_KEY, m);
 }
-// 司機講了話、調度還沒看（目前開著的那張不算）
+// 司機講了話、調度還沒看（目前開著的那張不算；收件匣選項「只通知轉人工」時客叫／AI 單沒轉人工不標）
 function driverChatUnread(order) {
   const t = msOf(order && order.lastDriverMessageAt);
-  return !!t && driverChat.orderId !== order.id && (driverChatSeen()[order.id] || 0) < t;
+  if (!t || driverChat.orderId === order.id || (INBOX_MODE && inboxMutedOrder(order))) return false;
+  return (driverChatSeen()[order.id] || 0) < t;
 }
 // 兩個短音；收件匣用收件匣的提示音開關
 let driverChatAudio = null;

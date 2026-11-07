@@ -2,7 +2,7 @@
 import { ic } from "../core/icons.js";
 import { storeSet } from "../core/store.js";
 import { closeDriverChat, driverChat, driverChatDock, openDriverChat, renderDriverChatHead, syncDriverChatOrders } from "../driver-chat.js";
-import { INBOX_DCHAT_DOCK_KEY, INBOX_ORDERS_COLLAPSED_KEY, ih, inbox } from "./core.js";
+import { INBOX_DCHAT_DOCK_KEY, INBOX_ORDERS_COLLAPSED_KEY, ih, inbox, inboxMutedOrder } from "./core.js";
 import { INBOX_BOARD_AFTER_ACTION_MS, inboxLoadBoard, inboxPatchBoard } from "./order-status.js";
 import { inboxOpenChat } from "./send.js";
 import { renderInboxSide } from "./side.js";
@@ -32,11 +32,12 @@ async function inboxLoadOrders(chat) {
 const inboxHasDriver = (list) => liveOrders(list).some((o) => o.hasDriver);
 // 選項「固定開啟司機對話」：選到有司機的訂單就自動打開（多台開第一台）；司機訊息通知卡點進來的一律開那一台。
 // 同一位客人手動關掉後不再自動開，換一位客人或點通知卡才會再開。自動打開不搶客人輸入框的游標。
+// 選項「只通知轉人工」：客叫／AI 單沒轉人工不自動開（按訂單列「司機對話」照樣開得了）。
 function inboxAutoOpenDriverChat(chat, list) {
   const withDriver = liveOrders(list).filter((o) => o.hasDriver);
   const want = inbox.dchatWant && withDriver.find((o) => o.id === inbox.dchatWant);
   if (!want && (!inbox.pinDchat || inbox.dchatAutoFor === chat.key || driverChat.host === inbox.el.dchat)) return;
-  const target = want || withDriver[0];
+  const target = want || withDriver.find((o) => !inboxMutedOrder(o));
   if (!target) return;
   inbox.dchatWant = "";
   inbox.dchatAutoFor = chat.key;

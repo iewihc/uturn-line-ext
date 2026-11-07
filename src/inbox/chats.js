@@ -1,4 +1,5 @@
 // 收件匣資料層：對話模型、官方帳號清單、SSE 連線與重連、對話載入與事件更新。
+import { aiBots } from "../ai-toggle.js";
 import { storeSet } from "../core/store.js";
 import { inboxProbeAi } from "./ai.js";
 import { inboxMarkRead } from "./chat-tools.js";
@@ -213,7 +214,7 @@ function inboxOnMessageEvent(chat, key, sub, payload) {
   chat.unreadCount += 1;
   // 選項「自動標已讀」：正在看的這位客人又傳來，畫面在前景就直接標已讀、不跳通知
   if (inbox.autoRead && inbox.selected === key && document.visibilityState === "visible") inboxMarkRead(chat);
-  else inboxNotify(chat, payload);
+  else if (!(inbox.handoffOnly && aiBots.get(chat.botId) === true)) inboxNotify(chat, payload); // 只通知轉人工：有 AI 的帳號改由轉人工事件提醒
 }
 function inboxScheduleReconnect(c, why) {
   if (!inbox.enabled.has(c.botId)) { c.status = "off"; c.error = ""; return renderInboxRail(); }

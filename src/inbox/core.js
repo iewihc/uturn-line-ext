@@ -32,6 +32,7 @@ const INBOX_PIN_DCHAT_KEY = "loe_inbox_pin_dchat_v1"; // 選項：固定開啟�
 const INBOX_PIN_NOTES_KEY = "loe_inbox_pin_notes_v1"; // 選項：固定開啟記事本（預設關）
 const INBOX_HIDE_OA_NAME_KEY = "loe_inbox_hide_oa_name_v1"; // 選項：官方訊息列表不顯示官方帳號名稱（有群編時只顯示群編）
 const INBOX_AUTO_READ_KEY = "loe_inbox_auto_read_v1"; // 選項：開啟對話自動標已讀（預設關＝永不自動，只手動按）
+const INBOX_HANDOFF_ONLY_KEY = "loe_inbox_handoff_only_v1"; // 選項：只通知轉人工（客叫單）（預設關）
 const INBOX_COL_WIDTHS_KEY = "loe_inbox_col_widths_v1"; // 三欄寬度 { rail, list, side }（px；拖拉分隔線調整，雙擊回預設）
 const INBOX_SIDE_SPLIT_KEY = "loe_inbox_side_split_v1"; // 右欄司機對話的高度（px；兩個都開時中間可拖拉）
 const INBOX_COMPOSER_H_KEY = "loe_inbox_composer_h_v1"; // 回覆輸入框高度（px；拖拉訊息串與輸入區之間的分隔條，雙擊回預設）
@@ -84,6 +85,7 @@ const inbox = {
   colWidths: Object(storeGet(INBOX_COL_WIDTHS_KEY, {})), // 左欄／中欄／右側欄寬度（沒設＝CSS 預設）
   optionsOpen: false,
   autoRead: storeGet(INBOX_AUTO_READ_KEY, false) === true,
+  handoffOnly: storeGet(INBOX_HANDOFF_ONLY_KEY, false) === true, // 只通知轉人工：客叫／AI 單的司機訊息、AI 處理中的客人訊息都不提醒
   threadAtBottom: true, // 對話訊息區是否停在底部（圖片載入後要不要跟著捲）
   hideOaName: storeGet(INBOX_HIDE_OA_NAME_KEY, false) === true,
   notes: new Map(), // "bot/chat" → { list, total, next, loading, error }
@@ -122,6 +124,8 @@ const inbox = {
   el: {},
 };
 const inboxKey = (botId, chatId) => `${botId}/${chatId}`;
+// 選項「只通知轉人工」時不提醒的單：客叫／AI 叫車（懶惰蟲派的單 sourceLabel 為空）且還沒轉人工
+const inboxMutedOrder = (o) => inbox.handoffOnly && !!o?.sourceLabel && !o.handoff;
 const inboxBotName = (botId) => inbox.botById.get(botId)?.name || botId;
 const inboxBotColor = (botId) => inbox.botById.get(botId)?.color || INBOX_OA_COLORS[0];
 const inboxInitial = (name) => (name || "").replace(/^[^-]*-/, "").trim().slice(0, 1) || "？";
@@ -187,4 +191,4 @@ async function inboxApi(method, path, body, retried = false, opts = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-export { INBOX_AUTO_READ_KEY, INBOX_BOTS_REFRESH_MS, INBOX_COLS_COLLAPSED_KEY, INBOX_COL_WIDTHS_KEY, INBOX_COMPOSER_H_KEY, INBOX_QUICK_H_KEY, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDER_FILTERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_THEME_KEY, INBOX_THEME_OPTIONS, INBOX_TOAST_MAX_KEPT, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_TOAST_MAX_SHOWN, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
+export { INBOX_AUTO_READ_KEY, INBOX_HANDOFF_ONLY_KEY, INBOX_BOTS_REFRESH_MS, INBOX_COLS_COLLAPSED_KEY, INBOX_COL_WIDTHS_KEY, INBOX_COMPOSER_H_KEY, INBOX_QUICK_H_KEY, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDER_FILTERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_THEME_KEY, INBOX_THEME_OPTIONS, INBOX_TOAST_MAX_KEPT, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_TOAST_MAX_SHOWN, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxMutedOrder, inboxTime };
