@@ -44,7 +44,7 @@ function setOrderSystemNoti(order, enabled, onChange) {
     else toast(`${order.shortId} 自動通知已${enabled ? "開啟" : "關閉"}`, "ok", 2500);
   }, onChange);
 }
-// 司機↔客人轉傳（懶惰蟲單）：開著時司機在 App「聯繫客戶」的話加「司機說：」轉到這個對話；關掉司機只能聯繫調度
+// 司機↔客人轉傳（懶惰蟲單）：開著時司機在 App「聯繫客戶」的話加「司機說：」轉到這個對話、客人的話加「客人說：」轉給司機；關掉兩邊都停
 function setOrderDriverRelay(order, enabled, onChange) {
   return runOrderAction(order, enabled ? "開啟司機↔客人" : "暫停司機↔客人", async () => {
     const r = await lineExtOrderApi("PUT", order.id, "/driver-relay", { enabled });
@@ -100,7 +100,7 @@ function orderRow(o, { onChange, onChat }) {
             onclick: () => setOrderSystemNoti(o, !o.isSystemNoti, onChange) },
             ih("span", { text: o.isSystemNoti ? `自動通知 ${noti}` : "自動通知 關" })),
           o.driverRelayAvailable ? ih("button", { type: "button", class: "loe-ord-btn relay" + (o.driverRelay ? " on" : ""), html: ic("arrow-left-right"), disabled: busy,
-            title: `${o.driverRelay ? "轉傳中" : "已暫停"}。開著：司機在 App 傳給客人的話會加「司機說：」轉到這個對話；點一下切換`,
+            title: `${o.driverRelay ? "轉傳中" : "已暫停"}。開著：司機在 App 傳給客人的話會加「司機說：」轉到這個對話，客人在這裡說的話也會加「客人說：」自動轉給司機（要開著收件匣）；點一下切換`,
             onclick: () => setOrderDriverRelay(o, !o.driverRelay, onChange) },
             ih("span", { text: o.driverRelay ? "司機↔客人" : "司機↔客人 關" })) : null,
           o.hasDriver && onChat

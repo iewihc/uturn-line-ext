@@ -261,7 +261,7 @@ function openDispatchPopover(prefillAddress) {
   relayChk.checked = getDriverRelay();
   relayChk.addEventListener("change", () => setDriverRelay(relayChk.checked));
   const relayText = document.createElement("span");
-  relayText.textContent = "司機↔客人轉傳（司機可在 App 直接跟客人說話，會加「司機說：」）";
+  relayText.textContent = "司機↔客人轉傳（司機和客人互轉：司機的話加「司機說：」、客人的話加「客人說：」）";
   relayWrap.appendChild(relayChk);
   relayWrap.appendChild(relayText);
 
