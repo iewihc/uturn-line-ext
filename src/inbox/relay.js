@@ -13,6 +13,7 @@ import { renderInboxThread } from "./thread.js";
  *   轉給客人：走收件匣送出（文字／圖片，同手動回覆）
  *   文字一律加前綴：轉給司機＝「客人說：」、轉給客人＝「司機說：」（客服自己送出的也一樣；原文已有前綴先拿掉，不疊兩層）；圖片原圖下載後轉傳（LINE 圖要帶登入、GCS 不給跨網域讀，一律 GM_xmlhttpRequest）
  *   按一下就送，不再確認；原訊息下方標轉傳結果，失敗可重試（多台只重送還沒成功的）；轉過的可以再轉，不限次數
+ *   轉傳開著的懶惰蟲單：客人的話自動轉（見下方「自動轉給司機」）
  * ---------------------------------------------------------------------- */
 const RELAY_PREFIX = { driver: "客人說：", customer: "司機說：" };
 const RELAY_LABEL = { driver: "司機", customer: "客人" };
@@ -83,7 +84,7 @@ function relaySendToDrivers(item, orders) {
   const run = async () => {
     relaySet(key, { state: "sending", to });
     try {
-      const image = item.lineImage ? await relayFetchImage(await relayLineImageUrl(item.id)) : null;
+      const image = item.lineImage ? await relayFetchImage(await relayLineImageUrl(inboxSelectedChat(), item.id)) : null;
       while (left.length) {
         const order = left[0];
         const tempId = "relay_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -145,10 +146,72 @@ function relayToCustomer(item) {
   return run();
 }
 
+/* ---- 客人的話自動轉給司機（跟「司機↔客人」轉傳同一個開關） ----
+ *   看板 relays＝轉傳開著、已有司機的單；收到客人新訊息（SSE／輪詢）就送 …/driver-chat/customer-messages｜customer-images，
+ *   後端加「客人說：」放進司機的「聯繫客戶」。後端以 LINE 訊息編號去重：多位調度同時開著收件匣也只轉一次。
+ *   剛連上時 LINE 重播的舊訊息（超過 RELAY_AUTO_MAX_AGE_MS）不轉；貼圖、語音等只轉文字標示 */
+const RELAY_AUTO_MAX_AGE_MS = 2 * 60 * 1000;
+const RELAY_AUTO_IMAGE_TRIES = 3; // 剛收到的圖常還沒有網址：隔一下再抓
+const RELAY_AUTO_IMAGE_WAIT_MS = 2000;
+const RELAY_AUTO_STUB = { sticker: "[貼圖]", audio: "[語音]", video: "[影片]", file: "[檔案]" };
+function relayAutoText(msg) {
+  if (msg.type === "text" || msg.type === "textV2") return msg.text || "";
+  if (msg.type === "location") return [msg.title, msg.address].filter(Boolean).join(" ") || `${msg.latitude},${msg.longitude}`;
+  return RELAY_AUTO_STUB[msg.type] || "";
+}
+async function relayAutoImageUrl(chat, msg) {
+  for (let i = 1; ; i++) {
+    try { return await relayLineImageUrl(chat, msg.id, msg); }
+    catch (e) {
+      if (i >= RELAY_AUTO_IMAGE_TRIES) throw e;
+      await new Promise((r) => setTimeout(r, RELAY_AUTO_IMAGE_WAIT_MS));
+    }
+  }
+}
+// 看板列的單＋這位客人已載入的訂單（剛開轉傳、看板還沒更新也轉；以後端判斷為準）
+function relayAutoOrderIds(chat) {
+  const fromBoard = inbox.board.get(chat.botId)?.relays?.get(chat.chatId) || [];
+  const loaded = liveOrders(inbox.orders.get(chat.key)?.list).filter((o) => o.driverRelay && o.hasDriver).map((o) => o.id);
+  return [...new Set([...fromBoard, ...loaded])];
+}
+function relayCustomerAuto(chat, payload) {
+  const msg = payload?.message;
+  const orderIds = relayAutoOrderIds(chat);
+  if (!msg?.id || !orderIds.length || Date.now() - (payload.timestamp || Date.now()) > RELAY_AUTO_MAX_AGE_MS) return;
+  const key = `driver:${msg.id}`;
+  if (relay.status.has(key)) return; // 這個分頁轉過或正在轉
+  const isImage = msg.type === "image";
+  const text = isImage ? "" : relayAutoText(msg);
+  if (!isImage && !text) return;
+  const run = async () => {
+    relaySet(key, { state: "sending", auto: true });
+    try {
+      let relayed = false;
+      const image = isImage ? await relayFetchImage(await relayAutoImageUrl(chat, msg)) : null;
+      for (const orderId of orderIds) {
+        let r;
+        if (image) {
+          const form = new FormData();
+          form.append("lineMessageId", msg.id);
+          form.append("file", image, image.name);
+          r = await driverChatApi("POST", orderId, "/customer-images", form);
+        } else r = await driverChatApi("POST", orderId, "/customer-messages", { lineMessageId: msg.id, text });
+        relayed = relayed || !!r?.relayed;
+      }
+      if (relayed) relaySet(key, { state: "sent", auto: true });
+      else { relay.status.delete(key); relayRender(); } // 轉傳剛被關掉、單結束：照一般訊息畫
+    } catch (e) {
+      relaySet(key, { state: "failed", auto: true, error: e.message || String(e), retry: run }); // 重試整批再送，後端去重
+    }
+  };
+  run();
+}
+
 /* ---- 訊息下方的按鈕與結果（收件匣客人訊息、司機對話的司機訊息共用） ---- */
 function relayControls(dir, item) {
   const st = relay.status.get(`${dir}:${item.id}`);
   const send = (e) => (dir === "driver" ? relayToDriver(item, e.currentTarget) : relayToCustomer(item));
+  if (st?.auto) return relayAutoStatus(st);
   if (st?.state === "sending") return ih("span", { class: "loe-relay-status", text: `轉給${RELAY_LABEL[dir]}中…` });
   // 轉過的一樣可以再轉（不限次數）
   if (st?.state === "sent")
@@ -159,9 +222,18 @@ function relayControls(dir, item) {
       ih("button", { type: "button", class: "loe-relay-retry", text: "重試", onclick: () => st.retry() }));
   return ih("button", { type: "button", class: "loe-relay-btn", text: `轉給${RELAY_LABEL[dir]}`, title: `把這則訊息轉給${RELAY_LABEL[dir]}`, onclick: send });
 }
+// 自動轉給司機的結果（不給「再轉一次」：手動轉會進司機私訊，司機會看到兩次）
+function relayAutoStatus(st) {
+  if (st.state === "sending") return ih("span", { class: "loe-relay-status", text: "自動轉給司機中…" });
+  if (st.state === "sent") return ih("span", { class: "loe-relay-status ok", text: "已自動轉給司機 ✓" });
+  return ih("span", { class: "loe-relay-status err" }, `沒自動轉給司機：${st.error} `,
+    ih("button", { type: "button", class: "loe-relay-retry", text: "重試", onclick: () => st.retry() }));
+}
 // 收件匣訊息：客人傳的、客服自己送出的都能轉（文字、圖片、位置）；客人沒有已派到司機的單就不顯示
 function inboxRelayControls(m) {
   const msg = m.message;
+  const auto = msg?.id && relay.status.get(`driver:${msg.id}`);
+  if (auto?.auto) return relayAutoStatus(auto);
   if (!msg?.id || !relayTargets().length) return null;
   const item = relayItemOfLine(msg);
   return item ? relayControls("driver", item) : null;
@@ -173,13 +245,12 @@ function relayItemOfLine(msg) {
   if (msg.type === "image") return inboxMedia(inboxSelectedChat()?.botId, msg)?.expired ? null : { id: msg.id, lineImage: true };
   return null;
 }
-// 客人那張圖的原圖網址：先看畫面上的訊息，沒有就重抓一次這位客人的訊息（順便把畫面上那則補成圖片）
-async function relayLineImageUrl(msgId) {
-  const chat = inboxSelectedChat();
+// 客人那張圖的原圖網址：先看畫面上的訊息（或剛收到的事件），沒有就重抓一次這位客人的訊息（順便把畫面上那則補成圖片）
+async function relayLineImageUrl(chat, msgId, received) {
   if (!chat) throw new Error("沒有選到客人");
   const th = inbox.threads.get(chat.key);
   const shown = th?.list.find((m) => m.message?.id === msgId);
-  let media = shown && inboxMedia(chat.botId, shown.message);
+  let media = inboxMedia(chat.botId, shown?.message || received);
   if (!media?.url) {
     const data = await inboxApi("GET", `/api/v3/bots/${chat.botId}/chats/${encodeURIComponent(chat.chatId)}/messages`);
     const fresh = (data?.list || []).find((m) => m?.message?.id === msgId);
@@ -192,7 +263,7 @@ async function relayLineImageUrl(msgId) {
 }
 // 司機對話的訊息：司機傳的、調度這邊送出的都能轉（只在收件匣：面板對應的就是目前這位客人）
 function driverRelayControls(m) {
-  if (driverChat.host !== inbox.el.dchat || (m.sender !== "driver" && m.sender !== "user") || !m.id || m.isRecalled) return null;
+  if (driverChat.host !== inbox.el.dchat || (m.sender !== "driver" && m.sender !== "user") || !m.id || m.isRecalled || m.fromCustomer) return null;
   const item = m.type === "image" ? (m.imageUrl ? { id: m.id, imageUrl: m.imageUrl } : null)
     : m.type === "text" || m.type === "location" ? (m.content ? { id: m.id, text: m.content } : null) : null;
   return item ? relayControls("customer", item) : null;
@@ -235,4 +306,4 @@ function initInboxRelay() {
   document.addEventListener("scroll", relayHideBar, true);
 }
 
-export { inboxRelayControls, initInboxRelay };
+export { inboxRelayControls, initInboxRelay, relayCustomerAuto };

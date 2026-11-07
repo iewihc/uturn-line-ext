@@ -11,6 +11,7 @@ import { LINE_CHAT_RESOLVE_BATCH, liveOrders, resolveLineChats } from "../orders
 
 /* ---- 依訂單狀態篩選：每個啟用的官方帳號一次抓齊「每個聊天室進行中訂單的狀態」 ----
  *   GET /line-ext/oa/{bot}/board?version=（發送 KEY）：沒變只回 unchanged；後端 5 秒快取，多人同開一個帳號只查一次。
+ *   relays＝客人的話要自動轉給司機的單（inbox/relay.js）。
  *   每 20 秒一輪（分頁在背景 60 秒）；自己派單、取消、開關通知後立刻補抓。 */
 const ORDER_COLUMNS = [
   { id: "booking", label: "預約" }, { id: "pending", label: "未派" }, { id: "accepted", label: "承接" },
@@ -32,7 +33,9 @@ async function inboxLoadBoard(botId) {
   const chats = new Map((data.chats || []).map((c) => [c.chatId, c.columns || []]));
   // 訂單 → 聊天室：司機訊息通知卡據此開那位客人的對話
   const orderChat = new Map((data.chats || []).flatMap((c) => (c.orderIds || []).map((id) => [id, c.chatId])));
-  inbox.board.set(botId, { version: data.version || "", chats, orderChat });
+  // 聊天室 → 客人的話要自動轉給司機的單（轉傳開著、已有司機；不限「自己」範圍）
+  const relays = new Map((data.relays || []).map((r) => [r.chatId, r.orderIds || []]));
+  inbox.board.set(botId, { version: data.version || "", chats, orderChat, relays });
   for (const chatId of chats.keys()) inbox.linked.add(inboxKey(botId, chatId));
   // 有進行中訂單、但不在已載入對話裡的客人補抓進清單（依訂單狀態篩選才不會漏）
   const missing = [...chats.keys()].filter((id) => !id.startsWith("C") && !inbox.chats.has(inboxKey(botId, id))).slice(0, INBOX_BOARD_FETCH_MISSING);

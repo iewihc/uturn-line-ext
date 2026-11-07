@@ -427,17 +427,19 @@ function renderDriverChatMsgs(scrollToEnd) {
   for (const m of driverChat.messages) {
     if (m.type === "system") { box.append(ih("div", { class: "loe-dchat-system", text: m.content || "" })); prevSender = ""; continue; }
     const fromDriver = m.sender === "driver";
+    const fromCustomer = !!m.fromCustomer; // 客人在 LINE 說的話，已自動轉給司機
     const toCustomer = relayOrder && fromDriver && m.channel !== "dispatch";
-    const mine = driverChatIsMine(m) || !!m.tempId && !m.id;
-    const who = fromDriver ? `司機 ${m.senderName || ""}`.trim() : mine ? "我" : (m.senderName || "調度");
+    const mine = !fromCustomer && (driverChatIsMine(m) || !!m.tempId && !m.id);
+    const who = fromDriver ? `司機 ${m.senderName || ""}`.trim() : fromCustomer ? "客人" : mine ? "我" : (m.senderName || "調度");
     const read = !fromDriver && (m.readBy || []).some((r) => r.type === "driver");
     const meta = m.pending ? "傳送中…" : m.failed ? `傳送失敗：${m.failed}（點擊重送）` : `${inboxTime(msOf(m.timestamp))}${read ? " · 已讀" : ""}`;
-    const senderKey = `${m.sender}:${m.senderId || m.senderName}:${toCustomer}`;
+    const senderKey = `${m.sender}:${m.senderId || m.senderName}:${toCustomer}:${fromCustomer}`;
     const bubble = ih("div", { class: "loe-dchat-bubble" + (m.failed ? " failed" : ""), onclick: m.failed && m.retry ? () => m.retry() : null }, driverChatBubbleBody(m));
     const canRecall = mine && m.id && !m.isRecalled && Date.now() - msOf(m.timestamp) < DRIVER_CHAT_RECALL_MS;
-    box.append(ih("div", { class: "loe-dchat-msg " + (fromDriver ? "in" : "out") + (mine ? " mine" : "") },
+    box.append(ih("div", { class: "loe-dchat-msg " + (fromDriver || fromCustomer ? "in" : "out") + (mine ? " mine" : "") + (fromCustomer ? " customer" : "") },
       senderKey !== prevSender ? ih("div", { class: "loe-dchat-who" }, ih("span", { text: who }),
-        toCustomer ? ih("span", { class: "loe-dchat-relay", text: "對客人", title: "司機在 App「聯繫客戶」傳的話，已加「司機說：」轉給客人" }) : null) : null,
+        toCustomer ? ih("span", { class: "loe-dchat-relay", text: "對客人", title: "司機在 App「聯繫客戶」傳的話，已加「司機說：」轉給客人" }) : null,
+        fromCustomer ? ih("span", { class: "loe-dchat-relay", text: "轉給司機", title: "客人在 LINE 說的話，已加「客人說：」自動轉給司機" }) : null) : null,
       toCustomer && m.relayStatus === "failed" ? ih("div", { class: "loe-dchat-relay failed", text: "沒送到客人" }) : null,
       bubble,
       ih("div", { class: "loe-dchat-meta-line" },

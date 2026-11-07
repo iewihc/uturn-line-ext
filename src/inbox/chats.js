@@ -6,6 +6,7 @@ import { inboxMarkRead } from "./chat-tools.js";
 import { INBOX_ENABLED_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_PAGES_PER_BOT, INBOX_POLL_MS, inbox, inboxApi, inboxBotName, inboxKey } from "./core.js";
 import { inboxDismissToast, inboxNotify } from "./notify.js";
 import { inboxLoadBoard, inboxQueueLink } from "./order-status.js";
+import { relayCustomerAuto } from "./relay.js";
 import { inboxAppendToThread, inboxRefreshThread, inboxSetContext } from "./send.js";
 import { inboxRenderAll, renderInboxHeader, renderInboxRail } from "./shell.js";
 import { renderInboxThread } from "./thread.js";
@@ -210,6 +211,7 @@ function inboxOnMessageEvent(chat, key, sub, payload) {
   inboxAppendToThread(key, payload);
   inboxNoteMessageIds(chat, lineMessageIds([payload]));
   if (sub !== "message") return;
+  relayCustomerAuto(chat, payload); // 轉傳開著的懶惰蟲單：客人的話自動轉給司機
   chat.unread = true;
   chat.unreadCount += 1;
   // 選項「自動標已讀」：正在看的這位客人又傳來，畫面在前景就直接標已讀、不跳通知
