@@ -249,19 +249,20 @@ function openDispatchPopover(prefillAddress) {
   notiWrap.appendChild(notiText);
 
   // 司機↔客人轉傳：司機在 App「聯繫客戶」傳的話，後端用建單人員的懶惰蟲身份授權加「司機說：」送進這個對話；
-  // 預設不勾、勾過記住；派單後在訂單列「司機↔客人」隨時開關。沒有聊天室（不帶 linechaturl:）時不會有作用
+  // 預設不勾、勾過記住；派單後在訂單列「司機↔客人」隨時開關。沒有聊天室（不帶 linechaturl:）時不會有作用。只有收件匣派車才有；原生頁派車不顯示也不送
   const relayWrap = document.createElement("label");
   relayWrap.className = "loe-check loe-sysnoti-check";
   relayWrap.style.margin = "4px 0";
   relayWrap.title = "司機可在 App 直接跟客人說話，訊息會加「司機說：」轉到這個對話；派單後可在訂單列隨時開關";
   const relayChk = document.createElement("input");
   relayChk.type = "checkbox";
-  relayChk.checked = getDriverRelay();
+  relayChk.checked = INBOX_MODE && getDriverRelay();
   relayChk.addEventListener("change", () => setDriverRelay(relayChk.checked));
   const relayText = document.createElement("span");
-  relayText.textContent = "司機↔客人轉傳（司機和客人互轉：司機的話加「司機說：」、客人的話加「客人說：」）";
+  relayText.textContent = "司機↔客人轉傳（司機和客人互轉）";
   relayWrap.appendChild(relayChk);
   relayWrap.appendChild(relayText);
+  if (!INBOX_MODE) relayWrap.style.display = "none";
 
   // 依設定檔決定預設：此對話有店配覆寫就用覆寫的群編＋固定上車地址，否則用此帳號前綴
   const override = getCurrentOverride();
