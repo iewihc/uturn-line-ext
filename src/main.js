@@ -1,5 +1,6 @@
 // 入口：一般聊天頁等 DOMContentLoaded 再增強；收件匣頁 document-start 就接管整頁。
 import { closeLineAdvancedMenu, enhanceLineAdvancedMenu, lineAdvancedMenu } from "./advanced-menu.js";
+import { initAuthHealth } from "./auth-health.js";
 import { initAiToggle, refreshAiToggle, renderAiToggle } from "./ai-toggle.js";
 import { initBoard } from "./board.js";
 import { INBOX_MODE } from "./core/env.js";
@@ -35,6 +36,7 @@ function uturnMain() {
 
   injectStyles();
   if (INBOX_MODE) { bootInbox(); return; }
+  initAuthHealth(); // 身份授權失效提示（LINE 後台頁）
   /* ---------------------------------------------------------------------- *
    * Boot
    * ---------------------------------------------------------------------- */

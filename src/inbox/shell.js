@@ -3,6 +3,7 @@ import { startDriverLive } from "./driver-live.js";
 import { applyHandoffLive } from "./handoff-live.js";
 import { aiBots } from "../ai-toggle.js";
 import { board, closeBoard, openBoard } from "../board.js";
+import { authLoginInvalid, initAuthHealth } from "../auth-health.js";
 import { hasLineExtAuth, lineAuthDoneText, saveLineCookie } from "../core/backend.js";
 import { UTURN_BUILD } from "../core/constants.js";
 import { ic } from "../core/icons.js";
@@ -114,11 +115,13 @@ function renderInboxHeader() {
   const optionsBtn = inboxOptionsButton();
   const hint = inboxSoundReady() ? null : ih("span", { class: "loe-inbox-hint", text: "點一下頁面啟用提示音" });
   const authed = hasLineExtAuth();
+  const authBad = authed && authLoginInvalid();
   const authBtn = ih("button", {
-    type: "button", class: "loe-inbox-btn" + (authed ? " on" : " warn"), html: ic("shield-check"),
-    title: authed ? `已授權：${getDispatcher()}（點擊可重新授權）` : "收件匣需要身份授權才能使用",
+    type: "button", class: "loe-inbox-btn" + (authBad ? " auth-invalid" : authed ? " on" : " warn"), html: ic("shield-check"),
+    title: authBad ? "身份授權失效：LINE 登入已失效，自動通知、司機↔客人轉傳都送不出去。重新登入 LINE 後點擊重新授權"
+      : authed ? `已授權：${getDispatcher()}（點擊可重新授權）` : "收件匣需要身份授權才能使用",
     onclick: inboxAuthorize,
-  }, ih("span", { text: authed ? "已授權" : "身份授權" }));
+  }, ih("span", { text: authBad ? "授權失效" : authed ? "已授權" : "身份授權" }));
   const backBtn = ih("a", { class: "loe-inbox-btn", href: "https://chat.line.biz/", html: ic("external-link") }, ih("span", { text: "回 LINE 後台" }));
   host.append(...[
     ih("div", { class: "loe-inbox-brand" },
@@ -182,6 +185,10 @@ function inboxStart() {
   inboxScheduleBoard();
   startDriverLive();
   applyHandoffLive();
+}
+// 授權失效提示：紅條的「重新身份授權」走收件匣的流程（指定官方帳號），狀態變了重畫標頭按鈕
+function initInboxAuthHealth() {
+  initAuthHealth({ authorize: () => inboxAuthorize({ currentTarget: {} }), onChange: renderInboxHeader });
 }
 // 收件匣的身份授權：同 LINE 後台選單的「身份授權」，用任一官方帳號讀目前的 LINE 登入；授權後馬上重抓需要 KEY 的資料
 async function inboxAuthorize(e) {
@@ -303,4 +310,4 @@ function inboxAvatar(chat) {
   return img;
 }
 
-export { inboxApplyRail, inboxApplyTheme, inboxAvatar, inboxRenderAll, inboxToggleRail, inboxVisibleChats, renderInboxGate, renderInboxHeader, renderInboxRail };
+export { initInboxAuthHealth, inboxApplyRail, inboxApplyTheme, inboxAvatar, inboxRenderAll, inboxToggleRail, inboxVisibleChats, renderInboxGate, renderInboxHeader, renderInboxRail };

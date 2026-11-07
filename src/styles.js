@@ -474,6 +474,24 @@ const STYLE_CSS = `
     .loe-toast.err { background: rgba(153,27,27,.95); }
     .loe-toast.warn { background: rgba(146,64,14,.95); }
 
+    /* 身份授權失效：畫面上方固定紅條（auth-health.js） */
+    .loe-auth-banner {
+      position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 2147483646; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      max-width: min(860px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 10px;
+      background: #b91c1c; color: #fff; font-size: 13px; line-height: 1.5;
+      box-shadow: 0 10px 30px rgba(127,29,29,.35);
+    }
+    .loe-auth-banner strong { font-size: 14px; white-space: nowrap; }
+    .loe-auth-banner span { flex: 1 1 280px; }
+    .loe-auth-banner button {
+      border: 1px solid rgba(255,255,255,.7); background: transparent; color: #fff;
+      border-radius: 8px; padding: 5px 12px; font: inherit; cursor: pointer; white-space: nowrap;
+    }
+    .loe-auth-banner button.primary { background: #fff; color: #b91c1c; border-color: #fff; font-weight: 600; }
+    .loe-auth-banner button:disabled { opacity: .6; cursor: default; }
+    .loe-inbox-btn.auth-invalid { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+
     /* 派單按鈕（傳送左邊，藍色） */
     .${DISPATCH_BUTTON_CLASS} {
       position: relative;

@@ -141,6 +141,7 @@ async function saveLineCookie(botId) {
   if (!result || result.account !== account || result.updated !== true)
     throw new Error("後端尚未確認 Cookie 儲存成功");
   storeSet(sendKeyStoreKey(account), key);
+  window.dispatchEvent(new Event("loe-line-auth-saved")); // 授權失效提示馬上重查（auth-health.js）
   return result;
 }
 const lineAuthDoneText = (result) =>

@@ -14,7 +14,7 @@ import { inboxUnlockAudio } from "./notify.js";
 import { inboxLoadBoard } from "./order-status.js";
 import { inboxLoadOrders } from "./orders.js";
 import { inboxSend, inboxSendFiles, inboxSetReply } from "./send.js";
-import { inboxApplyRail, inboxApplyTheme, inboxRenderAll, inboxToggleRail, renderInboxGate, renderInboxHeader, renderInboxRail } from "./shell.js";
+import { initInboxAuthHealth, inboxApplyRail, inboxApplyTheme, inboxRenderAll, inboxToggleRail, renderInboxGate, renderInboxHeader, renderInboxRail } from "./shell.js";
 import { hasAcceptedInboxTerms, showInboxTerms } from "./terms.js";
 import { renderInboxNotes } from "./chat-tools.js";
 import { renderInboxContents, renderInboxPicker, renderInboxToasts } from "./thread.js";
@@ -125,6 +125,7 @@ function bootInbox() {
   setInterval(() => { if (inbox.el.foot) renderInboxRail(); }, 10000); // 「最後事件 n 秒前」
   inboxRenderAll();
   renderInboxGate();
+  initInboxAuthHealth();
   (async () => {
     try {
       inbox.me = await inboxApi("GET", "/api/v1/me").catch(() => null);
