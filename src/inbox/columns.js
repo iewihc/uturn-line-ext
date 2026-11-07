@@ -1,14 +1,12 @@
 // 收件匣的分隔線：三條直的拖拉調整左欄（官方帳號）、中欄（官方訊息）、右側欄（司機對話／記事本）的寬度，對話欄吃剩下的；
 // 一條橫的在訊息串與輸入區之間，拖拉調整回覆輸入框高度。都記在本機，雙擊回預設。
 import { storeSet } from "../core/store.js";
-import { INBOX_COL_WIDTHS_KEY, INBOX_COMPOSER_H_KEY, INBOX_QUICK_H_KEY, inbox } from "./core.js";
+import { INBOX_COL_WIDTHS_KEY, INBOX_COMPOSER_H_KEY, inbox } from "./core.js";
 
 const COL_MIN = { rail: 180, list: 260, side: 280 };
 const COL_MAX_RATIO = 0.6; // 單欄最多佔整個收件匣寬度的六成
 const COMPOSER_MIN = 60; // 同 .loe-inbox-textarea 的 min-height
-const THREAD_MIN = 160; // 輸入框／快捷列拉高時訊息串至少留這麼高
-const QUICK_MIN = 46; // 快捷回覆列一排的高度（氣泡 30 ＋ 上下 8）；拖到這以下就回預設一排
-const QUICK_MAX = 320;
+const THREAD_MIN = 160; // 輸入框拉高時訊息串至少留這麼高
 const colEl = (col) => ({ rail: inbox.el.railAside, list: inbox.el.listSection, side: inbox.el.side })[col];
 
 // 共用的拖拉：pointerdown 時 start(e) 回傳 { move(ev), end() }（回 null 就不開始）；期間加 .dragging、用 pointer capture
@@ -40,18 +38,12 @@ function inboxApplyColumns() {
   }
 }
 function inboxApplyComposer() {
-  const { textarea: ta, quickBar } = inbox.el;
+  const ta = inbox.el.textarea;
   if (ta) ta.style.height = inbox.composerHeight ? `${inbox.composerHeight}px` : "";
-  if (quickBar) { quickBar.style.height = inbox.quickHeight ? `${inbox.quickHeight}px` : ""; quickBar.classList.toggle("tall", !!inbox.quickHeight); }
 }
 function inboxSaveComposer(h) {
   inbox.composerHeight = h;
   storeSet(INBOX_COMPOSER_H_KEY, h);
-}
-function inboxSaveQuick(h) {
-  inbox.quickHeight = h;
-  storeSet(INBOX_QUICK_H_KEY, h);
-  inboxApplyComposer();
 }
 function initInboxColumns() {
   inboxApplyColumns();
@@ -86,24 +78,6 @@ function initInboxColumns() {
     };
   });
   thSplit.addEventListener("dblclick", () => { inboxSaveComposer(0); inboxApplyComposer(); });
-  // 快捷回覆列／輸入框之間：往下拉列變高（換行多排），拉回一排的高度以下就回預設
-  const { qrSplit, quickBar } = inbox.el;
-  if (qrSplit && quickBar) {
-    inboxDragSplit(qrSplit, (e) => {
-      const startY = e.clientY, startH = quickBar.getBoundingClientRect().height;
-      const max = Math.min(QUICK_MAX, Math.max(QUICK_MIN, startH + (thMsgs?.clientHeight || 0) - THREAD_MIN));
-      let h = inbox.quickHeight;
-      return {
-        move(ev) {
-          h = Math.round(Math.min(startH + (ev.clientY - startY), max));
-          if (h <= QUICK_MIN) h = 0;
-          quickBar.style.height = h ? `${h}px` : ""; quickBar.classList.toggle("tall", !!h);
-        },
-        end() { inboxSaveQuick(h); },
-      };
-    });
-    qrSplit.addEventListener("dblclick", () => inboxSaveQuick(0));
-  }
   // 輸入框右下角原生的拉角也能調，放開時一樣記住
   ta.addEventListener("pointerup", () => {
     const h = parseInt(ta.style.height, 10) || 0;

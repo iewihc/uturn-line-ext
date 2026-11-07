@@ -33,7 +33,7 @@ function bootInbox() {
     railAside: $(".loe-inbox-rail"), railToggle: $(".loe-inbox-rail-toggle"), railStrip: $(".loe-inbox-rail-strip"),
     body: $(".loe-inbox-body"), listSection: $(".loe-inbox-list"),
     filters: $(".loe-inbox-filters"), rows: $(".loe-inbox-rows"), listSearch: $(".loe-inbox-list-search"),
-    thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thSplit: $(".loe-inbox-th-split:not(.loe-inbox-qr-split)"), qrSplit: $(".loe-inbox-qr-split"), thEmpty: $(".loe-inbox-th-empty"),
+    thHead: $(".loe-inbox-th-head"), thMsgs: $(".loe-inbox-th-msgs"), thComposer: $(".loe-inbox-composer"), thSplit: $(".loe-inbox-th-split"), thEmpty: $(".loe-inbox-th-empty"),
     reply: $(".loe-inbox-reply"), replyWho: $(".loe-inbox-reply-who"), replyText: $(".loe-inbox-reply-text"), mention: $(".loe-inbox-mention-list"),
     msearch: $(".loe-inbox-msearch"), msearchInput: $(".loe-inbox-msearch-input"), msearchCount: $(".loe-inbox-msearch-count"), msearchPrev: $(".loe-inbox-msearch-prev"), msearchNext: $(".loe-inbox-msearch-next"), msearchClose: $(".loe-inbox-msearch-close"), msearchList: $(".loe-inbox-msearch-list"),
     quickBar: $(".loe-inbox-quick"), textarea: $(".loe-inbox-textarea"), toasts: $(".loe-inbox-toasts"), notif: $(".loe-inbox-notif"), notes: $(".loe-inbox-notes"),
