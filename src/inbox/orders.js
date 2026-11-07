@@ -8,7 +8,7 @@ import { inboxOpenChat } from "./send.js";
 import { renderInboxSide } from "./side.js";
 import { renderInboxThread } from "./thread.js";
 import { fetchChatOrders } from "../orders-lookup.js";
-import { liveOrders, orderActionBusy, orderNotiSummary, orderRow, setOrderSystemNoti } from "../orders.js";
+import { liveOrders, orderActionBusy, orderNotiDetail, orderRow, setOrderSystemNoti } from "../orders.js";
 
 /* ---- 訂單狀態／系統自動通知 ---- */
 async function inboxLoadOrders(chat) {
@@ -107,7 +107,7 @@ function renderInboxOrders() {
   const list = liveOrders(st && st.list);
   const notiList = list.filter((o) => o.systemNotiAvailable !== false); // 客叫／AI 單系統本來就會推通知，不在這裡開關
   const notiOn = notiList.some((o) => o.isSystemNoti);
-  const notiTip = list.filter((o) => o.isSystemNoti).map((o) => `${o.shortId} ${orderNotiSummary(o) || "等待司機承接"}`).join("\n");
+  const notiTip = list.filter((o) => o.isSystemNoti).map((o) => `${o.shortId} ${orderNotiDetail(o) || "等待司機承接"}`).join("\n");
   slot.append(ih("button", { type: "button", class: "loe-inbox-btn loe-inbox-sysnoti" + (notiOn ? " on" : " off"), html: ic("bell"),
     disabled: !notiList.length || notiList.some((o) => orderActionBusy.has(o.id)),
     title: !notiList.length ? (list.length ? "客叫／AI 叫車的單系統會自己推 LINE 通知給乘客" : "沒有進行中的訂單")

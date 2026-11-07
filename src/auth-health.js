@@ -1,5 +1,6 @@
-// 身份授權失效提示：每分鐘問後端 GET /line-ext/auth-status。後端用這份 LINE 登入送訊息被 LINE 回「沒有登入」時，
-// 畫面上方固定一條紅色提示（自動通知、司機↔客人轉傳都送不出去），按「重新身份授權」就地重授；「稍後」10 分鐘內不再跳。
+// 身份授權失效提示：每分鐘問後端 GET /line-ext/auth-status。後端用這份 LINE 登入送訊息被 LINE 回「沒有登入」時：
+//   - 收件匣：右上角「已授權」按鈕變紅「授權失效」，點了就重新授權
+//   - LINE 後台頁：畫面上方固定一條紅色提示，按「重新身份授權」就地重授；「稍後」10 分鐘內不再跳
 // 任何地方授權成功（saveLineCookie 發 loe-line-auth-saved）馬上重查。
 import { hasLineExtAuth, lineAuthDoneText, lineExtApi, saveLineCookie } from "./core/backend.js";
 import { ih } from "./inbox/core.js";
@@ -7,7 +8,7 @@ import { toast } from "./ui/toast.js";
 
 const AUTH_HEALTH_MS = 60000;
 const AUTH_SNOOZE_MS = 10 * 60000;
-const authHealth = { invalid: false, since: "", snoozeUntil: 0, el: null, timer: 0, busy: false, authorize: null, onChange: null };
+const authHealth = { invalid: false, since: "", snoozeUntil: 0, el: null, timer: 0, busy: false, authorize: null, onChange: null, banner: true };
 
 async function checkAuthHealth() {
   if (!hasLineExtAuth()) return setAuthInvalid(false, "");
@@ -28,7 +29,7 @@ const authSinceText = () => {
   return d && !Number.isNaN(d.getTime()) ? `（${d.toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} 起）` : "";
 };
 function renderAuthBanner() {
-  const show = authHealth.invalid && Date.now() >= authHealth.snoozeUntil;
+  const show = authHealth.banner && authHealth.invalid && Date.now() >= authHealth.snoozeUntil;
   if (!show) { authHealth.el?.remove(); authHealth.el = null; return; }
   authHealth.el?.remove();
   authHealth.el = ih("div", { class: "loe-auth-banner", role: "alert" },
@@ -53,15 +54,18 @@ async function reauthorize() {
     renderAuthBanner();
   }
 }
-// authorize：收件匣自己的授權流程；onChange：失效狀態變了（收件匣重畫標頭）
-function initAuthHealth({ authorize, onChange } = {}) {
+// authorize：收件匣自己的授權流程；onChange：失效狀態變了（收件匣重畫標頭）；
+// banner=false：不跳上方紅條（收件匣改在右上角「已授權」按鈕顯示授權失效）
+function initAuthHealth({ authorize, onChange, banner = true } = {}) {
   authHealth.authorize = authorize || null;
   authHealth.onChange = onChange || null;
+  authHealth.banner = banner;
   if (authHealth.timer) return;
   window.addEventListener("loe-line-auth-saved", () => { authHealth.snoozeUntil = 0; checkAuthHealth(); });
   checkAuthHealth();
   authHealth.timer = setInterval(checkAuthHealth, AUTH_HEALTH_MS);
 }
 const authLoginInvalid = () => authHealth.invalid;
+const authInvalidSinceText = authSinceText;
 
-export { authLoginInvalid, initAuthHealth };
+export { authInvalidSinceText, authLoginInvalid, initAuthHealth };
