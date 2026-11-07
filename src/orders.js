@@ -21,13 +21,19 @@ const driverChatApi = (method, orderId, sub, body, query = "") =>
   lineExtOrderApi(method, orderId, "/driver-chat" + sub, body, query);
 /* ---- 訂單操作：系統自動通知隨時開關、取消訂單（收件匣訂單列、原生頁訂單面板共用） ---- */
 const ORDER_NOTI_STATUS = { sent: "✓", sending: "…", failed: "✗", unknown: "?" };
-// 自動通知節點一律用最短的字（訂單列空間小）；沒列到的用後端給的名稱
-const ORDER_NOTI_SHORT = { schedule_accepted: "接單", schedule_enroute: "出發" };
+// 自動通知節點一律兩個字（訂單列空間小；過N 例外）；沒列到的用後端給的名稱
+const ORDER_NOTI_SHORT = { schedule_accepted: "接單", enroute: "承接", schedule_enroute: "出發", arrived: "抵達", onboard: "客上", completed: "完成", cancelled: "取消" };
+// 司機按過N 的節點（由小到大）：訂單列只顯示過到第幾跳
+const ORDER_NOTI_WAITS = ["meter_started", "waited_5", "waited_10", "waited_15", "waited_20"];
 const orderActionBusy = new Set(); // 動作進行中的 orderId（按鈕暫時停用）
 const orderNotiLabel = (l) => ORDER_NOTI_SHORT[l.state] || l.stateLabel;
-// 已通知的節點打勾：「承接✓ 抵達✓」；沒送成功的原因不擠在訂單列（授權失效看收件匣右上角，其餘滑過看 orderNotiDetail）
+// 已通知的節點打勾：「承接✓ 抵達✓ 過10✓」；過N 只留最大那一跳；沒送成功的原因不擠在訂單列（授權失效看收件匣右上角，其餘滑過看 orderNotiDetail）
 function orderNotiSummary(order) {
-  return (order.systemNotiLogs || []).map((l) => `${orderNotiLabel(l)}${ORDER_NOTI_STATUS[l.status] || ""}`).join(" ");
+  const logs = order.systemNotiLogs || [];
+  const waitRank = (l) => ORDER_NOTI_WAITS.indexOf(l.state);
+  const lastWait = logs.reduce((best, l) => (waitRank(l) > (best ? waitRank(best) : -1) ? l : best), null);
+  return logs.filter((l) => waitRank(l) < 0 || l === lastWait)
+    .map((l) => `${orderNotiLabel(l)}${ORDER_NOTI_STATUS[l.status] || ""}`).join(" ");
 }
 // 滑過提示：每個節點一行，沒送成功的附原因
 function orderNotiDetail(order) {
