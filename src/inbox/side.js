@@ -1,6 +1,7 @@
 // 收件匣右欄：上半司機對話（停靠時）、下半記事本，中間可拖拉；固定開啟司機對話但這位客人沒有單時留一條說明。
 import { storeSet } from "../core/store.js";
 import { liveOrders } from "../orders.js";
+import { inboxDragSplit } from "./columns.js";
 import { INBOX_SIDE_SPLIT_KEY, inbox } from "./core.js";
 
 const SIDE_MIN_PX = 140; // 拖拉時上下各至少留這麼高
@@ -28,21 +29,17 @@ function renderInboxSide() {
 function initInboxSide() {
   const { side, sideSplit, dchat } = inbox.el;
   if (!sideSplit) return;
-  sideSplit.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || !dchat) return;
+  inboxDragSplit(sideSplit, () => {
+    if (!dchat) return null;
     const top = side.getBoundingClientRect().top;
     const max = side.clientHeight - SIDE_MIN_PX;
-    const move = (ev) => {
-      inbox.dchatHeight = Math.round(Math.min(Math.max(ev.clientY - top, SIDE_MIN_PX), max));
-      dchat.style.flexBasis = `${inbox.dchatHeight}px`;
-      ev.preventDefault();
+    return {
+      move(ev) {
+        inbox.dchatHeight = Math.round(Math.min(Math.max(ev.clientY - top, SIDE_MIN_PX), max));
+        dchat.style.flexBasis = `${inbox.dchatHeight}px`;
+      },
+      end() { storeSet(INBOX_SIDE_SPLIT_KEY, inbox.dchatHeight); },
     };
-    const up = () => {
-      sideSplit.removeEventListener("pointermove", move); sideSplit.removeEventListener("pointerup", up); sideSplit.removeEventListener("pointercancel", up);
-      storeSet(INBOX_SIDE_SPLIT_KEY, inbox.dchatHeight);
-    };
-    sideSplit.setPointerCapture(e.pointerId);
-    sideSplit.addEventListener("pointermove", move); sideSplit.addEventListener("pointerup", up); sideSplit.addEventListener("pointercancel", up);
   });
   sideSplit.addEventListener("dblclick", () => { inbox.dchatHeight = 0; storeSet(INBOX_SIDE_SPLIT_KEY, 0); renderInboxSide(); });
 }

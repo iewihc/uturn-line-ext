@@ -81,21 +81,35 @@ function inboxBeep() {
     playTwoTone(ctx);
   } catch (_) {}
 }
-// 兩個短音（收件匣新訊息、司機對話共用）。有人反應太小聲：三角波（泛音多、聽起來比正弦波響）、音量加大、每個音拉長一點
-const TONE_PEAK = 0.85; // 兩個音不重疊，接近 1 也不會破音
-const TONE_SECONDS = 0.26;
+// 兩個短音（收件匣新訊息、司機對話共用）。有人反應太小聲，一路加大：
+//   方波（同振幅下比三角波響一倍）＋高八度疊一層、每個音再拉長，最後過一個壓縮器當限幅：
+//   壓縮器門檻壓低、比例拉高，Chrome 會自動補償增益把整體音量推上去，又不會削波破音
+const TONE_PEAK = 0.9;
+const TONE_SECONDS = 0.3;
+const TONE_STEPS = [[880, 0], [1175, 0.18]]; // [頻率, 起始延遲]
+function toneBus(ctx) { // 每個 AudioContext 一條：壓縮器 → 喇叭
+  if (!ctx._loeBus) {
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -30; comp.knee.value = 10; comp.ratio.value = 16; comp.attack.value = 0.002; comp.release.value = 0.12;
+    comp.connect(ctx.destination);
+    ctx._loeBus = comp;
+  }
+  return ctx._loeBus;
+}
 function playTwoTone(ctx) {
   try {
-    const t0 = ctx.currentTime;
-    [[880, 0], [1175, 0.16]].forEach(([freq, delay]) => {
-      const osc = ctx.createOscillator(), gain = ctx.createGain();
-      osc.type = "triangle"; osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t0 + delay);
-      gain.gain.exponentialRampToValueAtTime(TONE_PEAK, t0 + delay + 0.012);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + TONE_SECONDS);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(t0 + delay); osc.stop(t0 + delay + TONE_SECONDS + 0.02);
-    });
+    const t0 = ctx.currentTime, bus = toneBus(ctx);
+    for (const [freq, delay] of TONE_STEPS) {
+      for (const [mul, level] of [[1, TONE_PEAK], [2, TONE_PEAK * 0.35]]) { // 基音＋高八度
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.type = "square"; osc.frequency.value = freq * mul;
+        gain.gain.setValueAtTime(0.0001, t0 + delay);
+        gain.gain.exponentialRampToValueAtTime(level, t0 + delay + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + delay + TONE_SECONDS);
+        osc.connect(gain).connect(bus);
+        osc.start(t0 + delay); osc.stop(t0 + delay + TONE_SECONDS + 0.02);
+      }
+    }
   } catch (_) {}
 }
 const inboxSoundReady = () => !inbox.sound || (inbox.audio && inbox.audio.state === "running");

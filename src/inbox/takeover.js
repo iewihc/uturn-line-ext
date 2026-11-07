@@ -317,6 +317,15 @@ function inboxTakeover() {
   img.loe-inbox-avatar { object-fit: cover; }
   .loe-inbox-msg.failed .loe-inbox-msg-meta { color: var(--loe-error); }
   .loe-inbox-composer { flex: 0 0 auto; padding: 10px 20px 16px; background: var(--loe-paper); border-top: 1px solid var(--loe-line); display: flex; flex-direction: column; gap: 8px; }
+  /* 訊息串與輸入區之間的分隔條：拖拉調整輸入框高度（記住），雙擊回預設；和右欄的 side-split 同款 */
+  .loe-inbox-th-split { flex: 0 0 8px; margin: -11px -20px 0; cursor: row-resize; background: var(--loe-raise2); border-block: 1px solid var(--loe-line); touch-action: none; user-select: none; position: relative; }
+  .loe-inbox-th-split::after { content: ""; position: absolute; left: 50%; top: 2px; width: 36px; height: 3px; margin-left: -18px; border-radius: 2px; background: #94a3b8; }
+  .loe-inbox-th-split:hover, .loe-inbox-th-split.dragging { background: rgba(28,108,243,.15); }
+  .loe-inbox-th-split:hover::after, .loe-inbox-th-split.dragging::after { background: var(--loe-primary); }
+  /* 快捷回覆列下方的分隔條：往下拖拉把列拉高，氣泡換行排多排、超過就在列內捲；拉到底回一排橫向捲 */
+  .loe-inbox-qr-split { margin-top: -8px; }
+  .loe-inbox-quick:empty + .loe-inbox-qr-split { display: none; }
+  .loe-inbox .loe-qr-bar.tall { box-sizing: border-box; flex-wrap: wrap; align-content: flex-start; overflow-x: hidden; overflow-y: auto; }
   .loe-inbox-composer-row { display: flex; gap: 10px; align-items: flex-end; }
   /* 回覆（引用）：輸入框上方的引用條（同 LINE 聊天室）；泡泡內的引用塊 */
   .loe-inbox-reply { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-left: 3px solid var(--loe-primary); border-radius: 6px; background: var(--loe-info-soft); font-size: 12px; }
@@ -533,7 +542,9 @@ function inboxTakeover() {
       <div class="loe-inbox-th-empty">尚無訊息，請從官方訊息選取一位客人</div>
       <aside class="loe-inbox-dchat" hidden aria-label="司機對話"></aside>
       <div class="loe-inbox-composer" hidden>
+        <div class="loe-inbox-th-split" role="separator" aria-orientation="horizontal" aria-label="拖拉調整回覆輸入框高度" title="拖拉調整輸入框高度，雙擊回到預設"></div>
         <div class="loe-inbox-quick loe-qr-bar"></div>
+        <div class="loe-inbox-th-split loe-inbox-qr-split" role="separator" aria-orientation="horizontal" aria-label="拖拉調整快捷回覆列高度" title="拖拉調整快捷回覆列高度，雙擊回到一排"></div>
         <div class="loe-inbox-picker" hidden></div>
         <div class="loe-inbox-reply" hidden aria-label="回覆的訊息"><span class="loe-inbox-reply-body"><strong class="loe-inbox-reply-who"></strong><span class="loe-inbox-reply-text"></span></span><button type="button" class="loe-inbox-x loe-inbox-reply-x" title="取消回覆（Esc）" aria-label="取消回覆">${ic("x")}</button></div>
         <div class="loe-inbox-mention-list" hidden role="listbox" aria-label="標記成員"></div>

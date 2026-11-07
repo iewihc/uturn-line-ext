@@ -34,6 +34,8 @@ const INBOX_HIDE_OA_NAME_KEY = "loe_inbox_hide_oa_name_v1"; // 選項：官方�
 const INBOX_AUTO_READ_KEY = "loe_inbox_auto_read_v1"; // 選項：開啟對話自動標已讀（預設關＝永不自動，只手動按）
 const INBOX_COL_WIDTHS_KEY = "loe_inbox_col_widths_v1"; // 三欄寬度 { rail, list, side }（px；拖拉分隔線調整，雙擊回預設）
 const INBOX_SIDE_SPLIT_KEY = "loe_inbox_side_split_v1"; // 右欄司機對話的高度（px；兩個都開時中間可拖拉）
+const INBOX_COMPOSER_H_KEY = "loe_inbox_composer_h_v1"; // 回覆輸入框高度（px；拖拉訊息串與輸入區之間的分隔條，雙擊回預設）
+const INBOX_QUICK_H_KEY = "loe_inbox_quick_h_v1"; // 快捷回覆列高度（px；拖拉列下方的分隔條，拉高後氣泡換行多排；0＝一排橫向捲）
 const INBOX_TERMS_VERSION = "2026-11-05.5"; // 條款內容變更時更新，與腳本版本分開，避免一般更新重複要求同意
 const INBOX_TERMS_KEY_PREFIX = "loe_inbox_terms_acceptance_v1::"; // 本機依後台帳號記錄版本與同意時間
 const INBOX_PAGES_PER_BOT = 2; // 每個帳號初始掃幾頁對話（25 位/頁）
@@ -77,6 +79,8 @@ const inbox = {
   noteEditing: null, // 正在編輯的筆記 noteId（換對話清掉）
   notesMax: false, // 記事本放大：蓋在訊息串上的大視窗（本次頁面有效；Esc 或「還原」回右欄）
   dchatHeight: Number(storeGet(INBOX_SIDE_SPLIT_KEY, 0)) || 0, // 0＝預設（約 55%）
+  composerHeight: Number(storeGet(INBOX_COMPOSER_H_KEY, 0)) || 0, // 回覆輸入框高度；0＝預設（CSS 的 min-height）
+  quickHeight: Number(storeGet(INBOX_QUICK_H_KEY, 0)) || 0, // 快捷回覆列高度；0＝預設一排
   colWidths: Object(storeGet(INBOX_COL_WIDTHS_KEY, {})), // 左欄／中欄／右側欄寬度（沒設＝CSS 預設）
   optionsOpen: false,
   autoRead: storeGet(INBOX_AUTO_READ_KEY, false) === true,
@@ -183,4 +187,4 @@ async function inboxApi(method, path, body, retried = false, opts = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-export { INBOX_AUTO_READ_KEY, INBOX_BOTS_REFRESH_MS, INBOX_COLS_COLLAPSED_KEY, INBOX_COL_WIDTHS_KEY, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDER_FILTERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_THEME_KEY, INBOX_THEME_OPTIONS, INBOX_TOAST_MAX_KEPT, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_TOAST_MAX_SHOWN, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
+export { INBOX_AUTO_READ_KEY, INBOX_BOTS_REFRESH_MS, INBOX_COLS_COLLAPSED_KEY, INBOX_COL_WIDTHS_KEY, INBOX_COMPOSER_H_KEY, INBOX_QUICK_H_KEY, INBOX_DCHAT_DOCK_KEY, INBOX_ENABLED_KEY, INBOX_FILTERS, INBOX_HIDE_OA_NAME_KEY, INBOX_LIMIT_RETRY_MS, INBOX_OA_COLORS, INBOX_ORDERS_COLLAPSED_KEY, INBOX_ORDER_FILTERS_COLLAPSED_KEY, INBOX_ORDERS_REFRESH_MS, INBOX_PAGES_PER_BOT, INBOX_PIN_DCHAT_KEY, INBOX_PIN_NOTES_KEY, INBOX_POLL_KEY, INBOX_POLL_MS, INBOX_RAIL_COLLAPSED_KEY, INBOX_SIDE_SPLIT_KEY, INBOX_SOUND_KEY, INBOX_TERMS_KEY_PREFIX, INBOX_TERMS_VERSION, INBOX_THEME_KEY, INBOX_THEME_OPTIONS, INBOX_TOAST_MAX_KEPT, INBOX_TOAST_MAX_KEY, INBOX_TOAST_MAX_RANGE, INBOX_TOAST_MAX_SHOWN, INBOX_TOAST_MS, ih, inbox, inboxApi, inboxBotColor, inboxBotName, inboxChatUrl, inboxGroupLabel, inboxInitial, inboxKey, inboxTime };
