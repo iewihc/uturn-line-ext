@@ -67,7 +67,7 @@ function inboxOptionsButton() {
       "不勾＝永遠不自動標，只有按「標為已讀」才標（回覆後也不標）；勾了就不顯示「標為已讀」鈕"),
     ih("div", { class: "loe-inbox-options-group", text: "連線" }),
     row("refresh", "超過連線上限改用輪詢", inbox.pollFallback, (v) => { set(INBOX_POLL_KEY, "pollFallback", v); inboxApplyPollFallback(); },
-      "LINE 每個登入約 19 條即時連線，超過官方開啟數 LINE 會限制。不勾＝那些帳號只等名額（收不到新訊息）；勾了＝每 12 秒輪詢一次"),
+      "LINE 即時連線有限制，超過官方開啟數 LINE 會限制。不勾＝收不到新訊息；勾了＝每 12 秒輪詢一次，輪詢會比較慢一點。"),
     ih("div", { class: "loe-inbox-options-group", text: "通知" }),
     row("headset", "只通知轉人工（客叫單）", inbox.handoffOnly, (v) => { set(INBOX_HANDOFF_ONLY_KEY, "handoffOnly", v); applyHandoffLive(); renderInboxOrders(); },
       "客叫／AI 叫車的單：司機訊息、AI 處理中的客人訊息都不跳通知、不自動開司機對話；只有客人轉人工（含轉人工後再傳的話）才通知"),
